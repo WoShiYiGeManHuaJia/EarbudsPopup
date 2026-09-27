@@ -8,11 +8,15 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
@@ -22,6 +26,7 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.Spinner;
@@ -59,6 +64,12 @@ public class MainActivity extends AppCompatActivity {
     private SwitchMaterial swLock, swNoFocus;
     private SwitchMaterial swMaster, swWired, swAutoStart, swBattery;
 
+    // 实时预览
+    private View pvCard, pvAccent;
+    private ImageView pvImage;
+    private TextView pvTitle, pvSub, pvBattery, tvDevice;
+    private ProgressBar pvBar;
+
     private final Set<String> allowSet = new LinkedHashSet<>();
     private boolean bindingUi = false;
 
@@ -72,6 +83,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 prefs.setImageUri(uri.toString());
                 loadPreview();
+                updatePreview();
             });
 
     @Override
@@ -91,6 +103,14 @@ public class MainActivity extends AppCompatActivity {
         permStatus = findViewById(R.id.permStatus);
         deviceList = findViewById(R.id.deviceList);
         imgPreview = findViewById(R.id.imgPreview);
+        pvCard = findViewById(R.id.pvCard);
+        pvAccent = findViewById(R.id.pvAccent);
+        pvImage = findViewById(R.id.pvImage);
+        pvTitle = findViewById(R.id.pvTitle);
+        pvSub = findViewById(R.id.pvSub);
+        pvBattery = findViewById(R.id.pvBattery);
+        pvBar = findViewById(R.id.pvBar);
+        tvDevice = findViewById(R.id.tvDevice);
         etTitle = findViewById(R.id.etTitle);
         etSub = findViewById(R.id.etSub);
         etBg = findViewById(R.id.etBg);
@@ -146,6 +166,8 @@ public class MainActivity extends AppCompatActivity {
         if (saved != null) allowSet.addAll(saved);
         syncSeekLabels();
         loadPreview();
+        updatePreview();
+        showDeviceInfo();
         bindingUi = false;
     }
 
@@ -157,6 +179,7 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.btnClearImage).setOnClickListener(v -> {
             prefs.setImageUri("");
             loadPreview();
+            updatePreview();
         });
         findViewById(R.id.btnTest).setOnClickListener(v -> {
             saveAll();
@@ -211,6 +234,7 @@ public class MainActivity extends AppCompatActivity {
             public void onNothingSelected(AdapterView<?> p) {
             }
         });
+        watch(etTitle, etSub, etBg, etTextColor, etAccent);
         spEngine.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             public void onItemSelected(AdapterView<?> p, View v, int i, long id) {
                 if (!bindingUi) prefs.setEngine(i);
@@ -233,6 +257,7 @@ public class MainActivity extends AppCompatActivity {
         });
         swBattery.setOnCheckedChangeListener((b, checked) -> {
             if (!bindingUi) prefs.setShowBattery(checked);
+            updatePreview();
         });
         swLock.setOnCheckedChangeListener((b, checked) -> {
             if (!bindingUi) prefs.setShowOnLock(checked);
@@ -248,10 +273,116 @@ public class MainActivity extends AppCompatActivity {
         tvRadius.setText("圆角 " + sbRadius.getProgress() + "dp");
         tvImgH.setText("图片高度 " + (sbImgH.getProgress() + 60) + "dp");
         tvDuration.setText("显示时长 " + ((sbDuration.getProgress() + 1) * 500) + "ms");
+        if (!bindingUi) updatePreview();
         if (sbDim != null) tvDim.setText("背景压暗 " + sbDim.getProgress() + "%");
         if (sbBlur != null) {
             int b = sbBlur.getProgress();
             tvBlur.setText(b == 0 ? "背景模糊 关闭" : "背景模糊半径 " + b + "dp");
+        }
+    }
+
+    // ---------------- 实时预览 ----------------
+
+    private int parseColor(String v, int fallback) {
+        try {
+            return Color.parseColor(v);
+        } catch (Exception e) {
+            return fallback;
+        }
+    }
+
+    private float dp(float v) {
+        return v * getResources().getDisplayMetrics().density;
+    }
+
+    private void showDeviceInfo() {
+        if (tvDevice == null) return;
+        String model = Build.MODEL;
+        String device = Build.DEVICE;
+        String pretty = model;
+        if ("manet".equalsIgnoreCase(device) || model.contains("23117RK66C")) {
+            pretty = "Redmi K70 Pro";
+        }
+        tvDevice.setText(pretty + "  ·  Android " + Build.VERSION.RELEASE);
+    }
+
+    /** 把当前设置渲染到预览卡片上，做到所见即所得 */
+    private void updatePreview() {
+        if (pvCard == null) return;
+
+        int w = (int) dp(prefs.widthDp());
+        ViewGroup.LayoutParams lp = pvCard.getLayoutParams();
+        lp.width = w;
+        pvCard.setLayoutParams(lp);
+
+        GradientDrawable gd = new GradientDrawable();
+        gd.setShape(GradientDrawable.RECTANGLE);
+        gd.setCornerRadius(dp(prefs.radiusDp()));
+        gd.setColor(parseColor(prefs.bgColor(), 0xFF141620));
+        pvCard.setBackground(gd);
+        pvCard.setElevation(dp(10));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            pvCard.setClipToOutline(true);
+        }
+
+        pvAccent.setBackgroundColor(parseColor(prefs.accentColor(), 0xFF00E5A0));
+
+        int textColor = parseColor(prefs.textColor(), Color.WHITE);
+        pvTitle.setTextColor(textColor);
+        pvSub.setTextColor(textColor);
+        pvBattery.setTextColor(textColor);
+
+        String t = etTitle.getText().toString().trim();
+        pvTitle.setText(t.isEmpty() ? "耳机已连接" : t);
+
+        String subRaw = etSub.getText().toString();
+        if (subRaw.trim().isEmpty()) {
+            pvSub.setVisibility(View.GONE);
+        } else {
+            pvSub.setVisibility(View.VISIBLE);
+            pvSub.setText(subRaw.contains("%s")
+                    ? String.format(subRaw, "Buds 5 Pro 电竞版") : subRaw);
+        }
+
+        boolean showBat = swBattery.isChecked();
+        pvBar.setVisibility(showBat ? View.VISIBLE : View.GONE);
+        pvBattery.setVisibility(showBat ? View.VISIBLE : View.GONE);
+        if (showBat) {
+            pvBar.setProgress(78);
+            pvBattery.setText("78%");
+        }
+
+        ViewGroup.LayoutParams ilp = pvImage.getLayoutParams();
+        ilp.height = (int) dp(prefs.imageHeightDp());
+        pvImage.setLayoutParams(ilp);
+
+        String uri = prefs.imageUri();
+        if (!uri.isEmpty()) {
+            try {
+                Glide.with(this).load(Uri.parse(uri)).centerCrop().into(pvImage);
+            } catch (Exception e) {
+                pvImage.setImageResource(R.drawable.ic_headphone);
+            }
+        } else {
+            pvImage.setImageResource(R.drawable.ic_headphone);
+        }
+    }
+
+    /** 让输入框改动即时反映到预览上 */
+    private void watch(EditText... eds) {
+        TextWatcher tw = new TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) {
+            }
+
+            public void onTextChanged(CharSequence s, int a, int b, int c) {
+                if (!bindingUi) updatePreview();
+            }
+
+            public void afterTextChanged(Editable s) {
+            }
+        };
+        for (EditText e : eds) {
+            if (e != null) e.addTextChangedListener(tw);
         }
     }
 
