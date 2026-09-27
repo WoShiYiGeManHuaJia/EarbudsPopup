@@ -103,7 +103,7 @@ public class Prefs {
     }
 
     public int radiusDp() {
-        return sp.getInt("radius", 28);
+        return sp.getInt("radius", 26);
     }
 
     public void setRadiusDp(int v) {
@@ -152,6 +152,53 @@ public class Prefs {
         sp.edit().putInt("duration", v).apply();
     }
 
+
+
+    // ---------- 自动取色 ----------
+    /** 是否根据上传图片自动决定卡片底色 */
+    public boolean autoColor() {
+        return sp.getBoolean("auto_color", true);
+    }
+
+    public void setAutoColor(boolean v) {
+        sp.edit().putBoolean("auto_color", v).apply();
+    }
+
+    /** 从图片提取到的底色（Palette 生成后缓存，避免每次弹窗都算） */
+    public String autoBgColor() {
+        return sp.getString("auto_bg", "#F2141620");
+    }
+
+    public void setAutoBgColor(String c) {
+        sp.edit().putString("auto_bg", c).apply();
+    }
+
+    /** 提取到的强调色 */
+    public String autoAccentColor() {
+        return sp.getString("auto_accent", "#FF00E5A0");
+    }
+
+    public void setAutoAccentColor(String c) {
+        sp.edit().putString("auto_accent", c).apply();
+    }
+
+    /** 图片区高度 = 弹窗宽度 × 该比例（华为规范约 0.70，整体宽高比 1:1.24） */
+    public float imageRatio() {
+        return sp.getFloat("img_ratio", 0.70f);
+    }
+
+    public void setImageRatio(float v) {
+        sp.edit().putFloat("img_ratio", v).apply();
+    }
+
+    /** 是否显示充电盒电量圆环（拿不到时会自动隐藏） */
+    public boolean showCaseBattery() {
+        return sp.getBoolean("show_case", true);
+    }
+
+    public void setShowCaseBattery(boolean v) {
+        sp.edit().putBoolean("show_case", v).apply();
+    }
 
     // ---------- 系统级弹窗引擎 ----------
     /** 0=系统级Activity 1=悬浮窗 2=智能降级 */
