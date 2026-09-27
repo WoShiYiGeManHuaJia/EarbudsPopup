@@ -74,6 +74,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvEngine, tvDim, tvBlur;
     private LinearLayout deviceList;
     private TextView tvProbeHint;
+    private SwitchMaterial swHideRecents;
 
     private View tabHome, tabLook, tabSet;
 
@@ -188,6 +189,7 @@ public class MainActivity extends AppCompatActivity {
         tvBlur = findViewById(R.id.tvBlur);
         deviceList = findViewById(R.id.deviceList);
         tvProbeHint = findViewById(R.id.tvProbeHint);
+        swHideRecents = findViewById(R.id.swHideRecents);
     }
 
     // ---------------- 载入与保存 ----------------
@@ -212,6 +214,7 @@ public class MainActivity extends AppCompatActivity {
         swNoFocus.setChecked(prefs.notFocusable());
         swPowerSave.setChecked(prefs.powerSave());
         swHideNoti.setChecked(prefs.hideNotification());
+        if (swHideRecents != null) swHideRecents.setChecked(prefs.hideFromRecents());
         swAutoColor.setChecked(prefs.autoColor());
 
         syncValueLabels();
@@ -315,6 +318,10 @@ public class MainActivity extends AppCompatActivity {
         bindSwitch(swNoFocus, prefs::setNotFocusable, null);
         bindSwitch(swPowerSave, prefs::setPowerSave, this::restartService);
         bindSwitch(swHideNoti, prefs::setHideNotification, this::restartService);
+        bindSwitch(swHideRecents, v -> {
+            prefs.setHideFromRecents(v);
+            applyRecentsHidden(v);
+        }, null);
         bindSwitch(swAutoColor, v -> {
             prefs.setAutoColor(v);
             String u = prefs.imageUri();
@@ -473,6 +480,18 @@ public class MainActivity extends AppCompatActivity {
         pvCard.setBackground(gd);
         pvCard.setElevation(12 * d);
         pvCard.setClipToOutline(true);
+
+        // 预览里的图片区也做圆角裁切，跟真实弹窗保持一致
+        if (pvImageArea != null) {
+            final float pr = 16 * d * 0.78f;
+            pvImageArea.setOutlineProvider(new android.view.ViewOutlineProvider() {
+                @Override
+                public void getOutline(android.view.View v, android.graphics.Outline o) {
+                    o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), pr);
+                }
+            });
+            pvImageArea.setClipToOutline(true);
+        }
 
         // 信息窄条：与真实弹窗同一套拼接逻辑
         int bat = swBattery.isChecked() ? 78 : -1;
@@ -715,6 +734,7 @@ public class MainActivity extends AppCompatActivity {
         }
         refreshPermStatus();
         if (prefs.masterEnabled()) toggleService(true);
+        applyRecentsHidden(prefs.hideFromRecents());
     }
 
     private void refreshPermStatus() {
@@ -887,46 +907,97 @@ public class MainActivity extends AppCompatActivity {
             nHolder[0] = null;
         }
         final String n = nHolder[0];
+
         final android.app.ProgressDialog pd = new android.app.ProgressDialog(this);
         pd.setTitle("正在探测");
-        pd.setMessage((n == null ? addr : n) + "\n扫描 BLE 广播并读取 GATT，最多 20 秒…");
+        pd.setMessage((n == null ? addr : n) + "\n扫描 BLE 广播并读取 GATT，最多 25 秒…");
         pd.setCancelable(false);
         pd.show();
 
-        new BatteryProbe(this).probe(addr, dev, (levels, diagnostic) -> {
-            try {
-                pd.dismiss();
-            } catch (Exception ignored) {
-            }
-            BatteryStore store = new BatteryStore(this);
-            store.save(addr, levels);
-            if (tvProbeHint != null) {
-                tvProbeHint.setText("上次结果 L:" + BatteryLevels.fmt(levels.left)
-                        + " R:" + BatteryLevels.fmt(levels.right)
-                        + " Case:" + BatteryLevels.fmt(levels.caseBox)
-                        + "（" + levels.source + "）");
-            }
-            String summary = "设备: " + (n == null ? addr : n) + " (" + addr + ")\n"
-                    + "结果: L=" + BatteryLevels.fmt(levels.left)
-                    + "  R=" + BatteryLevels.fmt(levels.right)
-                    + "  Case=" + BatteryLevels.fmt(levels.caseBox)
-                    + "  来源=" + levels.source + "\n\n";
-            String full = summary + diagnostic;
+        final BatteryProbe probe = new BatteryProbe(this);
+        final boolean[] finished = new boolean[1];
 
-            new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-                    .setTitle("探测完成")
-                    .setMessage(summary + "\n完整日志已准备好，点「导出日志」发给我，"
-                            + "我据此为你这台耳机写死精确的电量字段。")
-                    .setPositiveButton("导出日志", (d, w) -> {
-                        copy(full, "日志已复制");
-                        Intent share = new Intent(Intent.ACTION_SEND);
-                        share.setType("text/plain");
-                        share.putExtra(Intent.EXTRA_TEXT, full);
-                        startActivity(Intent.createChooser(share, "发送电量探测日志"));
-                    })
-                    .setNegativeButton("关闭", null)
-                    .show();
+        // 硬超时兜底：GATT 卡死或回调没来时也不能让用户干等，
+        // 25 秒后强制用当前累积日志弹出结果窗口
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (finished[0]) return;
+            finished[0] = true;
+            dismissQuietly(pd);
+            showProbeResult(n, addr, null, probe.currentLog()
+                    + "\n\n[超时兜底] 探测超过 25 秒未结束，以上是不完整日志。");
+        }, 25000);
+
+        probe.probe(addr, dev, (levels, diagnostic) -> {
+            if (finished[0]) return;
+            finished[0] = true;
+            dismissQuietly(pd);
+            showProbeResult(n, addr, levels, diagnostic);
         });
+    }
+
+    private void dismissQuietly(android.app.Dialog d) {
+        try {
+            d.dismiss();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** 探测结果窗口：无论成功失败都会出现，并且一定能导出日志 */
+    private void showProbeResult(String name, String addr, BatteryLevels levels,
+                                 String diagnostic) {
+        if (levels == null) {
+            levels = new BatteryLevels();
+            levels.timestamp = System.currentTimeMillis();
+            levels.source = "未取到";
+        } else {
+            new BatteryStore(this).save(addr, levels);
+        }
+        if (tvProbeHint != null) {
+            tvProbeHint.setText("上次结果 L:" + BatteryLevels.fmt(levels.left)
+                    + " R:" + BatteryLevels.fmt(levels.right)
+                    + " Case:" + BatteryLevels.fmt(levels.caseBox)
+                    + "（" + levels.source + "）");
+        }
+        String summary = "设备: " + (name == null ? addr : name) + " (" + addr + ")\n"
+                + "结果: L=" + BatteryLevels.fmt(levels.left)
+                + "  R=" + BatteryLevels.fmt(levels.right)
+                + "  Case=" + BatteryLevels.fmt(levels.caseBox)
+                + "  来源=" + levels.source;
+        final String payload = summary + "\n\n" + (diagnostic == null ? "(无日志)" : diagnostic);
+
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle("探测完成")
+                .setMessage(summary + "\n\n点「导出日志」把完整 GATT 服务树和原始字节发出来，"
+                        + "我据此为你这台耳机写死精确的电量解析规则。")
+                .setPositiveButton("导出日志", (d, w) -> {
+                    copy(payload, "日志已复制，粘贴给我");
+                    Intent share = new Intent(Intent.ACTION_SEND);
+                    share.setType("text/plain");
+                    share.putExtra(Intent.EXTRA_TEXT, payload);
+                    try {
+                        startActivity(Intent.createChooser(share, "发送电量探测日志"));
+                    } catch (Exception ignored) {
+                    }
+                })
+                .setNeutralButton("存到文件", (d, w) -> saveProbeLog(payload))
+                .setNegativeButton("关闭", null)
+                .show();
+    }
+
+    /** 日志存到下载目录，方便从文件管理器发出来 */
+    private void saveProbeLog(String content) {
+        try {
+            java.io.File dir = android.os.Environment.getExternalStoragePublicDirectory(
+                    android.os.Environment.DIRECTORY_DOWNLOADS);
+            if (dir != null && !dir.exists()) dir.mkdirs();
+            java.io.File f = new java.io.File(dir, "电量探测日志.txt");
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(f, false);
+            fos.write(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            fos.close();
+            Toast.makeText(this, "已保存到 下载/电量探测日志.txt", Toast.LENGTH_LONG).show();
+        } catch (Exception e) {
+            Toast.makeText(this, "保存失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
     }
 
     private void showAbout() {
