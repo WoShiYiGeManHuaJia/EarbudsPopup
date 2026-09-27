@@ -173,6 +173,20 @@ public class Prefs {
         sp.edit().putInt("vpos", Math.max(0, Math.min(100, v))).apply();
     }
 
+    /**
+     * 是否用「私有特征值」推断充电盒电量。
+     * 默认【关闭】：那个字节没有被确认是电量，
+     * 直接拿来显示会出现乱跳的数字，比显示 --% 更糟。
+     * 用户想试可在设置页打开。
+     */
+    public boolean privateCaseEnabled() {
+        return sp.getBoolean("private_case", false);
+    }
+
+    public void setPrivateCaseEnabled(boolean v) {
+        sp.edit().putBoolean("private_case", v).apply();
+    }
+
     public int position() {
         return sp.getInt("pos", 2);   // 默认沉底（类小米官方弹窗）
     }
