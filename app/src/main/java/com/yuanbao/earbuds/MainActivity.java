@@ -82,6 +82,8 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvEngine, tvDim, tvBlur;
     private LinearLayout deviceList;
     private TextView tvProbeHint;
+    /** 最近一次电量探测的结果，供预览显示真实值 */
+    private BatteryLevels lastProbeResult;
     private SwitchMaterial swHideRecents;
 
     private View tabHome, tabLook, tabSet;
@@ -846,9 +848,26 @@ public class MainActivity extends AppCompatActivity {
             pvImage.setRadius(pr);
         }
 
-        // 信息窄条：与真实弹窗同一套拼接逻辑
-        int bat = swBattery.isChecked() ? 78 : -1;
-        int cas = (swBattery.isChecked() && swCase.isChecked()) ? 65 : -1;
+        // 信息窄条：与真实弹窗同一套拼接逻辑。
+        //
+        // 之前这里写死 78 / 65 作为预览假数据 —— 结果预览上一直显示
+        // 「L 78% R 78% Case 65%」，看起来像电量已经打通了，实际是假的。
+        // 现在改用真实探测缓存：有值就显示真实值，没有就 --%。
+        // 数据源优先级：本次探测结果 > 上次探测的缓存
+        BatteryLevels cached = null;
+        if (swBattery.isChecked()) {
+            if (lastProbeResult != null) {
+                cached = lastProbeResult;
+            } else {
+                String addr = prefs.lastAddress();
+                if (addr != null && !addr.isEmpty()) {
+                    cached = new BatteryStore(this).load(addr);
+                }
+            }
+        }
+        int bat = (cached != null && BatteryLevels.valid(cached.left)) ? cached.left : -1;
+        int cas = (cached != null && BatteryLevels.valid(cached.caseBox)
+                && swCase.isChecked()) ? cached.caseBox : -1;
         String devName = etTitle.getText().toString().trim();
         if (devName.isEmpty()) devName = "我的耳机";
         if (pvBattery != null) pvBattery.setText(bat >= 0 ? bat + "%" : "--%");
@@ -1505,6 +1524,7 @@ public class MainActivity extends AppCompatActivity {
             levels.timestamp = System.currentTimeMillis();
             levels.source = "未取到";
         } else {
+            lastProbeResult = levels;
             new BatteryStore(this).save(addr, levels);
         }
         if (tvProbeHint != null) {
