@@ -115,7 +115,7 @@ public final class PopupRenderer {
         tipText.setTextColor(applyAlpha(textColor, 0.55f));
 
         // ---------- ② 信息窄条：名称 · 状态 | L / R / Case ----------
-        infoBar.setText(buildInfo(prettyName(rawName), prefs.subText(), levels));
+        infoBar.setText(buildInfo(prettyName(rawName), prefs, levels));
 
         // ---------- ① GIF / 图片 ----------
         // 每次弹窗都让 GIF 从第一帧开始播：Glide 会缓存已解码的 GifDrawable，
@@ -290,17 +290,39 @@ public final class PopupRenderer {
         a.start();
     }
 
-    /** 组装信息窄条：菠萝耳机 5pro · 已连接  |  L:68%  R:66%  Case:59% */
-    private static String buildInfo(String name, String sub, BatteryLevels b) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(name);
-        String s = sub == null ? "" : sub.trim();
-        if (!s.isEmpty()) {
-            sb.append(" · ").append(s.contains("%s") ? String.format(s, name) : s);
+    /**
+     * 组装信息窄条。
+     *
+     * 修掉两个问题：
+     *  1. 之前主标题写死用设备名，用户在「外观 → 主标题」填的内容根本没被使用；
+     *  2. 副标题默认 "%s 已连接"，%s 又被替换成设备名，
+     *     结果显示成 "Redmi Buds 5 Pro · Redmi Buds 5 Pro 已连接"，设备名重复两遍。
+     *
+     * 现在的规则：
+     *  - 主标题取 prefs.titleText()，支持 %s（替换成设备名）；为空则退回设备名
+     *  - 副标题同理；若副标题去掉 %s 后与主标题相同，则不再重复拼接
+     */
+    private static String buildInfo(String deviceName, Prefs prefs, BatteryLevels b) {
+        String dev = deviceName == null ? "" : deviceName.trim();
+        if (dev.isEmpty()) dev = "耳机";
+
+        String title = "";
+        String sub = "";
+        if (prefs != null) {
+            title = fill(prefs.titleText(), dev);
+            sub = fill(prefs.subText(), dev);
         }
+        // 主标题为空就用设备名
+        String head = title.isEmpty() ? dev : title;
+
+        StringBuilder sb = new StringBuilder(head);
+        // 副标题非空、且与主标题不同才拼，避免重复
+        if (!sub.isEmpty() && !sub.equals(head)) {
+            sb.append(" · ").append(sub);
+        }
+
         if (b == null) return sb.toString();
-        // 只有存在有效电量（1~100）时才显示这一段；全未知就整段省略，
-        // 避免出现 "L:0% R:0%" 这种明显不对的显示
+        // 只有存在有效电量（1~100）时才显示这一段；全未知就整段省略
         if (b.anyKnown()) {
             sb.append("  |  ");
             sb.append("L:").append(BatteryLevels.fmt(b.left));
@@ -308,6 +330,14 @@ public final class PopupRenderer {
             sb.append("  Case:").append(BatteryLevels.fmt(b.caseBox));
         }
         return sb.toString();
+    }
+
+    /** 把模板里的 %s 替换成设备名 */
+    private static String fill(String tpl, String dev) {
+        if (tpl == null) return "";
+        String v = tpl.trim();
+        if (v.isEmpty()) return "";
+        return v.contains("%s") ? v.replace("%s", dev) : v;
     }
 
     /**
@@ -318,8 +348,7 @@ public final class PopupRenderer {
         if (root == null || levels == null) return;
         TextView infoBar = root.findViewById(R.id.infoBar);
         if (infoBar == null) return;
-        infoBar.setText(buildInfo(prettyName(rawName),
-                prefs == null ? "" : prefs.subText(), levels));
+        infoBar.setText(buildInfo(prettyName(rawName), prefs, levels));
     }
 
     /** 流光：一条窄斜向高光带扫过，播完立即隐藏，绝不残留 */
