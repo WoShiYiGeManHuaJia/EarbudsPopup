@@ -19,6 +19,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
