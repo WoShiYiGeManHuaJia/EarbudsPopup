@@ -119,12 +119,13 @@ public final class PopupRenderer {
             tvBattery.setTextColor(sub);
         }
         if (tvCase != null) {
-            boolean hasCase = levels != null && BatteryLevels.valid(levels.caseBox);
-            tvCase.setText(hasCase ? BatteryLevels.fmt(levels.caseBox) : "--%");
+            // 用户要求始终显示充电盒槽位，读不到就显示 --%
+            tvCase.setText(levels != null && BatteryLevels.valid(levels.caseBox)
+                    ? BatteryLevels.fmt(levels.caseBox) : "--%");
             tvCase.setTextColor(sub);
-            if (icCase != null) icCase.setVisibility(hasCase ? View.VISIBLE : View.GONE);
-            tvCase.setVisibility(hasCase ? View.VISIBLE : View.GONE);
+            tvCase.setVisibility(View.VISIBLE);
         }
+        if (icCase != null) icCase.setVisibility(View.VISIBLE);
         if (icCase != null) icCase.setColorFilter(sub);
         ImageView icEarbuds = root.findViewById(R.id.icEarbuds);
         if (icEarbuds != null) icEarbuds.setColorFilter(sub);
@@ -228,17 +229,21 @@ public final class PopupRenderer {
         // 叠一层半透明卡片色，保证文字可读
         blur.setDim(applyAlpha(cardBg, 0.45f));
         blur.setSource(img);
+        // 布局里是 gone + 76dp，这里才显示。
+        // 高度由布局写死，不再依赖测量，避免撑高父容器把整卡糊掉。
+        blur.setVisibility(View.VISIBLE);
     }
 
-    /** 左/右耳电量文本 */
+    /**
+     * 耳机（左/右）电量文本。
+     * 用户要求左右耳分开显示，所以即便两值相同也照实分列，
+     * 读不到就显示 --%，不再合并成一个数字。
+     */
     private static String batteryText(BatteryLevels b) {
-        if (b == null) return "--%";
-        if (BatteryLevels.valid(b.left) && BatteryLevels.valid(b.right)) {
-            if (b.left == b.right) return b.left + "%";   // 只有一个整机值时不重复显示
-            return "L" + b.left + "%  R" + b.right + "%";
-        }
-        if (BatteryLevels.valid(b.overall)) return b.overall + "%";
-        return "--%";
+        if (b == null) return "L --%  R --%";
+        String l = BatteryLevels.valid(b.left) ? b.left + "%" : "--%";
+        String r = BatteryLevels.valid(b.right) ? b.right + "%" : "--%";
+        return "L " + l + "  R " + r;
     }
 
     public static void applyImageMatrix(ImageView img) {
@@ -361,12 +366,12 @@ public final class PopupRenderer {
         ImageView icCase = root.findViewById(R.id.icCase);
         levels.sanitize();
         if (tvBattery != null) tvBattery.setText(batteryText(levels));
-        boolean hasCase = BatteryLevels.valid(levels.caseBox);
         if (tvCase != null) {
-            tvCase.setText(hasCase ? BatteryLevels.fmt(levels.caseBox) : "--%");
-            tvCase.setVisibility(hasCase ? View.VISIBLE : View.GONE);
+            tvCase.setText(BatteryLevels.valid(levels.caseBox)
+                    ? BatteryLevels.fmt(levels.caseBox) : "--%");
+            tvCase.setVisibility(View.VISIBLE);
         }
-        if (icCase != null) icCase.setVisibility(hasCase ? View.VISIBLE : View.GONE);
+        if (icCase != null) icCase.setVisibility(View.VISIBLE);
     }
 
     private static String fill(String tpl, String dev) {
