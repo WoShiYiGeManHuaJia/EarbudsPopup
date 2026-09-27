@@ -50,6 +50,12 @@ public class LiveBlurView extends View {
     private Drawable.Callback originalCallback;
     private Drawable attached;
 
+    /** 顶部渐隐遮罩：让模糊层上沿与上方清晰画面自然过渡，避免一刀切 */
+    private final Paint fadePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private android.graphics.LinearGradient fadeGradient;
+    /** 渐隐带高度占本 View 高度的比例 */
+    private float fadeRatio = 0.45f;
+
     /** API < 31 时的逐帧降采样模糊缓冲 */
     private Bitmap smallBuf;
     private Canvas smallCanvas;
@@ -90,6 +96,32 @@ public class LiveBlurView extends View {
     public void setDim(int argb) {
         this.dimColor = argb;
         invalidate();
+    }
+
+    /** 设置顶部渐隐带高度（0 = 不做渐隐，即硬边） */
+    public void setFadeRatio(float r) {
+        this.fadeRatio = Math.max(0f, Math.min(1f, r));
+        fadeGradient = null;
+        invalidate();
+    }
+
+    /** 按需构建渐变：顶部全透明 → 向下逐渐不透明 */
+    private void ensureGradient(int w, int h) {
+        if (w <= 0 || h <= 0) return;
+        float fh = h * fadeRatio;
+        if (fh <= 0f) {
+            fadeGradient = null;
+            return;
+        }
+        if (fadeGradient == null) {
+            // 从 y=0（完全透明）到 y=fh（完全不透明）
+            fadeGradient = new android.graphics.LinearGradient(
+                    0f, 0f, 0f, fh,
+                    0x00000000, 0xFF000000, Shader.TileMode.CLAMP);
+            fadePaint.setShader(fadeGradient);
+            fadePaint.setXfermode(new android.graphics.PorterDuffXfermode(
+                    android.graphics.PorterDuff.Mode.DST_OUT));
+        }
     }
 
     private void applyEffect() {
@@ -210,6 +242,17 @@ public class LiveBlurView extends View {
 
         // 叠一层半透明色，保证文字可读
         canvas.drawColor(dimColor);
+
+        // 顶部渐隐：用 DST_OUT 把上沿擦成透明，
+        // 模糊层与上方清晰画面之间就有了平滑过渡，不再是硬边一刀切
+        if (fadeRatio > 0f) {
+            ensureGradient(vw, vh);
+            if (fadeGradient != null) {
+                int saved = canvas.saveLayer(0f, 0f, vw, vh, null);
+                canvas.drawRect(0f, 0f, vw, vh * fadeRatio, fadePaint);
+                canvas.restoreToCount(saved);
+            }
+        }
     }
 
     /**
