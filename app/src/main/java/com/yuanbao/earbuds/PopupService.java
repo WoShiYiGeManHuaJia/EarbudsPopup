@@ -627,8 +627,11 @@ public class PopupService extends Service {
         }
         current = v;
 
-        // 入场动画：按用户选择的样式（缩放淡入 / 底部上滑 / 顶部下滑）
-        PopupRenderer.applyEnter(v, prefs.animStyle());
+        // 注意：这里【不能】再调 applyEnter。
+        // PopupRenderer.bind() 内部已经执行过入场动画；
+        // 再调一次会 cancel 掉正在进行的动画并重置 translationY(140dp)，
+        // 于是弹窗滑上来后又被拽回起点重新播一遍 ——
+        // 这就是「弹出来一瞬间，然后又被压下去」的原因。
 
         v.postDelayed(this::dismiss, prefs.durationMs());
     }
