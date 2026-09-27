@@ -8,6 +8,7 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -26,6 +27,7 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.FrameLayout;
 import android.widget.ProgressBar;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
@@ -39,7 +41,11 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import androidx.palette.graphics.Palette;
+
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.request.target.CustomTarget;
+import com.bumptech.glide.request.transition.Transition;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 
 import java.util.ArrayList;
@@ -61,14 +67,16 @@ public class MainActivity extends AppCompatActivity {
     private Spinner spPos, spAnim, spEngine;
     private SeekBar sbDim, sbBlur;
     private TextView tvDim, tvBlur;
-    private SwitchMaterial swLock, swNoFocus;
+    private SwitchMaterial swLock, swNoFocus, swCase, swAutoColor;
     private SwitchMaterial swMaster, swWired, swAutoStart, swBattery;
 
     // 实时预览
-    private View pvCard, pvAccent;
+    private View pvCard, pvFade;
+    private FrameLayout pvImageArea;
     private ImageView pvImage;
-    private TextView pvTitle, pvSub, pvBattery, tvDevice;
-    private ProgressBar pvBar;
+    private TextView pvTitle, pvSub, tvDevice;
+    private BatteryRingView pvRingEarbud, pvRingBox;
+    private LinearLayout pvBoxGroup;
 
     private final Set<String> allowSet = new LinkedHashSet<>();
     private boolean bindingUi = false;
@@ -84,6 +92,7 @@ public class MainActivity extends AppCompatActivity {
                 prefs.setImageUri(uri.toString());
                 loadPreview();
                 updatePreview();
+                extractTheme(uri);
             });
 
     @Override
@@ -104,12 +113,14 @@ public class MainActivity extends AppCompatActivity {
         deviceList = findViewById(R.id.deviceList);
         imgPreview = findViewById(R.id.imgPreview);
         pvCard = findViewById(R.id.pvCard);
-        pvAccent = findViewById(R.id.pvAccent);
+        pvImageArea = findViewById(R.id.pvImageArea);
         pvImage = findViewById(R.id.pvImage);
+        pvFade = findViewById(R.id.pvFade);
         pvTitle = findViewById(R.id.pvTitle);
         pvSub = findViewById(R.id.pvSub);
-        pvBattery = findViewById(R.id.pvBattery);
-        pvBar = findViewById(R.id.pvBar);
+        pvRingEarbud = findViewById(R.id.pvRingEarbud);
+        pvRingBox = findViewById(R.id.pvRingBox);
+        pvBoxGroup = findViewById(R.id.pvBoxGroup);
         tvDevice = findViewById(R.id.tvDevice);
         etTitle = findViewById(R.id.etTitle);
         etSub = findViewById(R.id.etSub);
@@ -132,6 +143,8 @@ public class MainActivity extends AppCompatActivity {
         tvDim = findViewById(R.id.tvDim);
         tvBlur = findViewById(R.id.tvBlur);
         swLock = findViewById(R.id.swLock);
+        swCase = findViewById(R.id.swCase);
+        swAutoColor = findViewById(R.id.swAutoColor);
         swNoFocus = findViewById(R.id.swNoFocus);
         swMaster = findViewById(R.id.swMaster);
         swWired = findViewById(R.id.swWired);
@@ -148,7 +161,7 @@ public class MainActivity extends AppCompatActivity {
         etAccent.setText(prefs.accentColor());
         sbWidth.setProgress(prefs.widthDp() - 180);
         sbRadius.setProgress(prefs.radiusDp());
-        sbImgH.setProgress(prefs.imageHeightDp() - 60);
+        sbImgH.setProgress((int) (prefs.imageRatio() * 100) - 40);
         sbDuration.setProgress(prefs.durationMs() / 500 - 1);
         spPos.setSelection(prefs.position());
         spAnim.setSelection(prefs.animStyle());
@@ -187,6 +200,9 @@ public class MainActivity extends AppCompatActivity {
             s.setAction(PopupService.ACTION_SHOW);
             s.putExtra(PopupService.EXTRA_NAME, "我的耳机");
             s.putExtra(PopupService.EXTRA_BATTERY, prefs.showBattery() ? 78 : -1);
+            // 演示用：真实连接时若读不到充电盒电量会自动隐藏该圆环
+            s.putExtra(PopupService.EXTRA_CASE,
+                    (prefs.showBattery() && prefs.showCaseBattery()) ? 65 : -1);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(s);
             else startService(s);
         });
@@ -259,6 +275,24 @@ public class MainActivity extends AppCompatActivity {
             if (!bindingUi) prefs.setShowBattery(checked);
             updatePreview();
         });
+        if (swCase != null) {
+            swCase.setChecked(prefs.showCaseBattery());
+            swCase.setOnCheckedChangeListener((b, checked) -> {
+                if (!bindingUi) prefs.setShowCaseBattery(checked);
+                updatePreview();
+            });
+        }
+        if (swAutoColor != null) {
+            swAutoColor.setChecked(prefs.autoColor());
+            swAutoColor.setOnCheckedChangeListener((b, checked) -> {
+                if (!bindingUi) {
+                    prefs.setAutoColor(checked);
+                    String u = prefs.imageUri();
+                    if (checked && !u.isEmpty()) extractTheme(Uri.parse(u));
+                    updatePreview();
+                }
+            });
+        }
         swLock.setOnCheckedChangeListener((b, checked) -> {
             if (!bindingUi) prefs.setShowOnLock(checked);
         });
@@ -271,7 +305,7 @@ public class MainActivity extends AppCompatActivity {
     private void syncSeekLabels() {
         tvWidth.setText("弹窗宽度 " + (sbWidth.getProgress() + 180) + "dp");
         tvRadius.setText("圆角 " + sbRadius.getProgress() + "dp");
-        tvImgH.setText("图片高度 " + (sbImgH.getProgress() + 60) + "dp");
+        tvImgH.setText("图片占弹窗高度 " + (sbImgH.getProgress() + 40) + "%");
         tvDuration.setText("显示时长 " + ((sbDuration.getProgress() + 1) * 500) + "ms");
         if (!bindingUi) updatePreview();
         if (sbDim != null) tvDim.setText("背景压暗 " + sbDim.getProgress() + "%");
@@ -310,31 +344,45 @@ public class MainActivity extends AppCompatActivity {
     private void updatePreview() {
         if (pvCard == null) return;
 
-        int w = (int) dp(prefs.widthDp());
+        int cardColor = parseColor(
+                prefs.autoColor() ? prefs.autoBgColor() : prefs.bgColor(), 0xF2141620);
+        int accent = parseColor(
+                prefs.autoColor() ? prefs.autoAccentColor() : prefs.accentColor(), 0xFF00E5A0);
+        int textColor = parseColor(prefs.textColor(), Color.WHITE);
+
+        float d = getResources().getDisplayMetrics().density;
+        int w = (int) (prefs.widthDp() * d);
         ViewGroup.LayoutParams lp = pvCard.getLayoutParams();
         lp.width = w;
         pvCard.setLayoutParams(lp);
 
         GradientDrawable gd = new GradientDrawable();
         gd.setShape(GradientDrawable.RECTANGLE);
-        gd.setCornerRadius(dp(prefs.radiusDp()));
-        gd.setColor(parseColor(prefs.bgColor(), 0xFF141620));
+        gd.setCornerRadius(prefs.radiusDp() * d);
+        gd.setColor(cardColor);
         pvCard.setBackground(gd);
-        pvCard.setElevation(dp(10));
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            pvCard.setClipToOutline(true);
+        pvCard.setElevation(12 * d);
+        pvCard.setClipToOutline(true);
+
+        // 图片区：铺满宽度，高度 = 宽度 × 比例
+        if (pvImageArea != null) {
+            ViewGroup.LayoutParams ilp = pvImageArea.getLayoutParams();
+            ilp.height = (int) (w * prefs.imageRatio());
+            pvImageArea.setLayoutParams(ilp);
         }
 
-        pvAccent.setBackgroundColor(parseColor(prefs.accentColor(), 0xFF00E5A0));
+        // 渐变遮罩：图片底部渐隐到卡片底色
+        if (pvFade != null) {
+            GradientDrawable fade = new GradientDrawable(
+                    GradientDrawable.Orientation.BOTTOM_TOP,
+                    new int[]{cardColor, Color.TRANSPARENT});
+            pvFade.setBackground(fade);
+        }
 
-        int textColor = parseColor(prefs.textColor(), Color.WHITE);
         pvTitle.setTextColor(textColor);
         pvSub.setTextColor(textColor);
-        pvBattery.setTextColor(textColor);
-
         String t = etTitle.getText().toString().trim();
         pvTitle.setText(t.isEmpty() ? "耳机已连接" : t);
-
         String subRaw = etSub.getText().toString();
         if (subRaw.trim().isEmpty()) {
             pvSub.setVisibility(View.GONE);
@@ -345,19 +393,24 @@ public class MainActivity extends AppCompatActivity {
         }
 
         boolean showBat = swBattery.isChecked();
-        pvBar.setVisibility(showBat ? View.VISIBLE : View.GONE);
-        pvBattery.setVisibility(showBat ? View.VISIBLE : View.GONE);
-        if (showBat) {
-            pvBar.setProgress(78);
-            pvBattery.setText("78%");
+        pvRingEarbud.setVisibility(showBat ? View.VISIBLE : View.GONE);
+        pvRingEarbud.setProgress(78);
+        pvRingEarbud.setRingColor(accent);
+        pvRingEarbud.setTrackColor(adjustAlpha(textColor, 0.22f));
+        pvRingEarbud.setTextColor(textColor);
+        // 预览里始终展示充电盒圆环，方便看排版
+        boolean showBox = showBat && swCase != null && swCase.isChecked();
+        pvBoxGroup.setVisibility(showBox ? View.VISIBLE : View.GONE);
+        if (showBox) {
+            pvRingBox.setProgress(65);
+            pvRingBox.setRingColor(accent);
+            pvRingBox.setTrackColor(adjustAlpha(textColor, 0.22f));
+            pvRingBox.setTextColor(textColor);
         }
-
-        ViewGroup.LayoutParams ilp = pvImage.getLayoutParams();
-        ilp.height = (int) dp(prefs.imageHeightDp());
-        pvImage.setLayoutParams(ilp);
 
         String uri = prefs.imageUri();
         if (!uri.isEmpty()) {
+            pvImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
             try {
                 Glide.with(this).load(Uri.parse(uri)).centerCrop().into(pvImage);
             } catch (Exception e) {
@@ -365,7 +418,54 @@ public class MainActivity extends AppCompatActivity {
             }
         } else {
             pvImage.setImageResource(R.drawable.ic_headphone);
+            pvImage.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         }
+    }
+
+    private int adjustAlpha(int color, float alpha) {
+        int a = Math.round(255 * alpha);
+        return (a << 24) | (color & 0x00FFFFFF);
+    }
+
+    /** 从所选图片提取主色调，压暗后作为卡片底色，强调色取鲜艳色 */
+    private void extractTheme(Uri uri) {
+        if (!prefs.autoColor()) return;
+        Glide.with(this)
+                .asBitmap()
+                .load(uri)
+                .into(new CustomTarget<Bitmap>() {
+                    @Override
+                    public void onResourceReady(Bitmap bmp, Transition<? super Bitmap> t) {
+                        Palette.from(bmp).generate(p -> {
+                            if (p == null) return;
+                            int seed = p.getDominantColor(0xFF141620);
+                            if (seed == 0xFF141620) {
+                                seed = p.getDarkVibrantColor(seed);
+                            }
+                            int bg = darken(seed, 0.26f);
+                            prefs.setAutoBgColor(String.format("#%08X", bg));
+
+                            int accent = p.getVibrantColor(0);
+                            if (accent == 0) accent = p.getLightVibrantColor(0);
+                            if (accent == 0) accent = p.getMutedColor(0xFF00E5A0);
+                            prefs.setAutoAccentColor(String.format("#%08X", accent));
+                            updatePreview();
+                        });
+                    }
+
+                    @Override
+                    public void onLoadCleared(android.graphics.drawable.Drawable d) {
+                    }
+                });
+    }
+
+    /** 保留色相、压暗明度，保证白字可读 */
+    private int darken(int color, float maxV) {
+        float[] hsv = new float[3];
+        Color.colorToHSV(color, hsv);
+        hsv[1] = Math.min(hsv[1] * 1.15f, 1f);
+        hsv[2] = Math.min(hsv[2], maxV);
+        return Color.HSVToColor(0xF2, hsv);
     }
 
     /** 让输入框改动即时反映到预览上 */
@@ -411,7 +511,7 @@ public class MainActivity extends AppCompatActivity {
         prefs.setAccentColor(ac.isEmpty() ? "#FF00E5A0" : ac);
         prefs.setWidthDp(sbWidth.getProgress() + 180);
         prefs.setRadiusDp(sbRadius.getProgress());
-        prefs.setImageHeightDp(sbImgH.getProgress() + 60);
+        prefs.setImageRatio((sbImgH.getProgress() + 40) / 100f);
         prefs.setDurationMs((sbDuration.getProgress() + 1) * 500);
         prefs.setDimAmount(sbDim.getProgress() / 100f);
         prefs.setBlurRadius(sbBlur.getProgress());
