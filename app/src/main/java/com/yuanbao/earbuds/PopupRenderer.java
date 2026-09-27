@@ -91,13 +91,12 @@ public final class PopupRenderer {
             card.setElevation(18 * d);
         }
 
-        // ---------- 底部渐变：透明 → 卡片底色 ----------
-        if (gradientFade != null) {
-            GradientDrawable fade = new GradientDrawable(
-                    GradientDrawable.Orientation.BOTTOM_TOP,
-                    new int[]{cardBg, Color.TRANSPARENT});
-            gradientFade.setBackground(fade);
-        }
+        // ---------- 底部渐变层：停用 ----------
+        // 这个 96dp 的渐变层（cardBg → 透明）叠在媒体区底部，
+        // 而 LiveBlurView 现在自己就带渐隐过渡，两者叠加会在底部
+        // 形成一条很宽的「灰色带」—— 这就是一直被吐槽的「加了一层灰」。
+        // 过渡交给 LiveBlurView 的 fadeRatio 就够了，这里直接隐藏。
+        if (gradientFade != null) gradientFade.setVisibility(View.GONE);
 
         int textColor = parseColor(prefs.textColor(), Color.WHITE);
 
