@@ -4,7 +4,7 @@
     android:id="@+id/rowPrivateCase"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/bg_card_row_single"
+    android:background="@drawable/bg_card"
     android:gravity="center_vertical"
     android:orientation="horizontal"
     android:paddingStart="16dp"
