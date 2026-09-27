@@ -246,6 +246,35 @@ public class Prefs {
         sp.edit().putBoolean("no_focus", v).apply();
     }
 
+
+    // ---------- 后台功耗 & 通知 ----------
+    /** 省电模式：熄屏时不弹窗、不唤醒，显著减少待机耗电 */
+    public boolean powerSave() {
+        return sp.getBoolean("power_save", true);
+    }
+
+    public void setPowerSave(boolean v) {
+        sp.edit().putBoolean("power_save", v).apply();
+    }
+
+    /** 隐藏后台通知：渠道降到最低重要性，并引导用户在系统设置彻底关闭 */
+    public boolean hideNotification() {
+        return sp.getBoolean("hide_noti", false);
+    }
+
+    public void setHideNotification(boolean v) {
+        sp.edit().putBoolean("hide_noti", v).apply();
+    }
+
+    /** 用户是否已在系统设置里关闭了本 App 的通知（App 侧记录，用于提示） */
+    public boolean notiDismissed() {
+        return sp.getBoolean("noti_dismissed", false);
+    }
+
+    public void setNotiDismissed(boolean v) {
+        sp.edit().putBoolean("noti_dismissed", v).apply();
+    }
+
     // ---------- 设备白名单 ----------
     /** 返回 null 或空集表示“所有设备都弹” */
     public Set<String> allowedDevices() {
