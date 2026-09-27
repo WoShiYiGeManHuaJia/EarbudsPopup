@@ -1,94 +1,125 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  弹窗卡片。参照华为官方《耳机弹窗主题设计指导》：
+  设计尺寸 1440×1792（宽高比约 1 : 1.24），圆角 128px ≈ 宽度的 8.9%。
+
+  图片处理：产品图铺满卡片顶部、与卡片同圆角，底部叠一层由透明渐变到
+  卡片底色的遮罩，让图片"长进"卡片里，而不是在卡片中间挖一个方块。
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/card"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="0dp">
+    android:orientation="vertical">
 
-    <!-- 顶部电竞风高亮条 -->
-    <View
-        android:id="@+id/accentBar"
+    <!-- ① 产品图区：铺满宽度，无内边距 -->
+    <FrameLayout
+        android:id="@+id/imageArea"
         android:layout_width="match_parent"
-        android:layout_height="3dp"
-        android:background="#FF00E5A0" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="14dp">
+        android:layout_height="wrap_content">
 
         <ImageView
             android:id="@+id/popupImage"
             android:layout_width="match_parent"
-            android:layout_height="170dp"
+            android:layout_height="match_parent"
             android:contentDescription="弹窗动画"
             android:scaleType="centerCrop" />
+
+        <!-- 渐变遮罩：透明 → 卡片底色，实现图片与文字区的融合 -->
+        <View
+            android:id="@+id/imageFade"
+            android:layout_width="match_parent"
+            android:layout_height="86dp"
+            android:layout_gravity="bottom" />
+    </FrameLayout>
+
+    <!-- ② 文字与电量 -->
+    <LinearLayout
+        android:id="@+id/contentArea"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="20dp"
+        android:paddingTop="2dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="18dp">
 
         <TextView
             android:id="@+id/popupTitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
             android:gravity="center"
             android:text="Buds 5 Pro 电竞版"
             android:textColor="#FFFFFFFF"
-            android:textSize="18sp"
+            android:textSize="17sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/popupSub"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:alpha="0.8"
+            android:layout_marginTop="3dp"
+            android:alpha="0.75"
             android:gravity="center"
             android:text="已连接"
             android:textColor="#FFFFFFFF"
-            android:textSize="13sp" />
+            android:textSize="12.5sp" />
 
-        <!-- 电量条 -->
+        <!-- 电量：耳机 + 充电盒 两个圆环并排 -->
         <LinearLayout
             android:id="@+id/batteryRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:gravity="center_vertical"
+            android:layout_marginTop="16dp"
+            android:gravity="center"
             android:orientation="horizontal">
 
-            <ProgressBar
-                android:id="@+id/batteryBar"
-                style="?android:attr/progressBarStyleHorizontal"
-                android:layout_width="0dp"
-                android:layout_height="6dp"
-                android:layout_weight="1"
-                android:max="100"
-                android:progress="78"
-                android:progressDrawable="@drawable/bg_battery_bar" />
-
-            <TextView
-                android:id="@+id/popupBattery"
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="10dp"
-                android:text="78%"
-                android:textColor="#FFFFFFFF"
-                android:textSize="12sp"
-                android:textStyle="bold" />
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
+
+                <com.yuanbao.earbuds.BatteryRingView
+                    android:id="@+id/ringEarbud"
+                    android:layout_width="60dp"
+                    android:layout_height="60dp" />
+
+                <TextView
+                    android:id="@+id/labelEarbud"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:alpha="0.7"
+                    android:text="耳机"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/boxGroup"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="34dp"
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
+
+                <com.yuanbao.earbuds.BatteryRingView
+                    android:id="@+id/ringBox"
+                    android:layout_width="60dp"
+                    android:layout_height="60dp" />
+
+                <TextView
+                    android:id="@+id/labelBox"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:alpha="0.7"
+                    android:text="充电盒"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="11sp" />
+            </LinearLayout>
         </LinearLayout>
-
-        <TextView
-            android:id="@+id/popupHint"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:alpha="0.45"
-            android:gravity="center"
-            android:text="轻触关闭"
-            android:textColor="#FFFFFFFF"
-            android:textSize="11sp" />
-
     </LinearLayout>
 
 </LinearLayout>
