@@ -306,6 +306,19 @@
                 android:drawableStart="@drawable/ic_notification"
                 android:text="隐藏后台通知"
                 android:textSize="15.5sp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="?attr/colorSurfaceVariant" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/swHideRecents"
+                style="@style/AppItem"
+                android:drawableStart="@drawable/ic_lock"
+                android:text="在最近任务里隐藏"
+                android:textSize="15.5sp" />
         </LinearLayout>
 
         <LinearLayout
