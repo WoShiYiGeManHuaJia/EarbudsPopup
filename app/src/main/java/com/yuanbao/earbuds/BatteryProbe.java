@@ -508,10 +508,15 @@ public final class BatteryProbe {
                         + (v != null ? "  raw=" + hex(ch.getValue()) : ""));
                 int idx = indexOf(levels, ch);
                 if (idx >= 0) {
+                    // 标准电量特征：继续读下一个
                     readNext(g, levels, idx + 1, overall, cb);
-                } else {
-                    closeAndFinish(g, overall, cb);
                 }
+                // 关键修复：私有特征的读取由 dumpNext() 自己的 postDelayed 链推进。
+                // 之前这里写的是 else { closeAndFinish(...) }，
+                // 读到的第一个私有特征就会把整条链掐断，
+                // finalizeLevels() 永远执行不到 —— 这就是「日志里有 32，
+                // 但最终结果却是 Case=--% 且没有任何推断日志」的原因。
+                // 现在不对私有特征做任何流程控制，交给 dumpNext 收尾。
             }
 
             @Override
