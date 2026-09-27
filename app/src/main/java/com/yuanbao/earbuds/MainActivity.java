@@ -64,7 +64,11 @@ public class MainActivity extends AppCompatActivity {
     private TextView pvInfo, pvTip;
 
     // 外观
-    private ImageView imgPreview;
+    private RoundedImageView pvFrameImage;
+    private TextView tvFrameHint;
+    private TextView tvSoundName;
+    private TextView tvSoundVol;
+    private SwitchMaterial swSound;
     private EditText etTitle, etSub, etBg, etTextColor, etAccent;
     private TextView tvWidth, tvRadius, tvImgH, tvDuration, tvPos, tvAnim;
     private SwitchMaterial swAutoColor;
@@ -98,6 +102,19 @@ public class MainActivity extends AppCompatActivity {
                 extractTheme(uri);
             });
 
+    private final ActivityResultLauncher<String[]> pickSound =
+            registerForActivityResult(new ActivityResultContracts.OpenDocument(), uri -> {
+                if (uri == null) return;
+                try {
+                    getContentResolver().takePersistableUriPermission(uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } catch (Exception ignored) {
+                }
+                prefs.setSoundUri(uri.toString());
+                updateSoundLabel();
+                Toast.makeText(this, "音效已设置", Toast.LENGTH_SHORT).show();
+            });
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         // 不使用 DynamicColors：它会用壁纸色覆盖主题，浅色壁纸下
@@ -107,6 +124,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         prefs = new Prefs(this);
+        PopupRenderer.PrefsHolder.init(this);
 
         setupToolbarAndNav();
         bindViews();
@@ -166,7 +184,22 @@ public class MainActivity extends AppCompatActivity {
         pvInfo = findViewById(R.id.pvInfo);
         pvTip = findViewById(R.id.pvTip);
 
-        imgPreview = findViewById(R.id.imgPreview);
+        pvFrameImage = findViewById(R.id.pvFrameImage);
+        tvFrameHint = findViewById(R.id.tvFrameHint);
+        swSound = findViewById(R.id.swSound);
+        tvSoundName = findViewById(R.id.tvSoundName);
+        tvSoundVol = findViewById(R.id.tvSoundVol);
+        setupImageGesture();
+        setupSoundUi();
+        com.google.android.material.button.MaterialButton resetTf =
+                findViewById(R.id.btnResetTransform);
+        if (resetTf != null) {
+            resetTf.setOnClickListener(v -> {
+                prefs.resetImageTransform();
+                loadThumb();
+                Toast.makeText(this, "已重置缩放", Toast.LENGTH_SHORT).show();
+            });
+        }
         etTitle = findViewById(R.id.etTitle);
         etSub = findViewById(R.id.etSub);
         etBg = findViewById(R.id.etBg);
@@ -571,16 +604,44 @@ public class MainActivity extends AppCompatActivity {
         pvTip.setTextColor(adjustAlpha(textColor, 0.55f));
 
         String uri = prefs.imageUri();
+        pvImage.setScaleType(ImageView.ScaleType.MATRIX);
         if (!uri.isEmpty()) {
-            pvImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
             try {
-                Glide.with(this).load(Uri.parse(uri)).dontTransform().into(pvImage);
+                Glide.with(this)
+                        .load(Uri.parse(uri))
+                        .dontTransform()
+                        .into(new com.bumptech.glide.request.target.CustomViewTarget<ImageView,
+                                android.graphics.drawable.Drawable>(pvImage) {
+                            @Override
+                            public void onResourceReady(
+                                    android.graphics.drawable.Drawable resource,
+                                    com.bumptech.glide.request.transition.Transition<? super
+                                            android.graphics.drawable.Drawable> t) {
+                                pvImage.setImageDrawable(resource);
+                                PopupRenderer.applyImageMatrix(pvImage);
+                                if (resource instanceof android.graphics.drawable.Animatable) {
+                                    ((android.graphics.drawable.Animatable) resource).start();
+                                }
+                            }
+
+                            @Override
+                            public void onLoadFailed(android.graphics.drawable.Drawable d) {
+                                pvImage.setImageResource(R.drawable.ic_headphone);
+                                PopupRenderer.applyImageMatrix(pvImage);
+                            }
+
+                            @Override
+                            protected void onResourceCleared(
+                                    android.graphics.drawable.Drawable d) {
+                            }
+                        });
             } catch (Exception e) {
                 pvImage.setImageResource(R.drawable.ic_headphone);
+                PopupRenderer.applyImageMatrix(pvImage);
             }
         } else {
             pvImage.setImageResource(R.drawable.ic_headphone);
-            pvImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            PopupRenderer.applyImageMatrix(pvImage);
         }
     }
 
@@ -589,19 +650,171 @@ public class MainActivity extends AppCompatActivity {
         return (a << 24) | (color & 0x00FFFFFF);
     }
 
+    /**
+     * 把选中图片加载进「相框」预览。
+     * 用 MATRIX 而非 centerCrop：这样才能叠加用户的双指缩放 / 拖动。
+     */
     private void loadThumb() {
-        if (imgPreview == null) return;
+        if (pvFrameImage == null) return;
         String uri = prefs.imageUri();
+        pvFrameImage.setScaleType(ImageView.ScaleType.MATRIX);
         if (!uri.isEmpty()) {
-            imgPreview.setScaleType(ImageView.ScaleType.CENTER_CROP);
             try {
-                Glide.with(this).load(Uri.parse(uri)).centerCrop().into(imgPreview);
+                Glide.with(this)
+                        .load(Uri.parse(uri))
+                        .dontTransform()
+                        .into(new com.bumptech.glide.request.target.CustomViewTarget<ImageView,
+                                android.graphics.drawable.Drawable>(pvFrameImage) {
+                            @Override
+                            public void onResourceReady(
+                                    android.graphics.drawable.Drawable resource,
+                                    com.bumptech.glide.request.transition.Transition<? super
+                                            android.graphics.drawable.Drawable> t) {
+                                pvFrameImage.setImageDrawable(resource);
+                                PopupRenderer.applyImageMatrix(pvFrameImage);
+                                if (resource instanceof android.graphics.drawable.Animatable) {
+                                    ((android.graphics.drawable.Animatable) resource).start();
+                                }
+                            }
+
+                            @Override
+                            public void onLoadFailed(
+                                    android.graphics.drawable.Drawable d) {
+                                pvFrameImage.setImageResource(R.drawable.ic_headphone);
+                                PopupRenderer.applyImageMatrix(pvFrameImage);
+                            }
+
+                            @Override
+                            protected void onResourceCleared(
+                                    android.graphics.drawable.Drawable d) {
+                            }
+                        });
             } catch (Exception e) {
-                imgPreview.setImageResource(R.drawable.ic_headphone);
+                pvFrameImage.setImageResource(R.drawable.ic_headphone);
+                PopupRenderer.applyImageMatrix(pvFrameImage);
+            }
+            if (tvFrameHint != null) {
+                tvFrameHint.setText("双指缩放 · 单指拖动");
             }
         } else {
-            imgPreview.setImageResource(R.drawable.ic_headphone);
-            imgPreview.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+            pvFrameImage.setImageResource(R.drawable.ic_headphone);
+            PopupRenderer.applyImageMatrix(pvFrameImage);
+            if (tvFrameHint != null) {
+                tvFrameHint.setText("未选择图片 · 双指缩放 / 单指拖动");
+            }
+        }
+        // 首页预览同步
+        updatePreview();
+    }
+
+    /** 给相框和首页预览都挂上双指缩放 / 单指拖动 */
+    private void setupImageGesture() {
+        attachGesture(pvFrameImage);
+        attachGesture(pvImage);
+    }
+
+    /**
+     * 手势：双指缩放 + 单指拖动，实时写入 Prefs，
+     * 这样弹窗渲染时读到的是同一套变换，所见即所得。
+     */
+    private void attachGesture(ImageView v) {
+        if (v == null) return;
+        final float[] startScale = {1f};
+        final float[] startDx = {0f};
+        final float[] startDy = {0f};
+        final float[] lastX = {0f};
+        final float[] lastY = {0f};
+        final android.view.ScaleGestureDetector sgd = new android.view.ScaleGestureDetector(
+                this, new android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            @Override
+            public boolean onScale(android.view.ScaleGestureDetector det) {
+                float factor = det.getScaleFactor();
+                float ns = prefs.imageScale() * factor;
+                prefs.setImageScale(ns);
+                PopupRenderer.applyImageMatrix(pvFrameImage);
+                PopupRenderer.applyImageMatrix(pvImage);
+                return true;
+            }
+        });
+        v.setOnTouchListener((view, ev) -> {
+            sgd.onTouchEvent(ev);
+            float density = getResources().getDisplayMetrics().density;
+            switch (ev.getActionMasked()) {
+                case android.view.MotionEvent.ACTION_DOWN:
+                    startScale[0] = prefs.imageScale();
+                    startDx[0] = prefs.imageOffsetX();
+                    startDy[0] = prefs.imageOffsetY();
+                    lastX[0] = ev.getX();
+                    lastY[0] = ev.getY();
+                    view.getParent().requestDisallowInterceptTouchEvent(true);
+                    return true;
+                case android.view.MotionEvent.ACTION_MOVE:
+                    if (ev.getPointerCount() == 1) {
+                        float dx = (ev.getX() - lastX[0]) / density;
+                        float dy = (ev.getY() - lastY[0]) / density;
+                        prefs.setImageOffsetX(startDx[0] + dx);
+                        prefs.setImageOffsetY(startDy[0] + dy);
+                        PopupRenderer.applyImageMatrix(pvFrameImage);
+                        PopupRenderer.applyImageMatrix(pvImage);
+                    }
+                    return true;
+                case android.view.MotionEvent.ACTION_UP:
+                case android.view.MotionEvent.ACTION_CANCEL:
+                    view.getParent().requestDisallowInterceptTouchEvent(false);
+                    return true;
+                default:
+                    return true;
+            }
+        });
+    }
+
+    // ---------------- 弹窗音效 ----------------
+
+    private void setupSoundUi() {
+        if (swSound != null) {
+            swSound.setChecked(prefs.soundEnabled());
+            swSound.setOnCheckedChangeListener((b, checked) -> prefs.setSoundEnabled(checked));
+        }
+        updateSoundLabel();
+
+        View rowSound = findViewById(R.id.rowSound);
+        if (rowSound != null) {
+            rowSound.setOnClickListener(v -> pickSound());
+        }
+        View rowVol = findViewById(R.id.rowSoundVol);
+        if (rowVol != null) {
+            rowVol.setOnClickListener(v -> showSlider("音量", "%",
+                    0, 100, Math.round(prefs.soundVolume() * 100),
+                    val -> {
+                        prefs.setSoundVolume(val / 100f);
+                        updateSoundLabel();
+                    }));
+        }
+        com.google.android.material.button.MaterialButton test =
+                findViewById(R.id.btnTestSound);
+        if (test != null) {
+            test.setOnClickListener(v -> {
+                SoundPlayer.play(this, prefs);
+                Toast.makeText(this, "试听中", Toast.LENGTH_SHORT).show();
+            });
+        }
+    }
+
+    private void updateSoundLabel() {
+        if (tvSoundVol != null) {
+            tvSoundVol.setText(Math.round(prefs.soundVolume() * 100) + "%");
+        }
+        if (tvSoundName != null) {
+            String u = prefs.soundUri();
+            tvSoundName.setText(u.isEmpty() ? "未选择（用系统提示音）" : "已选择音频文件");
+        }
+    }
+
+    private void pickSound() {
+        try {
+            pickSound.launch(new String[]{"audio/*"});
+        } catch (Exception e) {
+            Toast.makeText(this, "无法打开文件选择器", Toast.LENGTH_SHORT).show();
         }
     }
 
