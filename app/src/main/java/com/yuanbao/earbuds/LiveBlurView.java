@@ -529,8 +529,14 @@ public class LiveBlurView extends View {
                 boutsum -= sir[2];
                 aoutsum -= sir[3];
 
-                if (x == 0) vmin[y] = Math.min(y + r1, hm) * w;
-                p = pix[yw + vmin[y]];
+                // 修复：水平 pass 里 vmin 必须按【列 x】索引，值是【行内偏移】，
+                // 不能乘 w。之前写成 vmin[y] = min(y+r1,hm)*w 且 p = pix[yw+vmin[y]]，
+                // 索引最大可达 2*(h-1)*w，远超数组长度 w*h → 每帧抛
+                // ArrayIndexOutOfBoundsException，被上层 catch 吞掉，
+                // 于是 stackBlur 从未成功执行过（只剩降采样 = 马赛克）。
+                // 只在 y==0 时初始化整行，之后各行复用（vmin[x] 只依赖 x）。
+                if (y == 0) vmin[x] = Math.min(x + r1, wm);
+                p = pix[yw + vmin[x]];
 
                 sir[0] = (p & 0xff0000) >> 16;
                 sir[1] = (p & 0x00ff00) >> 8;
@@ -683,10 +689,14 @@ public class LiveBlurView extends View {
         try {
             stackBlur(smallBuf, radius);
         } catch (Throwable t) {
+            // 不再静默吞掉：之前 stackBlur 每帧抛 ArrayIndexOutOfBounds
+            // 却毫无痕迹，导致「模糊从未生效」被误判成参数问题。
+            android.util.Log.e("LiveBlur", "stackBlur 失败 r=" + radius
+                    + " small=" + bw + "x" + bh, t);
             try {
                 stackBlur(smallBuf, 6);
-            } catch (Throwable ignored) {
-                // 都不行就保留降采样结果，至少不是纯色
+            } catch (Throwable t2) {
+                android.util.Log.e("LiveBlur", "stackBlur 兜底也失败", t2);
             }
         }
 
