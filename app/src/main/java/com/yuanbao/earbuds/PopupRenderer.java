@@ -228,6 +228,8 @@ public final class PopupRenderer {
         blur.setBlurRadius(22f * d);
         // 叠一层半透明卡片色，保证文字可读
         blur.setDim(applyAlpha(cardBg, 0.45f));
+        // 顶部 55% 高度做渐隐，与上方清晰画面平滑过渡（不再一刀切）
+        blur.setFadeRatio(0.55f);
         blur.setSource(img);
         // 布局里是 gone + 76dp，这里才显示。
         // 高度由布局写死，不再依赖测量，避免撑高父容器把整卡糊掉。
