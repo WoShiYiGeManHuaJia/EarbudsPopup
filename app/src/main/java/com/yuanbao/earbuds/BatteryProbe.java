@@ -202,6 +202,11 @@ public final class BatteryProbe {
 
     @SuppressLint("MissingPermission")
     public void probe(String address, BluetoothDevice device, Callback cb) {
+        // 记录地址，供预览读取缓存电量
+        try {
+            new Prefs(ctx).setLastAddress(address);
+        } catch (Throwable ignored) {
+        }
         log("========== 电量探测 ==========");
         log("地址: " + address);
         log("设备名: " + safeName(device));
