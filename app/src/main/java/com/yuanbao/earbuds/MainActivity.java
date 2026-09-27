@@ -82,6 +82,7 @@ public class MainActivity extends AppCompatActivity {
 
     private final Set<String> allowSet = new LinkedHashSet<>();
     private boolean bindingUi = false;
+    private boolean saving = false;
 
     private final ActivityResultLauncher<String[]> pickImage =
             registerForActivityResult(new ActivityResultContracts.OpenDocument(), uri -> {
@@ -361,7 +362,14 @@ public class MainActivity extends AppCompatActivity {
             }
 
             public void onTextChanged(CharSequence s, int a, int b, int c) {
-                if (!bindingUi) updatePreview();
+                if (bindingUi) return;
+                updatePreview();
+                // 边打字边落库：之前必须点「保存设置」才写进去，
+                // 用户改了直接连耳机会发现没变化
+                if (saving) return;
+                saving = true;
+                saveAll();
+                saving = false;
             }
 
             public void afterTextChanged(Editable s) {
@@ -376,6 +384,16 @@ public class MainActivity extends AppCompatActivity {
 
     private void showSlider(String title, String unit, int min, int max, int current,
                             java.util.function.Consumer<Integer> onPick) {
+        showSlider(title, unit, min, max, current, onPick, true);
+    }
+
+    /**
+     * @param live 是否在拖动过程中就应用并刷新预览。
+     *             之前只有点「确定」才生效，用户拖滑块看不到任何变化，
+     *             以为参数没用；现在默认边拖边变，点确定只是最终落库。
+     */
+    private void showSlider(String title, String unit, int min, int max, int current,
+                            java.util.function.Consumer<Integer> onPick, boolean live) {
         final int[] value = {clamp(current, min, max)};
         TextView label = new TextView(this, null, android.R.attr.textAppearanceMedium);
         label.setText(value[0] + " " + unit);
@@ -396,6 +414,11 @@ public class MainActivity extends AppCompatActivity {
             public void onProgressChanged(SeekBar s, int p, boolean b) {
                 value[0] = p + min;
                 label.setText(value[0] + " " + unit);
+                if (live) {
+                    onPick.accept(value[0]);   // 实时写入设置
+                    syncValueLabels();         // 行尾数字跟着变
+                    updatePreview();           // 预览卡片立刻变化
+                }
             }
 
             public void onStartTrackingTouch(SeekBar s) {
@@ -405,10 +428,16 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        final int original = clamp(current, min, max);
         new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
                 .setTitle(title)
                 .setView(box)
-                .setNegativeButton("取消", null)
+                .setNegativeButton("取消", (d, w) -> {
+                    // 拖动时已经实时改过了，取消要还原，否则等于改了却说没改
+                    onPick.accept(original);
+                    syncValueLabels();
+                    updatePreview();
+                })
                 .setPositiveButton("确定", (d, w) -> {
                     onPick.accept(value[0]);
                     syncValueLabels();
@@ -427,6 +456,7 @@ public class MainActivity extends AppCompatActivity {
                 .setPositiveButton("确定", (d, w) -> {
                     onPick.accept(sel[0]);
                     syncValueLabels();
+                    updatePreview();
                 })
                 .show();
     }
@@ -436,6 +466,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // ---------------- 预览 ----------------
+
+    /** 动态设置 LinearLayout 子项 weight */
+    private void setWeight(View v, int weight) {
+        if (v == null) return;
+        ViewGroup.LayoutParams lp = v.getLayoutParams();
+        if (lp instanceof LinearLayout.LayoutParams) {
+            ((LinearLayout.LayoutParams) lp).weight = weight;
+            v.setLayoutParams(lp);
+        }
+    }
 
     private int parseColor(String v, int fallback) {
         try {
@@ -476,12 +516,22 @@ public class MainActivity extends AppCompatActivity {
 
         GradientDrawable gd = new GradientDrawable();
         gd.setShape(GradientDrawable.RECTANGLE);
-        gd.setCornerRadius(24 * d * 0.78f);
+        gd.setCornerRadius(prefs.radiusDp() * d * 0.78f);
         gd.setColor(cardColor);
         gd.setStroke(Math.max(1, (int) d), 0x33FFFFFF);
         pvCard.setBackground(gd);
         pvCard.setElevation(12 * d);
         pvCard.setClipToOutline(true);
+
+        // 三区比例与真实弹窗用同一套算法，预览才等于所见即所得
+        float ratio = Math.max(0.30f, Math.min(0.92f, prefs.imageRatio()));
+        int gifW = Math.round(ratio * 100);
+        int rest = Math.max(6, 100 - gifW);
+        int infoW = Math.round(rest * 2f / 3f);
+        int tipW = Math.max(2, rest - infoW);
+        setWeight(pvImageArea, gifW);
+        setWeight(pvInfo, infoW);
+        setWeight(pvTip, tipW);
 
         // 预览里的图片区也做圆角裁切，跟真实弹窗保持一致
         if (pvImageArea != null) {
@@ -498,10 +548,12 @@ public class MainActivity extends AppCompatActivity {
         // 信息窄条：与真实弹窗同一套拼接逻辑
         int bat = swBattery.isChecked() ? 78 : -1;
         int cas = (swBattery.isChecked() && swCase.isChecked()) ? 65 : -1;
-        StringBuilder sb = new StringBuilder("Buds 5 Pro 电竞版");
+        String devName = etTitle.getText().toString().trim();
+        if (devName.isEmpty()) devName = "我的耳机";
+        StringBuilder sb = new StringBuilder(devName);
         String sub = etSub.getText().toString().trim();
         if (!sub.isEmpty()) sb.append(" · ").append(sub.contains("%s")
-                ? String.format(sub, "Buds 5 Pro 电竞版") : sub);
+                ? String.format(sub, devName) : sub);
         if (bat >= 0 || cas >= 0) {
             sb.append("  |  L:").append(bat >= 0 ? bat + "%" : "--%")
               .append("  R:").append(bat >= 0 ? bat + "%" : "--%")
@@ -1017,6 +1069,16 @@ public class MainActivity extends AppCompatActivity {
                 task.setExcludeFromRecents(hide);
             }
         } catch (Throwable ignored) {
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        // 兜底：任何情况下离开界面都把当前值写进去
+        try {
+            saveAll();
+        } catch (Exception ignored) {
         }
     }
 
