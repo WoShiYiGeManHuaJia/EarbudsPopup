@@ -111,7 +111,9 @@ public class Prefs {
     }
 
     public int widthDp() {
-        return sp.getInt("width", 296);
+        // 小米官方弹窗几乎占满屏宽（左右各留约 24dp）。
+        // K70 Pro 屏幕 411dp，默认 360dp 约占 88%，更接近官方观感。
+        return sp.getInt("width", 360);
     }
 
     public void setWidthDp(int v) {
