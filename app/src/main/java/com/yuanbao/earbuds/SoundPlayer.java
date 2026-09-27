@@ -50,9 +50,13 @@ public final class SoundPlayer {
                     }
                 });
                 current = mp;
-                // 兜底：8 秒后无论如何释放，避免长期占用
+                final MediaPlayer mine = mp;
+                // 兜底：8 秒后释放。
+                // 但必须带上「身份校验」：若这 8 秒内又播了新的音效，
+                // 这个延迟任务仍会执行，直接调 release() 会把正在响的新音效杀掉。
+                // 所以只在 current 仍是自己时才释放。
                 new android.os.Handler(android.os.Looper.getMainLooper())
-                        .postDelayed(SoundPlayer::release, 8000);
+                        .postDelayed(() -> releaseIf(mine), 8000);
                 return;
             } catch (Exception ignored) {
                 // 自定义音频不可用，退回系统提示音
@@ -65,6 +69,19 @@ public final class SoundPlayer {
             if (def == null) def = Settings.System.DEFAULT_NOTIFICATION_URI;
             Ringtone r = RingtoneManager.getRingtone(c, def);
             if (r != null) r.play();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** 只释放指定的实例；若已经换了别的音效在播，就不动它 */
+    private static void releaseIf(MediaPlayer target) {
+        try {
+            if (current != target) return;   // 已经不是自己了，说明有新音效在播
+            MediaPlayer mp = current;
+            current = null;
+            if (mp == null) return;
+            if (mp.isPlaying()) mp.stop();
+            mp.release();
         } catch (Exception ignored) {
         }
     }
