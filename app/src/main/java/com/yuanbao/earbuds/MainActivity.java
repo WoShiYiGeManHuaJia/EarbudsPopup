@@ -811,12 +811,13 @@ public class MainActivity extends AppCompatActivity {
 
     private void doProbe(BluetoothDevice dev) {
         final String addr = dev.getAddress();
-        final String n;
+        final String[] nHolder = new String[1];
         try {
-            n = dev.getName();
+            nHolder[0] = dev.getName();
         } catch (SecurityException e) {
-            n = null;
+            nHolder[0] = null;
         }
+        final String n = nHolder[0];
         final android.app.ProgressDialog pd = new android.app.ProgressDialog(this);
         pd.setTitle("正在探测");
         pd.setMessage((n == null ? addr : n) + "\n扫描 BLE 广播并读取 GATT，最多 20 秒…");
