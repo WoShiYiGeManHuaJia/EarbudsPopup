@@ -1,8 +1,10 @@
 package com.yuanbao.earbuds;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Matrix;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -13,36 +15,32 @@ import android.view.ViewGroup;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.bumptech.glide.Glide;
 
 /**
- * 弹窗渲染：悬浮窗引擎与系统级 Activity 引擎共用。
+ * 弹窗渲染（悬浮窗引擎与系统级 Activity 引擎共用）。
  *
- * 排版（类 realme）：
- *   ① 媒体区（图片 / GIF）占据主要空间，默认填满不留白
- *   ② 底部渐变，让媒体与详情自然过渡
- *   ③ 详情区：设备名 + 电量 + 提示
+ * 排版（类小米 / realme）：
+ *   - 媒体区铺满整张卡片，不预留空白条
+ *   - 详情区叠在卡片底部（overlay），不占位
+ *   - 四角圆角由 RoundedCardLayout 统一合成（顶部两角也是圆角，抗锯齿）
  *
- * 动画节奏（分两阶段，互不打断）：
- *   第 1 段：整个卡片从下往上入场（340ms）
- *   第 2 段：0.8 秒后，详情区缓慢升起（420ms）
- *   —— 详情区是「始终占位 + 平移淡入」，不触发重新测量，
- *      所以 GIF 全程连续播放，既不中断也不重置。
- *
- * 圆角：媒体区由 RoundedImageView 用离屏 DST_IN 合成，边缘抗锯齿无锯齿。
+ * 动画节奏：
+ *   第 1 段：整张卡片从下往上入场（340ms）
+ *   第 2 段：1 秒后，把详情区【所在那一块】做模糊，再淡入文字（420ms）
+ *           —— 详情区不参与布局占位，所以从头到尾不触发重新测量，
+ *              GIF 全程连续播放，既不中断也不重置。
  */
 public final class PopupRenderer {
 
-    /** 动画样式索引，与 Prefs.animStyle() 一致 */
     public static final int ANIM_SCALE = 0;
     public static final int ANIM_BOTTOM = 1;
     public static final int ANIM_TOP = 2;
 
-    /** 详情区延迟升起的时间 */
-    private static final long DETAIL_DELAY_MS = 800L;
+    /** 详情区延迟出现时间 */
+    private static final long DETAIL_DELAY_MS = 1000L;
     private static final long DETAIL_RISE_MS = 420L;
 
     private static final Handler main = new Handler(Looper.getMainLooper());
@@ -57,15 +55,18 @@ public final class PopupRenderer {
     public static void bind(Context c, View root, String rawName,
                             BatteryLevels levels,
                             Prefs prefs, OnClose onClose) {
-        final View card = root.findViewById(R.id.card);
+        final RoundedCardLayout card = root.findViewById(R.id.card);
         final FrameLayout gifWrap = root.findViewById(R.id.gifWrap);
         final RoundedImageView img = root.findViewById(R.id.popupImage);
         View shimmer = root.findViewById(R.id.shimmer);
         View gradientFade = root.findViewById(R.id.gradientFade);
         final View detailArea = root.findViewById(R.id.detailArea);
+        final ImageView detailBlurBg = root.findViewById(R.id.detailBlurBg);
         TextView tvDeviceName = root.findViewById(R.id.tvDeviceName);
-        TextView infoBar = root.findViewById(R.id.infoBar);
+        TextView tvBattery = root.findViewById(R.id.tvBattery);
+        TextView tvCase = root.findViewById(R.id.tvCase);
         TextView tipText = root.findViewById(R.id.tipText);
+        ImageView icCase = root.findViewById(R.id.icCase);
 
         float d = c.getResources().getDisplayMetrics().density;
 
@@ -83,17 +84,12 @@ public final class PopupRenderer {
             lp.width = widthPx;
             lp.height = heightPx;
             card.setLayoutParams(lp);
-
-            GradientDrawable gd = new GradientDrawable();
-            gd.setShape(GradientDrawable.RECTANGLE);
-            gd.setCornerRadius(prefs.radiusDp() * d);
-            gd.setColor(cardBg);
-            gd.setStroke(Math.max(1, (int) d), 0x33FFFFFF);
-            card.setBackground(gd);
+            // 关键：由卡片自己画底色 + 统一圆角合成，四角（含顶部）都是抗锯齿圆角
+            card.setCardStyle(prefs.radiusDp() * d, cardBg, 0x33FFFFFF, Math.max(1f, d));
             card.setElevation(18 * d);
         }
 
-        // ---------- ② 底部渐变：透明 → 卡片底色 ----------
+        // ---------- 底部渐变：透明 → 卡片底色 ----------
         if (gradientFade != null) {
             GradientDrawable fade = new GradientDrawable(
                     GradientDrawable.Orientation.BOTTOM_TOP,
@@ -101,15 +97,7 @@ public final class PopupRenderer {
             gradientFade.setBackground(fade);
         }
 
-        // ---------- ① 媒体区圆角（抗锯齿） ----------
-        if (img != null) {
-            img.setRadius(Math.max(0f, prefs.radiusDp() - 2) * d);
-        }
-
-        // ---------- 文字色 ----------
         int textColor = parseColor(prefs.textColor(), Color.WHITE);
-        int subColor = applyAlpha(textColor, 0.85f);
-        int tipColor = applyAlpha(textColor, 0.55f);
 
         String deviceName = prettyName(rawName);
         String head = fill(prefs.titleText(), deviceName);
@@ -117,15 +105,27 @@ public final class PopupRenderer {
             tvDeviceName.setText(head.isEmpty() ? deviceName : head);
             tvDeviceName.setTextColor(textColor);
         }
-        if (infoBar != null) {
-            infoBar.setText(buildDetail(prefs, deviceName, levels));
-            infoBar.setTextColor(subColor);
-        }
-        if (tipText != null) {
-            tipText.setTextColor(tipColor);
-        }
+        if (tipText != null) tipText.setTextColor(applyAlpha(textColor, 0.6f));
 
-        // ---------- ① 图片 / GIF ----------
+        // ---------- 电量（带图标） ----------
+        if (levels != null) levels.sanitize();
+        int sub = applyAlpha(textColor, 0.9f);
+        if (tvBattery != null) {
+            tvBattery.setText(batteryText(levels));
+            tvBattery.setTextColor(sub);
+        }
+        if (tvCase != null) {
+            boolean hasCase = levels != null && BatteryLevels.valid(levels.caseBox);
+            tvCase.setText(hasCase ? BatteryLevels.fmt(levels.caseBox) : "--%");
+            tvCase.setTextColor(sub);
+            if (icCase != null) icCase.setVisibility(hasCase ? View.VISIBLE : View.GONE);
+            tvCase.setVisibility(hasCase ? View.VISIBLE : View.GONE);
+        }
+        if (icCase != null) icCase.setColorFilter(sub);
+        ImageView icEarbuds = root.findViewById(R.id.icEarbuds);
+        if (icEarbuds != null) icEarbuds.setColorFilter(sub);
+
+        // ---------- 媒体区 ----------
         if (gifWrap != null) gifWrap.setBackground(null);
         String uri = prefs.imageUri();
         if (img != null) {
@@ -144,7 +144,6 @@ public final class PopupRenderer {
                                                 Drawable> transition) {
                                     img.setImageDrawable(resource);
                                     applyImageMatrix(img);
-                                    // 每次弹窗都从第 0 帧开始
                                     restartGif(resource);
                                 }
 
@@ -168,12 +167,11 @@ public final class PopupRenderer {
             }
         }
 
-        // ---------- 流光 ----------
         if (shimmer != null && card != null) {
-            startShimmer(c, shimmer, card.getWidth() > 0 ? card.getWidth() : widthPx);
+            startShimmer(c, shimmer, widthPx);
         }
 
-        // ---------- 点击卡片任意位置关闭 ----------
+        // ---------- 点击任意位置关闭 ----------
         if (card != null) {
             card.setOnClickListener(v -> {
                 if (onClose != null) onClose.close();
@@ -183,43 +181,103 @@ public final class PopupRenderer {
             if (onClose != null) onClose.close();
         });
 
-        // ---------- 音效 ----------
         SoundPlayer.play(c, prefs);
 
-        // ---------- 入场：整个卡片从下往上 ----------
+        // ---------- 入场：从下往上 ----------
         if (card != null) applyEnter(card, prefs.animStyle());
 
-        // ---------- 第 2 段：0.8 秒后详情区缓慢升起 ----------
-        if (detailArea != null) {
+        // ---------- 第 2 段：1 秒后模糊 + 详情淡入 ----------
+        if (detailArea != null && card != null) {
             detailArea.animate().cancel();
             detailArea.setAlpha(0f);
-            detailArea.setTranslationY(24 * d);
-            detailArea.animate()
-                    .alpha(1f)
-                    .translationY(0f)
-                    .setStartDelay(DETAIL_DELAY_MS)
-                    .setDuration(DETAIL_RISE_MS)
-                    .setInterpolator(new DecelerateInterpolator())
-                    .start();
+            detailArea.setTranslationY(18 * d);
+            final RoundedCardLayout fCard = card;
+            main.postDelayed(() -> {
+                applyBlurBackdrop(fCard, detailArea, detailBlurBg, cardBg);
+                detailArea.animate()
+                        .alpha(1f)
+                        .translationY(0f)
+                        .setDuration(DETAIL_RISE_MS)
+                        .setInterpolator(new DecelerateInterpolator())
+                        .start();
+            }, DETAIL_DELAY_MS);
         }
     }
 
     /**
-     * 应用图片变换矩阵：基础填满（centerCrop） + 用户双指缩放/拖动/旋转。
-     * 用 MATRIX 而非 FIT_CENTER：FIT_CENTER 会留白，且无法叠加用户手势。
+     * 把详情区所在的那一块画面捕获下来做模糊，作为详情区的背景。
+     *
+     * 为什么要「动态模糊」而不是直接铺个半透明黑条：
+     *   用户明确要求「这部分变得模糊起来，再显示文字」。
+     *   这里在详情区即将出现前才捕获，捕获的是当前这一帧的真实内容，
+     *   所以模糊的是动画当时的画面。
+     *
+     * 模糊实现：降采样 1/10 再放大回来（双线性插值），
+     *   无需 RenderScript / RenderEffect，全版本可用且非常快。
      */
+    private static void applyBlurBackdrop(View card, View detailArea,
+                                          ImageView detailBlurBg, int cardBg) {
+        if (card == null || detailArea == null || detailBlurBg == null) return;
+        int cw = card.getWidth();
+        int ch = card.getHeight();
+        int dh = detailArea.getHeight();
+        if (cw <= 0 || ch <= 0 || dh <= 0) return;
+
+        try {
+            // 捕获前先隐藏详情区，避免把自己也画进去
+            int oldVis = detailArea.getVisibility();
+            detailArea.setVisibility(View.INVISIBLE);
+
+            Bitmap src = Bitmap.createBitmap(cw, dh, Bitmap.Config.ARGB_8888);
+            Canvas cv = new Canvas(src);
+            // 只画卡片底部那一段
+            cv.translate(0, -(ch - dh));
+            card.draw(cv);
+
+            detailArea.setVisibility(oldVis);
+
+            // 降采样再放大 = 快速模糊
+            int sw = Math.max(1, cw / 10);
+            int sh = Math.max(1, dh / 10);
+            Bitmap small = Bitmap.createScaledBitmap(src, sw, sh, true);
+            Bitmap blurred = Bitmap.createScaledBitmap(small, cw, dh, true);
+
+            // 叠一层半透明卡片色，保证文字可读
+            Canvas oc = new Canvas(blurred);
+            oc.drawColor(applyAlpha(cardBg, 0.55f));
+
+            detailBlurBg.setVisibility(View.VISIBLE);
+            detailBlurBg.setImageDrawable(new BitmapDrawable(
+                    detailBlurBg.getResources(), blurred));
+
+            if (small != src && !small.isRecycled()) small.recycle();
+            if (!src.isRecycled() && src != blurred) src.recycle();
+        } catch (Throwable ignored) {
+            // 捕获失败就退回纯色背景，不影响弹窗显示
+            detailBlurBg.setVisibility(View.GONE);
+        }
+    }
+
+    /** 左/右耳电量文本 */
+    private static String batteryText(BatteryLevels b) {
+        if (b == null) return "--%";
+        if (BatteryLevels.valid(b.left) && BatteryLevels.valid(b.right)) {
+            if (b.left == b.right) return b.left + "%";   // 只有一个整机值时不重复显示
+            return "L" + b.left + "%  R" + b.right + "%";
+        }
+        if (BatteryLevels.valid(b.overall)) return b.overall + "%";
+        return "--%";
+    }
+
     public static void applyImageMatrix(ImageView img) {
         if (img == null) return;
         Drawable dr = img.getDrawable();
         int vw = img.getWidth();
         int vh = img.getHeight();
         if (dr == null || vw <= 0 || vh <= 0) {
-            // 尺寸还没测出来就等下一帧。
-            // 但不能无限 post 自己：若 View 一直没被 attach（宽高恒为 0），
-            // 会往主线程消息队列里无限塞任务，把 UI 线程堵死。
             Integer tries = (Integer) img.getTag(R.id.tag_matrix_retry);
             int t = (tries == null) ? 0 : tries;
-            if (t >= 8) return;                 // 最多重试 8 次
+            if (t >= 8) return;
             img.setTag(R.id.tag_matrix_retry, t + 1);
             img.post(() -> {
                 if (img.getWidth() > 0 && img.getHeight() > 0) {
@@ -229,8 +287,8 @@ public final class PopupRenderer {
             });
             return;
         }
-        // 成功应用，清空重试计数，下次换图还能正常重试
         img.setTag(R.id.tag_matrix_retry, 0);
+
         int dw = dr.getIntrinsicWidth();
         int dh = dr.getIntrinsicHeight();
         if (dw <= 0 || dh <= 0) dw = dh = 1;
@@ -242,32 +300,16 @@ public final class PopupRenderer {
         float rot = prefs == null ? 0f : prefs.imageRotation();
         float density = img.getResources().getDisplayMetrics().density;
 
-        Matrix m = new Matrix();
-
-        // 基础：centerCrop（等比放大到铺满，不留白）
-        float scale = Math.max((float) vw / dw, (float) vh / dh);
-        // 叠加用户缩放
-        scale *= userScale;
-
+        android.graphics.Matrix m = new android.graphics.Matrix();
+        float scale = Math.max((float) vw / dw, (float) vh / dh) * userScale;
         m.postScale(scale, scale);
-
-        // 用户旋转（绕图片中心）
-        float px = dw / 2f, py = dh / 2f;
-        if (rot != 0f) m.postRotate(rot, px, py);
-
-        // 居中
-        float tx = (vw - dw * scale) / 2f;
-        float ty = (vh - dh * scale) / 2f;
-
-        // 叠加用户拖动（dp → px）
-        tx += dx * density;
-        ty += dy * density;
-
+        if (rot != 0f) m.postRotate(rot, dw / 2f, dh / 2f);
+        float tx = (vw - dw * scale) / 2f + dx * density;
+        float ty = (vh - dh * scale) / 2f + dy * density;
         m.postTranslate(tx, ty);
         img.setImageMatrix(m);
     }
 
-    /** Prefs 的轻量全局持有，避免在静态渲染方法里反复 new */
     public static final class PrefsHolder {
         private static volatile Prefs instance;
 
@@ -280,7 +322,6 @@ public final class PopupRenderer {
         }
     }
 
-    /** 让 GIF 从第 0 帧重新开始（Glide 会复用缓存实例，否则会续播） */
     private static void restartGif(Drawable d) {
         if (d instanceof com.bumptech.glide.load.resource.gif.GifDrawable) {
             com.bumptech.glide.load.resource.gif.GifDrawable gif =
@@ -300,19 +341,11 @@ public final class PopupRenderer {
         }
     }
 
-    /**
-     * 入场动画：默认从下往上。
-     * 用户明确要求「弹窗从下往上升起」，所以三种样式统一为底部上滑的变体，
-     * 保证任何设置下都是自下而上出现。
-     */
     public static void applyEnter(View card, int style) {
         if (card == null) return;
         float d = card.getResources().getDisplayMetrics().density;
         card.animate().cancel();
-
-        // 统一：从下往上 + 淡入
         card.setTranslationY(140 * d);
-        card.setTranslationX(0);
         card.setAlpha(0.15f);
         if (style == ANIM_SCALE) {
             card.setScaleX(0.94f);
@@ -331,7 +364,6 @@ public final class PopupRenderer {
         }
     }
 
-    /** 退场：向下收回 */
     public static void applyExit(View card, int style, Runnable after) {
         if (card == null) {
             if (after != null) after.run();
@@ -349,29 +381,20 @@ public final class PopupRenderer {
         a.start();
     }
 
-    /** 只刷新电量等信息条，不重建弹窗、不打断 GIF */
+    /** 只刷新电量文本，不重建弹窗、不打断 GIF */
     public static void updateInfo(View root, String rawName, BatteryLevels levels, Prefs prefs) {
-        if (root == null || levels == null || prefs == null) return;
-        TextView infoBar = root.findViewById(R.id.infoBar);
-        if (infoBar == null) return;
+        if (root == null || levels == null) return;
+        TextView tvBattery = root.findViewById(R.id.tvBattery);
+        TextView tvCase = root.findViewById(R.id.tvCase);
+        ImageView icCase = root.findViewById(R.id.icCase);
         levels.sanitize();
-        infoBar.setText(buildDetail(prefs, prettyName(rawName), levels));
-    }
-
-    /** 详情区第二行：副标题 · 电量 */
-    private static String buildDetail(Prefs prefs, String deviceName, BatteryLevels b) {
-        StringBuilder sb = new StringBuilder();
-        String sub = fill(prefs.subText(), deviceName);
-        if (!sub.isEmpty()) sb.append(sub);
-        if (b != null && b.anyKnown()) {
-            if (sb.length() > 0) sb.append("  ·  ");
-            sb.append("L:").append(BatteryLevels.fmt(b.left))
-                    .append("  R:").append(BatteryLevels.fmt(b.right));
-            if (BatteryLevels.valid(b.caseBox)) {
-                sb.append("  Case:").append(BatteryLevels.fmt(b.caseBox));
-            }
+        if (tvBattery != null) tvBattery.setText(batteryText(levels));
+        boolean hasCase = BatteryLevels.valid(levels.caseBox);
+        if (tvCase != null) {
+            tvCase.setText(hasCase ? BatteryLevels.fmt(levels.caseBox) : "--%");
+            tvCase.setVisibility(hasCase ? View.VISIBLE : View.GONE);
         }
-        return sb.toString();
+        if (icCase != null) icCase.setVisibility(hasCase ? View.VISIBLE : View.GONE);
     }
 
     private static String fill(String tpl, String dev) {
