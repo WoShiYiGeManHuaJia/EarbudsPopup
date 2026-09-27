@@ -266,11 +266,8 @@ public class LiveBlurView extends View {
         drawSource(smallCanvas, dr, sw, sh, vh);
         smallCanvas.restore();
 
-        // 小图上做真模糊。
-        // 半径要限定上限：小图高度只有约 100px，半径过大（比如 19）
-        // 会把整块糊成一片纯色，反而看不出是模糊。
-        // 经验值：小图半径 6~12 最自然，再靠放大时的双线性插值补足柔化。
-        int radius = Math.max(2, Math.min(12, Math.round(blurRadiusPx / 8f)));
+        // 小图上做真模糊。半径换算：原图半径 / 降采样倍数，再限幅。
+        int radius = Math.max(4, Math.min(16, Math.round(blurRadiusPx / 5f)));
         stackBlur(smallBuf, radius);
 
         canvas.save();
