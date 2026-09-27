@@ -74,10 +74,17 @@ public class LiveBlurView extends View {
     private final Paint cornerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private android.graphics.Path cornerPath;
 
-    /** API < 31 时的逐帧降采样模糊缓冲 */
+    /** 降采样缓冲（小图，做 StackBlur 用） */
     private Bitmap smallBuf;
     private Canvas smallCanvas;
+    /** 放大回原尺寸的模糊位图，供 BitmapShader 填充圆角形状 */
+    private Bitmap outBuf;
+    private Canvas outCanvas;
     private final Paint upscalePaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    /** 填充圆角形状的画笔（带 BitmapShader） */
+    private final Paint shaderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /** 压暗画笔，保证文字可读 */
+    private final Paint dimPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     public LiveBlurView(Context c) {
         super(c);
@@ -113,14 +120,14 @@ public class LiveBlurView extends View {
     /** 叠加的半透明色，保证文字可读；argb */
     public void setDim(int argb) {
         this.dimColor = argb;
+        dimPaint.setColor(argb);
         invalidate();
     }
 
     /** 设置底部两角圆角半径（px），与卡片圆角保持一致 */
     public void setBottomCornerRadius(float px) {
         this.bottomRadiusPx = Math.max(0f, px);
-        cornerPath = null;
-        applyCornerClip();
+        cornerPath = null;   // 半径变了要重建路径
         invalidate();
     }
 
@@ -305,54 +312,40 @@ public class LiveBlurView extends View {
 
         // 始终自行模糊（原因见 applyEffect 注释）
 
-        // 整个绘制包进离屏图层，末尾用 DST_IN 裁出底部两角。
-        // 没有 RenderEffect 干扰时，View.onDraw 里的 saveLayer 是可靠的。
-        int layerSaved = canvas.saveLayer(0f, 0f, vw, vh, null);
-
-        drawManualBlur(canvas, dr, sw, sh, vw, vh);
-        // 叠一层半透明色，保证文字可读
-        canvas.drawColor(dimColor);
-
-        // ---- 清晰 → 模糊 的平滑过渡 ----
+        // ===== 圆角方案：形状填充（不再用 Xfermode） =====
         //
-        // 上一版错在两处：
-        //   1) saveLayer 在内容画完之后调用 —— saveLayer 创建的是【空白】离屏层，
-        //      已画的内容不在里面，DST_OUT 擦了个寂寞，完全无效。
-        //   2) 渐变方向反了（顶部不擦/底部全擦），即便生效也会把底部抹掉。
+        // 之前几版都是「先画满内容 → 再用 DST_IN / DST_OUT 擦出圆角」。
+        // 但 Xfermode 在硬件加速 + saveLayer 下不可靠（RenderNode、
+        // alpha layer、RenderEffect 都会干扰），所以圆角时有时无。
         //
-        // 正确做法：在顶部 fh 区域【先】saveLayer，然后在图层内画一遍清晰原图，
-        // 再用 DST_OUT 渐变从上（不擦=保持清晰）到下（全擦=露出底层模糊）。
-        // 于是顶部是清晰画面，向下平滑过渡到模糊，没有硬边。
+        // 现在反过来：先生成模糊位图 → 构造圆角形状 → 用 BitmapShader
+        // 把位图填充进形状。形状自带圆角，drawPath 带抗锯齿，
+        // 圆角必然生效、边缘平滑，不依赖任何合成模式。
+        Bitmap blurred = renderBlurredBitmap(dr, sw, sh, vw, vh);
+        if (blurred == null) {
+            canvas.drawColor(dimColor);
+            return;
+        }
+
+        ensureCornerPath(vw, vh);
+        shaderPaint.setShader(new android.graphics.BitmapShader(
+                blurred, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP));
+        shaderPaint.setAntiAlias(true);
+        canvas.drawPath(cornerPath, shaderPaint);
+
+        // 半透明压暗，保证文字可读
+        canvas.drawPath(cornerPath, dimPaint);
+
+        // ---- 顶部渐隐：擦掉上沿，露出下面清晰的动画 ----
         if (fadeRatio > 0f) {
             float fh = vh * fadeRatio;
             ensureGradient(vw, vh);
             if (fadeGradient != null && fh > 0f) {
-                // 只做擦除，不画内容。
-                //
-                // 关键修正：之前在图层里又画了一遍「清晰原图」，
-                // 但 RenderEffect 会模糊整个 View 的渲染输出，
-                // 那层原图同样被糊掉 —— 于是顶部并不清晰，过渡失效。
-                //
-                // 正确做法：本 View 只负责提供「模糊层」，
-                // 顶部用 DST_OUT 擦成透明，直接露出【下面那张清晰的 ImageView】。
-                // 这样顶部=清晰原图，底部=模糊层，中间渐变过渡。
                 int saved = canvas.saveLayer(0f, 0f, vw, fh, null);
                 canvas.drawRect(0f, 0f, vw, fh, fadePaint);
                 canvas.restoreToCount(saved);
             }
         }
-
-        // ---- 底部两角圆角 ----
-        // DST_IN：只保留「已画内容 ∩ 圆角矩形路径」的部分，
-        // 底部两角外侧被裁掉，与卡片圆角一致。
-        // 用抗锯齿 Path 绘制，边缘平滑无锯齿。
-        if (bottomRadiusPx > 0f) {
-            ensureCornerPath(vw, vh);
-            if (cornerPath != null) {
-                canvas.drawPath(cornerPath, cornerPaint);
-            }
-        }
-        canvas.restoreToCount(layerSaved);
     }
 
     /** 最小重绘间隔（ms）：把模糊重算限制在 ~30fps，降低 CPU 占用 */
@@ -627,6 +620,56 @@ public class LiveBlurView extends View {
     }
 
     /**
+    /**
+     * 生成模糊位图（与 View 同尺寸，已模糊）。
+     *
+     * 降采样倍数用 2（不是 4）：4 倍会把像素块拉得太大，
+     * 放大回来就是明显的马赛克；2 倍保留更多细节。
+     */
+    private Bitmap renderBlurredBitmap(Drawable dr, int sw, int sh,
+                                       int vw, int vh) {
+        int factor = 2;
+        int bw = Math.max(1, vw / factor);
+        int bh = Math.max(1, vh / factor);
+        if (smallBuf == null || smallBuf.getWidth() != bw
+                || smallBuf.getHeight() != bh) {
+            smallBuf = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
+            smallCanvas = new Canvas(smallBuf);
+        }
+        smallBuf.eraseColor(Color.TRANSPARENT);
+        smallCanvas.save();
+        smallCanvas.scale(1f / factor, 1f / factor);
+        drawSource(smallCanvas, dr, sw, sh, vh);
+        smallCanvas.restore();
+
+        // 半径按小图尺寸动态算：固定上限在高分屏上糊得不够，
+        // 固定下限又成了马赛克，所以取「不小于 6、不超过短边 1/3」。
+        int radius = Math.round(blurRadiusPx / 2f);
+        radius = Math.max(6, Math.min(Math.min(bw, bh) / 3, radius));
+        try {
+            stackBlur(smallBuf, radius);
+        } catch (Throwable t) {
+            try {
+                stackBlur(smallBuf, 6);
+            } catch (Throwable ignored) {
+                // 都不行就保留降采样结果，至少不是纯色
+            }
+        }
+
+        if (outBuf == null || outBuf.getWidth() != vw
+                || outBuf.getHeight() != vh) {
+            outBuf = Bitmap.createBitmap(vw, vh, Bitmap.Config.ARGB_8888);
+            outCanvas = new Canvas(outBuf);
+        }
+        outBuf.eraseColor(Color.TRANSPARENT);
+        outCanvas.save();
+        outCanvas.scale(factor, factor);
+        outCanvas.drawBitmap(smallBuf, 0, 0, upscalePaint);
+        outCanvas.restore();
+        return outBuf;
+    }
+
+
      * 手动模糊（RenderEffect 不可用时的兜底）：
      * 降采样 → StackBlur → 放大。小图像素少，逐帧开销可控。
      */
