@@ -1,5 +1,8 @@
 # 耳机弹窗 · 自定义弹窗动画（红米 / 小米 免 Root）
 
+> 仓库：<https://github.com/WoShiYiGeManHuaJia/EarbudsPopup>
+> 已配好云端自动编译：push 或手动触发 Actions，几分钟后就能拿到 APK。
+
 一个给红米、小米手机做的**自定义耳机连接弹窗**应用：耳机一连上，就用你自己的图片 / GIF / 文案在屏幕上弹出动画卡片。
 
 - **不需要 Root**，只需要一次 ADB 授权或直接点开关
@@ -10,7 +13,14 @@
 
 ---
 
-## 一、最快拿到 APK：用 GitHub 免费编译（不需要电脑）
+## 〇、直接下载编译好的 APK（最快）
+
+- 仓库 Actions 页面：<https://github.com/WoShiYiGeManHuaJia/EarbudsPopup/actions> → 点进最新一次成功的运行 → 最下方 **Artifacts** → `earbuds-popup-debug`
+- 或直接取仓库 `apk` 分支里的文件：
+  <https://github.com/WoShiYiGeManHuaJia/EarbudsPopup/blob/apk/apk/earbuds-popup-debug.apk>
+  （点右上角 `⋯` / `Download raw file` 即可下载）
+
+## 一、重新编译：用 GitHub 免费编译（不需要电脑）
 
 我这边无法直接帮你编译出 APK，但 GitHub Actions 可以在云端免费编好，你用手机就能下载安装。
 
