@@ -78,7 +78,7 @@ public class Prefs {
     }
 
     public String bgColor() {
-        return sp.getString("bg", "#F2141620");
+        return sp.getString("bg", "#1FFFFFFF");   // 液态玻璃半透白
     }
 
     public void setBgColor(String s) {
@@ -166,7 +166,7 @@ public class Prefs {
 
     /** 从图片提取到的底色（Palette 生成后缓存，避免每次弹窗都算） */
     public String autoBgColor() {
-        return sp.getString("auto_bg", "#F2141620");
+        return sp.getString("auto_bg", "#1FFFFFFF");
     }
 
     public void setAutoBgColor(String c) {
