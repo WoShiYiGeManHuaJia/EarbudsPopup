@@ -47,6 +47,7 @@ public class PopupService extends Service {
     public static final String EXTRA_BATTERY = "battery";
     public static final String EXTRA_CASE = "case_battery";
     public static final String EXTRA_LEFT = "left_battery";
+    public static final String EXTRA_OVERALL = "overall_battery";
     public static final String EXTRA_ADDRESS = "address";
     public static final String EXTRA_WIRED = "wired";
 
@@ -76,21 +77,48 @@ public class PopupService extends Service {
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         startForeground(NOTI_ID, buildNotification());
         refreshNotificationVisibility();
+        syncScreenState();
+        registerReceivers();
+    }
 
+    /**
+     * 注册广播。抽成方法是为了能在设置变化后重新注册——
+     * 之前只在 onCreate 里注册一次，用户在设置页改「省电模式」后
+     * （ ACTION_RESTART 只重载了 Prefs），屏幕开关监听不会跟着变，开关形同虚设。
+     */
+    private void registerReceivers() {
+        try {
+            unregisterReceiver(receiver);
+        } catch (Exception ignored) {
+        }
         IntentFilter f = new IntentFilter();
         f.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
         f.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
         f.addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED);
         f.addAction(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED);
-        f.addAction(Intent.ACTION_HEADSET_PLUG);
+        // 不在这里监听 ACTION_HEADSET_PLUG：
+        // WiredReceiver（静态注册）也在监听它，两边都弹会导致插一次弹两遍。
+        // 统一由 WiredReceiver 收到后发 ACTION_SHOW，走 onStartCommand 单路径弹窗。
         f.addAction(ACTION_SHOW);
         f.addAction(ACTION_RESTART);
-        // 省电：监听屏幕开关，熄屏时按设置决定是否弹窗，避免无谓唤醒
         if (prefs.powerSave()) {
             f.addAction(Intent.ACTION_SCREEN_ON);
             f.addAction(Intent.ACTION_SCREEN_OFF);
         }
-        registerReceiver(receiver, f);
+        try {
+            registerReceiver(receiver, f);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** 用系统实际状态初始化 screenOn，避免熄屏启动时误判为亮屏而弹窗 */
+    private void syncScreenState() {
+        try {
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            screenOn = pm == null || pm.isInteractive();
+        } catch (Throwable t) {
+            screenOn = true;
+        }
     }
 
     @Override
@@ -102,7 +130,8 @@ public class PopupService extends Service {
             lv.left = intent.getIntExtra(EXTRA_LEFT, -1);
             lv.right = intent.getIntExtra(EXTRA_BATTERY, -1);
             lv.caseBox = intent.getIntExtra(EXTRA_CASE, -1);
-            lv.overall = lv.right;
+            lv.overall = intent.getIntExtra(EXTRA_OVERALL, lv.right);
+            lv.sanitize();
             lv.fillFromOverall();
             lv.timestamp = System.currentTimeMillis();
             show(name == null ? "耳机" : name, addr, lv, null);
@@ -178,6 +207,8 @@ public class PopupService extends Service {
         // 重新加载设置并应用（通知可见性 / 省电策略变了）
         if (ACTION_RESTART.equals(i.getAction())) {
             prefs = new Prefs(this);
+            syncScreenState();
+            registerReceivers();     // 省电开关可能变了，要重新注册
             refreshNotificationVisibility();
             startForeground(NOTI_ID, buildNotification());
             return;
@@ -191,21 +222,11 @@ public class PopupService extends Service {
             demo.left = i.getIntExtra(EXTRA_LEFT, -1);
             demo.right = i.getIntExtra(EXTRA_BATTERY, -1);
             demo.caseBox = i.getIntExtra(EXTRA_CASE, -1);
-            demo.overall = demo.right;
+            demo.overall = i.getIntExtra(EXTRA_OVERALL, demo.right);
+            demo.sanitize();
             demo.fillFromOverall();
             demo.timestamp = System.currentTimeMillis();
             show(i.getStringExtra(EXTRA_NAME), i.getStringExtra(EXTRA_ADDRESS), demo, null);
-            return;
-        }
-
-        if (Intent.ACTION_HEADSET_PLUG.equals(action)) {
-            int state = i.getIntExtra("state", 0);
-            if (state == 1 && prefs.wiredEnabled()) {
-                String name = i.getStringExtra("name");
-                BatteryLevels none = new BatteryLevels();
-                none.timestamp = System.currentTimeMillis();
-                show(name == null || name.isEmpty() ? "有线耳机" : name, null, none, null);
-            }
             return;
         }
 
@@ -455,6 +476,7 @@ public class PopupService extends Service {
         if (current != null) {
             final View v = current;
             current = null;
+            currentRoot = null;
             v.animate().cancel();
             v.animate().alpha(0f).translationY(-dp(24)).setDuration(200)
                     .withEndAction(() -> {
