@@ -133,7 +133,8 @@ public final class PopupRenderer {
         ImageView icEarbudsRight = root.findViewById(R.id.icEarbudsRight);
         if (icEarbudsRight != null) icEarbudsRight.setColorFilter(sub);
         // 左右耳塞图标：右耳镜像翻转，形成「一对」
-        if (icEarbudsRight != null) icEarbudsRight.setScaleX(-1f);
+        // 左右图标是从系统状态栏截图里分别提取的，本身形态就不同，
+        // 不需要再镜像翻转（之前的 vector 是同一个图翻转的假「一对」）
 
         // ---------- 媒体区 ----------
         if (gifWrap != null) gifWrap.setBackground(null);
