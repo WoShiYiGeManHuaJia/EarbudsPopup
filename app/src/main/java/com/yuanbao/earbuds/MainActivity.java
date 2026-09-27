@@ -743,6 +743,10 @@ public class MainActivity extends AppCompatActivity {
             sb.append("。点下面的按钮，App 会自己跑完。");
         }
         if (!idle) sb.append("\n建议加入电池白名单，防止服务被回收。");
+        if (!overlay) {
+            sb.append("\n\n⚠ 悬浮窗权限被关闭（SYSTEM_ALERT_WINDOW=ignore），"
+                    + "悬浮窗引擎会失效。点「一键设置」重新授予。");
+        }
         permStatus.setText(sb.toString());
     }
 
