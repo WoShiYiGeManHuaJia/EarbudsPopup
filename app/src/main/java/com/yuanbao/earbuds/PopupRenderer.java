@@ -57,7 +57,11 @@ public final class PopupRenderer {
 
         // ---------- 卡片尺寸 ----------
         int widthPx = (int) (prefs.widthDp() * d);
-        int heightPx = (int) (widthPx * CARD_H_RATIO);
+        // 卡片总高由「图片占弹窗高度」换算：值越大卡片越高，
+        // 而文字区是固定紧凑高度，所以多出来的高度全部归 GIF 区
+        float ratio = Math.max(0.40f, Math.min(0.92f, prefs.imageRatio()));
+        float cardRatio = 0.55f + ratio * 0.80f;   // 0.76 -> 1.158
+        int heightPx = (int) (widthPx * cardRatio);
         // 卡片底色：自动取色优先，否则用用户手填的颜色
         int cardBg = parseColor(
                 prefs.autoColor() ? prefs.autoBgColor() : prefs.bgColor(), 0x1FFFFFFF);
@@ -78,15 +82,10 @@ public final class PopupRenderer {
             card.setClipToOutline(true);        // 让内容与玻璃边框一起被圆角裁切
         }
 
-        // ---------- 三区比例：GIF 区占比由用户调节，剩余按 2:1 分给信息条与提示 ----------
-        float ratio = Math.max(0.30f, Math.min(0.92f, prefs.imageRatio()));
-        int gifW = Math.round(ratio * 100);
-        int rest = Math.max(6, 100 - gifW);
-        int infoW = Math.round(rest * 2f / 3f);
-        int tipW = Math.max(2, rest - infoW);
-        setWeight(gifWrap, gifW);
-        setWeight(infoBar, infoW);
-        setWeight(tipText, tipW);
+        // ---------- 三区：GIF 区吃掉全部剩余空间，文字区保持紧凑 ----------
+        // 布局里 gifWrap 已是 weight=1，infoBar/tipText 是 wrap_content，
+        // 这里只在旧布局残留 weight 时兜底校正一次
+        forceWeight(gifWrap, 1f);
 
         // ---------- GIF 区：容器衬底，防浅色发白 / 深色糊成一团 ----------
         if (gifWrap != null) {
@@ -118,15 +117,37 @@ public final class PopupRenderer {
         infoBar.setText(buildInfo(prettyName(rawName), prefs.subText(), levels));
 
         // ---------- ① GIF / 图片 ----------
+        // 每次弹窗都让 GIF 从第一帧开始播：Glide 会缓存已解码的 GifDrawable，
+        // 第二次直接复用同一个实例，动画状态停在上次的位置，看起来就是「续播」。
+        // 这里加载完成后显式重启动画，保证每次都是从第 0 帧开始。
         String uri = prefs.imageUri();
         if (!uri.isEmpty()) {
             try {
-                // 不要对 GIF 用任何 Transformation：Glide 的 fitCenter 会逐帧重算，
-                // 直接把帧率打下来。用 ImageView 自己的 scaleType="fitCenter" 即可。
                 Glide.with(c.getApplicationContext())
                         .load(Uri.parse(uri))
                         .dontTransform()
-                        .into(img);
+                        .into(new com.bumptech.glide.request.target.CustomViewTarget<ImageView,
+                                android.graphics.drawable.Drawable>(img) {
+                            @Override
+                            public void onResourceReady(
+                                    android.graphics.drawable.Drawable resource,
+                                    com.bumptech.glide.request.transition.Transition<? super
+                                            android.graphics.drawable.Drawable> transition) {
+                                img.setImageDrawable(resource);
+                                restartGif(resource);
+                            }
+
+                            @Override
+                            public void onLoadFailed(
+                                    android.graphics.drawable.Drawable errorDrawable) {
+                                img.setImageResource(R.drawable.ic_headphone);
+                            }
+
+                            @Override
+                            protected void onResourceCleared(
+                                    android.graphics.drawable.Drawable placeholder) {
+                            }
+                        });
             } catch (Exception e) {
                 img.setImageResource(R.drawable.ic_headphone);
             }
@@ -153,13 +174,40 @@ public final class PopupRenderer {
         if (card != null) applyEnter(card, prefs.animStyle());
     }
 
-    /** 动态设置 LinearLayout 子项的 weight，让「图片占弹窗高度」真正生效 */
-    private static void setWeight(View v, int weight) {
+    /**
+     * 让 GIF 从第 0 帧重新开始播放。
+     * Glide 缓存的 GifDrawable 会被复用，第二次弹窗时动画状态停在上次结束处，
+     * 表现为「续播」。这里先 stop() 再 startFromFirstFrame()，强制回到开头。
+     */
+    private static void restartGif(android.graphics.drawable.Drawable d) {
+        if (d instanceof com.bumptech.glide.load.resource.gif.GifDrawable) {
+            com.bumptech.glide.load.resource.gif.GifDrawable gif =
+                    (com.bumptech.glide.load.resource.gif.GifDrawable) d;
+            try {
+                gif.stop();
+                gif.startFromFirstFrame();
+                gif.start();
+            } catch (Exception ignored) {
+            }
+        } else if (d instanceof android.graphics.drawable.Animatable) {
+            android.graphics.drawable.Animatable a = (android.graphics.drawable.Animatable) d;
+            try {
+                a.stop();
+                a.start();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    /** 把子项 height 设为 0dp 并指定 weight，让它吃掉剩余空间 */
+    private static void forceWeight(View v, float weight) {
         if (v == null) return;
         ViewGroup.LayoutParams lp = v.getLayoutParams();
         if (lp instanceof LinearLayout.LayoutParams) {
-            ((LinearLayout.LayoutParams) lp).weight = weight;
-            v.setLayoutParams(lp);
+            LinearLayout.LayoutParams llp = (LinearLayout.LayoutParams) lp;
+            llp.height = 0;
+            llp.weight = weight;
+            v.setLayoutParams(llp);
         }
     }
 
