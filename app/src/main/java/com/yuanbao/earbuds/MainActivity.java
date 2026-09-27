@@ -73,6 +73,7 @@ public class MainActivity extends AppCompatActivity {
     private SwitchMaterial swLock, swNoFocus, swPowerSave, swHideNoti;
     private TextView tvEngine, tvDim, tvBlur;
     private LinearLayout deviceList;
+    private TextView tvProbeHint;
 
     private View tabHome, tabLook, tabSet;
 
@@ -186,6 +187,7 @@ public class MainActivity extends AppCompatActivity {
         tvDim = findViewById(R.id.tvDim);
         tvBlur = findViewById(R.id.tvBlur);
         deviceList = findViewById(R.id.deviceList);
+        tvProbeHint = findViewById(R.id.tvProbeHint);
     }
 
     // ---------------- 载入与保存 ----------------
@@ -257,9 +259,11 @@ public class MainActivity extends AppCompatActivity {
             Intent s = new Intent(this, PopupService.class);
             s.setAction(PopupService.ACTION_SHOW);
             s.putExtra(PopupService.EXTRA_NAME, "我的耳机");
-            s.putExtra(PopupService.EXTRA_BATTERY, prefs.showBattery() ? 78 : -1);
+            boolean show = prefs.showBattery();
+            s.putExtra(PopupService.EXTRA_LEFT, show ? 78 : -1);
+            s.putExtra(PopupService.EXTRA_BATTERY, show ? 78 : -1);
             s.putExtra(PopupService.EXTRA_CASE,
-                    (prefs.showBattery() && prefs.showCaseBattery()) ? 65 : -1);
+                    (show && prefs.showCaseBattery()) ? 65 : -1);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(s);
             else startService(s);
         });
@@ -326,6 +330,7 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.btnNotiSettings).setOnClickListener(v -> openNotificationSettings());
         findViewById(R.id.btnBattery).setOnClickListener(v -> requestBatteryWhitelist());
         findViewById(R.id.rowMiPerm).setOnClickListener(v -> copyMiuiPermCommands());
+        findViewById(R.id.rowProbe).setOnClickListener(v -> runBatteryProbe());
         findViewById(R.id.rowInfo).setOnClickListener(v -> showAbout());
 
         watch(etTitle, etSub, etBg, etTextColor, etAccent);
@@ -729,6 +734,130 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // ---------------- 提示与命令 ----------------
+
+    /**
+     * 电量探测：扫描 BLE 广播 + 读取 GATT Battery Service 全部实例，
+     * 把完整服务树和原始字节 dump 出来，用于确定这台耳机实际的电量字段布局。
+     */
+    @android.annotation.SuppressLint("MissingPermission")
+    private void runBatteryProbe() {
+        if (Build.VERSION.SDK_INT >= 31 && ContextCompat.checkSelfPermission(
+                this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            Toast.makeText(this, "需要蓝牙连接权限，先回首页点一键设置", Toast.LENGTH_LONG).show();
+            return;
+        }
+        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+        if (adapter == null) {
+            Toast.makeText(this, "本机不支持蓝牙", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        java.util.Set<BluetoothDevice> bonded;
+        try {
+            bonded = adapter.getBondedDevices();
+        } catch (SecurityException e) {
+            return;
+        }
+        if (bonded == null || bonded.isEmpty()) {
+            Toast.makeText(this, "没有已配对设备", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // 优先挑名字像耳机的，否则让用户从列表里选
+        java.util.List<BluetoothDevice> list = new ArrayList<>(bonded);
+        BluetoothDevice pick = null;
+        for (BluetoothDevice d : list) {
+            String n;
+            try {
+                n = d.getName();
+            } catch (SecurityException e) {
+                n = null;
+            }
+            if (n != null) {
+                String low = n.toLowerCase();
+                if (low.contains("buds") || low.contains("airpods") || low.contains("耳机")
+                        || low.contains("pod") || low.contains("tws")) {
+                    pick = d;
+                    break;
+                }
+            }
+        }
+
+        if (pick == null && list.size() == 1) {
+            pick = list.get(0);
+        }
+
+        if (pick == null) {
+            String[] names = new String[list.size()];
+            for (int i = 0; i < list.size(); i++) {
+                String n;
+                try {
+                    n = list.get(i).getName();
+                } catch (SecurityException e) {
+                    n = null;
+                }
+                names[i] = (n == null ? "未知" : n) + "\n" + list.get(i).getAddress();
+            }
+            final int[] sel = {0};
+            new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                    .setTitle("选择要探测的设备")
+                    .setSingleChoiceItems(names, 0, (d, w) -> sel[0] = w)
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton("开始探测", (d, w) -> doProbe(list.get(sel[0])))
+                    .show();
+            return;
+        }
+        doProbe(pick);
+    }
+
+    private void doProbe(BluetoothDevice dev) {
+        String addr = dev.getAddress();
+        String n;
+        try {
+            n = dev.getName();
+        } catch (SecurityException e) {
+            n = null;
+        }
+        final android.app.ProgressDialog pd = new android.app.ProgressDialog(this);
+        pd.setTitle("正在探测");
+        pd.setMessage((n == null ? addr : n) + "\n扫描 BLE 广播并读取 GATT，最多 20 秒…");
+        pd.setCancelable(false);
+        pd.show();
+
+        new BatteryProbe(this).probe(addr, dev, (levels, diagnostic) -> {
+            try {
+                pd.dismiss();
+            } catch (Exception ignored) {
+            }
+            BatteryStore store = new BatteryStore(this);
+            store.save(addr, levels);
+            if (tvProbeHint != null) {
+                tvProbeHint.setText("上次结果 L:" + BatteryLevels.fmt(levels.left)
+                        + " R:" + BatteryLevels.fmt(levels.right)
+                        + " Case:" + BatteryLevels.fmt(levels.caseBox)
+                        + "（" + levels.source + "）");
+            }
+            String summary = "设备: " + (n == null ? addr : n) + " (" + addr + ")\n"
+                    + "结果: L=" + BatteryLevels.fmt(levels.left)
+                    + "  R=" + BatteryLevels.fmt(levels.right)
+                    + "  Case=" + BatteryLevels.fmt(levels.caseBox)
+                    + "  来源=" + levels.source + "\n\n";
+            String full = summary + diagnostic;
+
+            new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                    .setTitle("探测完成")
+                    .setMessage(summary + "\n完整日志已准备好，点「导出日志」发给我，"
+                            + "我据此为你这台耳机写死精确的电量字段。")
+                    .setPositiveButton("导出日志", (d, w) -> {
+                        copy(full, "日志已复制");
+                        Intent share = new Intent(Intent.ACTION_SEND);
+                        share.setType("text/plain");
+                        share.putExtra(Intent.EXTRA_TEXT, full);
+                        startActivity(Intent.createChooser(share, "发送电量探测日志"));
+                    })
+                    .setNegativeButton("关闭", null)
+                    .show();
+        });
+    }
 
     private void showAbout() {
         String msg = "自定义耳机连接弹窗 · 免 Root\n\n"
