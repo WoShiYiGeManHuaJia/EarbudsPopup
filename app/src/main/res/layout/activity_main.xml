@@ -297,6 +297,93 @@
                 android:entries="@array/popup_anim" />
         </LinearLayout>
 
+        <!-- ===== 系统级效果 ===== -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="⑤ 系统级效果（透明 Activity 引擎）"
+            android:textColor="#FF6900"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="弹出引擎"
+                android:textSize="13sp" />
+
+            <Spinner
+                android:id="@+id/spEngine"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:entries="@array/popup_engine" />
+
+            <TextView
+                android:id="@+id/tvDim"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="背景压暗"
+                android:textSize="13sp" />
+
+            <SeekBar
+                android:id="@+id/sbDim"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="70"
+                android:progress="30" />
+
+            <TextView
+                android:id="@+id/tvBlur"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="背景模糊半径"
+                android:textSize="13sp" />
+
+            <SeekBar
+                android:id="@+id/sbBlur"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="40"
+                android:progress="24" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/swLock"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="锁屏 / 熄屏时也弹（需系统「锁屏显示」权限）" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/swNoFocus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="不夺取焦点（打游戏时不打断操作）" />
+
+            <Button
+                android:id="@+id/btnMiPerm"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="复制 MIUI「后台弹出界面 / 锁屏显示」授权命令" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:alpha="0.6"
+                android:text="系统级引擎在小米上还受「后台弹出界面」限制，需 ADB 授权或去设置里手动打开"
+                android:textSize="11sp" />
+        </LinearLayout>
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
