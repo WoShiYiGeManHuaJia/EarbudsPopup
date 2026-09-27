@@ -50,6 +50,17 @@ public class LiveBlurView extends View {
     private Drawable.Callback originalCallback;
     private Drawable attached;
 
+    // ---- stackBlur 的缓冲区：全部缓存复用 ----
+    // 之前每帧都在 stackBlur 里 new int[w*h] / int[256*divsum] 等，
+    // 单次约 500KB，逐帧执行会疯狂 GC，直接把 App 撑崩（测试弹窗闪退）。
+    // 现在改为尺寸变化时才重建。
+    private int[] bufPix;
+    private int[] bufR, bufG, bufB, bufA;
+    private int[] bufVmin;
+    private int[] bufDv;
+    private int[][] bufStack;
+    private int bufW = -1, bufH = -1;
+
     /** 顶部渐隐遮罩：让模糊层上沿与上方清晰画面自然过渡，避免一刀切 */
     private final Paint fadePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private android.graphics.LinearGradient fadeGradient;
@@ -135,6 +146,10 @@ public class LiveBlurView extends View {
         hwBlurEnabled = false;
     }
 
+    /** 最小重绘间隔（ms）：把模糊重算限制在 ~30fps，降低 CPU 占用 */
+    private static final long MIN_REDRAW_MS = 33L;
+    private long lastDrawAt = 0L;
+
     private void attachCallback(Drawable dr) {
         attached = dr;
         originalCallback = dr.getCallback();
@@ -146,7 +161,11 @@ public class LiveBlurView extends View {
             public void invalidateDrawable(Drawable who) {
                 // 关键：先让源继续刷新（否则 GIF 会停），再刷新自己
                 if (originalCallback != null) originalCallback.invalidateDrawable(who);
-                invalidate();
+                long now = android.os.SystemClock.uptimeMillis();
+                if (now - lastDrawAt >= MIN_REDRAW_MS) {
+                    lastDrawAt = now;
+                    invalidate();
+                }
             }
 
             @Override
@@ -193,6 +212,20 @@ public class LiveBlurView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+        // 兜底：模糊属于视觉效果，任何异常都只能退化成纯色，
+        // 绝不能向上抛出把弹窗 / 整个 App 带崩（之前就是这里闪退）。
+        try {
+            drawBlur(canvas);
+        } catch (Throwable t) {
+            // 退化：画一层半透明底色，保证文字仍可读
+            try {
+                canvas.drawColor(dimColor);
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private void drawBlur(Canvas canvas) {
         if (src == null) return;
         Drawable dr = src.getDrawable();
         if (dr == null) return;
@@ -272,6 +305,20 @@ public class LiveBlurView extends View {
         }
     }
 
+    /** 按需分配（并复用）stackBlur 所需的缓冲区 */
+    private void ensureBlurBuffers(int w, int h) {
+        if (bufW == w && bufH == h && bufPix != null) return;
+        bufW = w;
+        bufH = h;
+        int wh = w * h;
+        bufPix = new int[wh];
+        bufR = new int[wh];
+        bufG = new int[wh];
+        bufB = new int[wh];
+        bufA = new int[wh];
+        bufVmin = new int[Math.max(w, h)];
+    }
+
     /**
      * StackBlur（Mario Klingemann 算法）：接近高斯模糊，速度远快于逐像素卷积。
      * 在小图上执行，开销很低，适合逐帧调用。
@@ -281,7 +328,8 @@ public class LiveBlurView extends View {
         int h = bmp.getHeight();
         if (w <= 0 || h <= 0 || radius <= 0) return;
 
-        int[] pix = new int[w * h];
+        ensureBlurBuffers(w, h);
+        int[] pix = bufPix;
         bmp.getPixels(pix, 0, w, 0, 0, w, h);
 
         int wm = w - 1;
@@ -289,21 +337,26 @@ public class LiveBlurView extends View {
         int wh = w * h;
         int div = radius + radius + 1;
 
-        int[] r = new int[wh];
-        int[] g = new int[wh];
-        int[] b = new int[wh];
-        int[] a = new int[wh];
+        int[] r = bufR, g = bufG, b = bufB, a = bufA;
         int rsum, gsum, bsum, asum, x, y, i, p, yp, yi, yw;
 
-        int[] vmin = new int[Math.max(w, h)];
+        int[] vmin = bufVmin;
         int divsum = (div + 1) >> 1;
         divsum *= divsum;
-        int[] dv = new int[256 * divsum];
+        int[] dv = bufDv;
+        if (dv.length < 256 * divsum) {
+            dv = new int[256 * divsum];
+            bufDv = dv;
+        }
         for (i = 0; i < 256 * divsum; i++) dv[i] = (i / divsum);
 
         yw = yi = 0;
 
-        int[][] stack = new int[div][4];
+        int[][] stack = bufStack;
+        if (stack == null || stack.length < div) {
+            stack = new int[Math.max(div, 8)][4];
+            bufStack = stack;
+        }
         int stackpointer;
         int stackstart;
         int[] sir;
