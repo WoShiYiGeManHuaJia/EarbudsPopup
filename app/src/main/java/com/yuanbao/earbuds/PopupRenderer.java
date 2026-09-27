@@ -202,7 +202,7 @@ public final class PopupRenderer {
             main.postDelayed(() -> {
                 // 模糊失败也必须让文字出现，否则用户看到的是"没有文字"
                 try {
-                    setupLiveBlur(detailBlurBg, img, cardBg);
+                    setupLiveBlur(detailBlurBg, img, cardBg, prefs.radiusDp());
                 } catch (Throwable ignored) {
                 }
                 detailArea.animate()
@@ -225,7 +225,8 @@ public final class PopupRenderer {
      *   源每前进一帧 → 回调转发 → 模糊层 invalidate → 重新绘制并模糊。
      * 背景与动画始终同步，是真正的动态模糊。
      */
-    private static void setupLiveBlur(LiveBlurView blur, ImageView img, int cardBg) {
+    private static void setupLiveBlur(LiveBlurView blur, ImageView img,
+                                       int cardBg, float radiusDp) {
         if (blur == null || img == null) return;
         float d = blur.getResources().getDisplayMetrics().density;
         blur.setBlurRadius(26f * d);
@@ -236,7 +237,7 @@ public final class PopupRenderer {
         // 顶部 55% 高度做渐隐，与上方清晰画面平滑过渡（不再一刀切）
         blur.setFadeRatio(0.62f);
         // 底部两角跟随卡片圆角
-        blur.setBottomCornerRadius(prefs.radiusDp() * d);
+        blur.setBottomCornerRadius(radiusDp * d);
         blur.setSource(img);
         // 布局里是 gone + 76dp，这里才显示。
         // 高度由布局写死，不再依赖测量，避免撑高父容器把整卡糊掉。
