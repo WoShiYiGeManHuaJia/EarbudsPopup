@@ -86,11 +86,28 @@ public class PopupService extends Service {
     public void onCreate() {
         super.onCreate();
         prefs = new Prefs(this);
+        // 弹窗渲染用静态 PrefsHolder 取配置，必须在服务里也初始化，
+        // 否则开机自启时用户设的图片缩放会丢失（拿到 null 回退成默认值）
+        PopupRenderer.PrefsHolder.init(this);
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         startForeground(NOTI_ID, buildNotification());
         refreshNotificationVisibility();
         syncScreenState();
         registerReceivers();
+        warmUpImage();
+    }
+
+    /**
+     * 预热：把弹窗图片提前解码进 Glide 内存缓存。
+     * 弹窗时直接命中缓存，省掉解码耗时，首帧出现更快（目标 < 1 秒）。
+     */
+    private void warmUpImage() {
+        try {
+            String u = prefs.imageUri();
+            if (u == null || u.isEmpty()) return;
+            Glide.with(this).load(Uri.parse(u)).preload();
+        } catch (Exception ignored) {
+        }
     }
 
     /**
