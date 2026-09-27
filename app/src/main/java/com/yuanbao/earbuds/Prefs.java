@@ -137,7 +137,7 @@ public class Prefs {
 
     /** 0=顶部 1=居中 2=底部（距底部留 120dp） */
     public int position() {
-        return sp.getInt("pos", 0);
+        return sp.getInt("pos", 2);   // 默认沉底（类小米官方弹窗）
     }
 
     public void setPosition(int v) {
