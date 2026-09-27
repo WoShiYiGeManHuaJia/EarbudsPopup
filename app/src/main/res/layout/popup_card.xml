@@ -106,8 +106,8 @@
                     android:id="@+id/icEarbuds"
                     android:layout_width="15dp"
                     android:layout_height="15dp"
-                    android:contentDescription="耳机电量"
-                    android:src="@drawable/ic_earbuds" />
+                    android:contentDescription="左耳电量"
+                    android:src="@drawable/ic_earbud_tws" />
 
                 <TextView
                     android:id="@+id/tvBattery"
@@ -121,16 +121,20 @@
                     android:textColor="#E6FFFFFF"
                     android:textSize="12.5sp" />
 
+                <!-- 充电盒槽位已移除：系统蓝牙栈 untethered_case_battery=null，
+                     该值取不到，留着只会一直显示 --% -->
+
+                <!-- 右耳：图标 + 纯数字（不带 R 字母） -->
                 <ImageView
-                    android:id="@+id/icCase"
+                    android:id="@+id/icEarbudsRight"
                     android:layout_width="15dp"
                     android:layout_height="15dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="充电盒电量"
-                    android:src="@drawable/ic_case" />
+                    android:layout_marginStart="14dp"
+                    android:contentDescription="右耳电量"
+                    android:src="@drawable/ic_earbud_tws" />
 
                 <TextView
-                    android:id="@+id/tvCase"
+                    android:id="@+id/tvBatteryRight"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="5dp"
