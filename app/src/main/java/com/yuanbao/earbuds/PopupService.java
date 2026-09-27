@@ -194,95 +194,52 @@ public class PopupService extends Service {
     // ---------------- 弹窗渲染 ----------------
 
     private void show(String name, String address, int battery) {
-        main.post(() -> render(name, address, battery));
+        main.post(() -> launch(name, address, battery));
     }
 
-    private void render(String name, String address, int battery) {
+    /**
+     * 按引擎分发：系统级透明 Activity / 悬浮窗 / 智能降级。
+     * 之所以能从后台启动 Activity：已授予 SYSTEM_ALERT_WINDOW 的应用
+     * 属于 Android 10+ 后台启动 Activity 限制的官方例外之一。
+     */
+    private void launch(String name, String address, int battery) {
+        int engine = prefs.engine();
+        boolean canOverlay = android.provider.Settings.canDrawOverlays(this);
+
+        if (engine == 1) {
+            showOverlay(name, address, battery);
+            return;
+        }
+
+        if (engine == 0) {
+            try {
+                startActivity(PopupActivity.makeIntent(this, name, battery));
+            } catch (Exception e) {
+                if (canOverlay) showOverlay(name, address, battery);
+            }
+            return;
+        }
+
+        // 智能模式：先试系统级 Activity，800ms 后确认没起来就降级悬浮窗
+        PopupActivity.lastShownAt = 0L;
+        try {
+            startActivity(PopupActivity.makeIntent(this, name, battery));
+        } catch (Exception e) {
+            if (canOverlay) showOverlay(name, address, battery);
+            return;
+        }
+        main.postDelayed(() -> {
+            if (PopupActivity.lastShownAt <= 0L && canOverlay) {
+                showOverlay(name, address, battery);
+            }
+        }, 800);
+    }
+
+    private void showOverlay(String name, String address, int battery) {
         dismiss();
         if (!android.provider.Settings.canDrawOverlays(this)) return;
 
         View v = LayoutInflater.from(this).inflate(R.layout.popup_card, null);
-
-        View card = v.findViewById(R.id.card);
-        ImageView img = v.findViewById(R.id.popupImage);
-        TextView title = v.findViewById(R.id.popupTitle);
-        TextView sub = v.findViewById(R.id.popupSub);
-        TextView bat = v.findViewById(R.id.popupBattery);
-        TextView hint = v.findViewById(R.id.popupHint);
-        View accentBar = v.findViewById(R.id.accentBar);
-        LinearLayout batteryRow = v.findViewById(R.id.batteryRow);
-        ProgressBar batteryBar = v.findViewById(R.id.batteryBar);
-
-        int accent;
-        try {
-            accent = Color.parseColor(prefs.accentColor());
-        } catch (IllegalArgumentException e) {
-            accent = 0xFF00E5A0;
-        }
-        accentBar.setBackgroundColor(accent);
-
-        // 背景：圆角 + 颜色
-        GradientDrawable gd = new GradientDrawable();
-        gd.setShape(GradientDrawable.RECTANGLE);
-        gd.setCornerRadius(dp(prefs.radiusDp()));
-        try {
-            gd.setColor(Color.parseColor(prefs.bgColor()));
-        } catch (IllegalArgumentException e) {
-            gd.setColor(0xE6222426);
-        }
-        card.setBackground(gd);
-        card.setElevation(dp(12));
-
-        int textColor;
-        try {
-            textColor = Color.parseColor(prefs.textColor());
-        } catch (IllegalArgumentException e) {
-            textColor = Color.WHITE;
-        }
-        title.setTextColor(textColor);
-        sub.setTextColor(textColor);
-        bat.setTextColor(textColor);
-        hint.setTextColor(textColor);
-
-        title.setText(prefs.titleText());
-        String subRaw = prefs.subText();
-        String pretty = prettyName(name);
-        sub.setText(subRaw.contains("%s") ? String.format(subRaw, pretty) : subRaw);
-        sub.setVisibility(subRaw.isEmpty() ? View.GONE : View.VISIBLE);
-
-        if (battery >= 0 && battery <= 100) {
-            bat.setText(battery + "%");
-            batteryBar.setProgress(battery);
-            batteryRow.setVisibility(View.VISIBLE);
-        } else {
-            batteryRow.setVisibility(View.GONE);
-        }
-
-        // 自定义图片 / GIF
-        String uri = prefs.imageUri();
-        if (!uri.isEmpty()) {
-            ViewGroup.LayoutParams lp = img.getLayoutParams();
-            lp.height = (int) dp(prefs.imageHeightDp());
-            img.setLayoutParams(lp);
-            img.setVisibility(View.VISIBLE);
-            try {
-                Glide.with(getApplicationContext())
-                        .load(Uri.parse(uri))
-                        .centerCrop()
-                        .into(img);
-            } catch (Exception e) {
-                img.setImageResource(R.drawable.ic_headphone);
-            }
-        } else {
-            img.setVisibility(View.VISIBLE);
-            ViewGroup.LayoutParams lp = img.getLayoutParams();
-            lp.height = (int) dp(prefs.imageHeightDp());
-            img.setLayoutParams(lp);
-            img.setImageResource(R.drawable.ic_headphone);
-        }
-
-        // 点击弹窗关闭
-        v.setOnClickListener(view -> dismiss());
 
         int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -337,11 +294,10 @@ public class PopupService extends Service {
                     .setInterpolator(new DecelerateInterpolator()).start();
         }
 
-        main.postDelayed(this::dismiss, prefs.durationMs());
+        v.postDelayed(this::dismiss, prefs.durationMs());
     }
 
     private void dismiss() {
-        main.removeCallbacksAndMessages(null);
         if (current != null) {
             final View v = current;
             current = null;
