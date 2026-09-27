@@ -59,8 +59,8 @@ public final class PopupRenderer {
         int widthPx = (int) (prefs.widthDp() * d);
         // 卡片总高由「图片占弹窗高度」换算：值越大卡片越高，
         // 而文字区是固定紧凑高度，所以多出来的高度全部归 GIF 区
-        float ratio = Math.max(0.40f, Math.min(0.92f, prefs.imageRatio()));
-        float cardRatio = 0.55f + ratio * 0.80f;   // 0.76 -> 1.158
+        float ratio = Math.max(0.40f, Math.min(0.94f, prefs.imageRatio()));
+        float cardRatio = 0.42f + ratio * 1.05f;   // 0.82 -> 1.28
         int heightPx = (int) (widthPx * cardRatio);
         // 卡片底色：自动取色优先，否则用用户手填的颜色
         int cardBg = parseColor(
@@ -87,25 +87,26 @@ public final class PopupRenderer {
         // 这里只在旧布局残留 weight 时兜底校正一次
         forceWeight(gifWrap, 1f);
 
-        // ---------- GIF 区：容器衬底，防浅色发白 / 深色糊成一团 ----------
+        // GIF 区不再铺任何半透明衬底：之前那层 6% 白会让 GIF 显得发灰、不清晰。
+        // 圆角由 ImageView 自己裁切，容器保持完全透明。
         if (gifWrap != null) {
-            GradientDrawable wrapBg = new GradientDrawable();
-            wrapBg.setShape(GradientDrawable.RECTANGLE);
-            wrapBg.setCornerRadius(GIF_CORNER * d);
-            wrapBg.setColor(0x0FFFFFFF);        // rgba(255,255,255,0.06)
-            gifWrap.setBackground(wrapBg);
+            gifWrap.setBackground(null);
+        }
 
-            // 圆角裁切：让图片/GIF 跟着容器一起变圆角，而不是直角硬边。
-            // 用 ViewOutlineProvider 交给 GPU 合成时裁切，不会像 Transformation 那样逐帧重算，
-            // 所以 GIF 帧率不受影响。
+        // 圆角裁切必须作用在 ImageView 本身：
+        // 之前裁的是外层容器 gifWrap，而图片在容器的 padding 内部，
+        // 容器边界上的圆角根本碰不到图片的四角，所以看起来还是直角。
+        // 用 ViewOutlineProvider 由 GPU 合成时裁切，不会像 Glide Transformation
+        // 那样逐帧重算，GIF 帧率不受影响。
+        if (img != null) {
             final float r = GIF_CORNER * d;
-            gifWrap.setOutlineProvider(new android.view.ViewOutlineProvider() {
+            img.setOutlineProvider(new android.view.ViewOutlineProvider() {
                 @Override
                 public void getOutline(android.view.View view, android.graphics.Outline outline) {
                     outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), r);
                 }
             });
-            gifWrap.setClipToOutline(true);
+            img.setClipToOutline(true);
         }
 
         // ---------- 文字色 ----------
