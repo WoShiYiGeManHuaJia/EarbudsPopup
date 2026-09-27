@@ -228,9 +228,11 @@ public final class PopupRenderer {
     private static void setupLiveBlur(LiveBlurView blur, ImageView img, int cardBg) {
         if (blur == null || img == null) return;
         float d = blur.getResources().getDisplayMetrics().density;
-        blur.setBlurRadius(22f * d);
-        // 叠一层半透明卡片色，保证文字可读
-        blur.setDim(applyAlpha(cardBg, 0.45f));
+        blur.setBlurRadius(26f * d);
+        // 之前 dim 给到 0.45，几乎把模糊层盖成一层灰 —— 用户看到的
+        // 「直接加一层灰」就是它。降到 0.20，只做轻微压暗保证文字可读，
+        // 让模糊本身成为主体。
+        blur.setDim(applyAlpha(cardBg, 0.20f));
         // 顶部 55% 高度做渐隐，与上方清晰画面平滑过渡（不再一刀切）
         blur.setFadeRatio(0.55f);
         blur.setSource(img);
