@@ -16,6 +16,12 @@
     <color name="md_error_container">#FFFFDAD6</color>
     <color name="md_on_error_container">#FF410002</color>
 
+    <!-- UI 固定配色：不随壁纸动态取色变化，保证任何主题下都清晰可见 -->
+    <color name="ui_text_primary">#FF1A1A1A</color>
+    <color name="ui_text_secondary">#FF6B6B6B</color>
+    <color name="ui_divider">#FFE6E0DA</color>
+    <color name="ui_card_bg">#FFFFFFFF</color>
+
     <color name="md_background">#FFFDF8F5</color>
     <color name="md_surface">#FFFFFFFF</color>
 </resources>
