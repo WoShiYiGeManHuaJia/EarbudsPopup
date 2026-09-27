@@ -65,6 +65,7 @@ public final class BatteryProbe {
 
     private BluetoothGatt gatt;
     private final AtomicBoolean done = new AtomicBoolean(false);
+    private volatile BatteryLevels metaLevels;
 
     public BatteryProbe(Context c) {
         ctx = c.getApplicationContext();
@@ -85,6 +86,15 @@ public final class BatteryProbe {
         log("系统隐藏 getBatteryLevel() = " + sys);
         final int overall = sys;
 
+        // D. 尝试反射读系统三方电量元数据（Android 13+ 存的就是左/右/盒）
+        final BatteryLevels meta = readSystemMetadata(device);
+        if (meta != null) {
+            log("系统元数据: L=" + meta.left + " R=" + meta.right + " Case=" + meta.caseBox);
+        } else {
+            log("系统元数据不可用（SystemApi，通常被隐藏 API 限制拦住）");
+        }
+        metaLevels = meta;
+
         // A + B 并行：先扫广播拿 MiBeacon，再连 GATT
         scanThenConnect(address, device, overall, cb);
     }
@@ -95,6 +105,69 @@ public final class BatteryProbe {
             return n == null ? "(null)" : n;
         } catch (SecurityException e) {
             return "(需要 BLUETOOTH_CONNECT)";
+        }
+    }
+
+    /**
+     * D. 反射读 Android 13+ 的三方电量元数据。
+     * 系统把左/右/盒电量就存在 BluetoothDevice 的 METADATA_UNTETHERED_* 里，
+     * 小米自己的弹窗也是读这里。对普通 App 是 SystemApi，多数情况下会被隐藏 API 限制拦住，
+     * 但值得一试——一旦通了就是最准的数据源。
+     */
+    private BatteryLevels readSystemMetadata(BluetoothDevice dev) {
+        if (dev == null) return null;
+        try {
+            java.lang.reflect.Method m = dev.getClass().getMethod("getMetadata", int.class);
+            int kl = staticInt(dev, "METADATA_UNTETHERED_LEFT_BATTERY", -1);
+            int kr = staticInt(dev, "METADATA_UNTETHERED_RIGHT_BATTERY", -1);
+            int kc = staticInt(dev, "METADATA_UNTETHERED_CASE_BATTERY", -1);
+            log("元数据字段 key: LEFT=" + kl + " RIGHT=" + kr + " CASE=" + kc);
+            BatteryLevels b = new BatteryLevels();
+            boolean any = false;
+            if (kl >= 0) {
+                b.left = metaByte(m, dev, kl);
+                if (b.left >= 0) any = true;
+            }
+            if (kr >= 0) {
+                b.right = metaByte(m, dev, kr);
+                if (b.right >= 0) any = true;
+            }
+            if (kc >= 0) {
+                b.caseBox = metaByte(m, dev, kc);
+                if (b.caseBox >= 0) any = true;
+            }
+            return any ? b : null;
+        } catch (Throwable t) {
+            log("getMetadata 不可用: " + t);
+            return null;
+        }
+    }
+
+    private int metaByte(java.lang.reflect.Method m, BluetoothDevice dev, int key) {
+        try {
+            Object r = m.invoke(dev, key);
+            if (r instanceof byte[]) {
+                byte[] arr = (byte[]) r;
+                if (arr.length > 0) return arr[0] & 0xFF;
+            }
+        } catch (Throwable ignored) {
+        }
+        return -1;
+    }
+
+    private int staticInt(BluetoothDevice dev, String field, int def) {
+        try {
+            java.lang.reflect.Field f = dev.getClass().getDeclaredField(field);
+            f.setAccessible(true);
+            return f.getInt(null);
+        } catch (Throwable t) {
+            try {
+                java.lang.reflect.Field f = BluetoothDevice.class.getDeclaredField(field);
+                f.setAccessible(true);
+                return f.getInt(null);
+            } catch (Throwable ignored) {
+                return def;
+            }
         }
     }
 
@@ -383,6 +456,20 @@ public final class BatteryProbe {
                                 Callback cb) {
         BatteryLevels b = new BatteryLevels();
         b.overall = overall;
+
+        // 系统元数据语义最准，优先采用
+        if (metaLevels != null && (metaLevels.left >= 0 || metaLevels.right >= 0
+                || metaLevels.caseBox >= 0)) {
+            b.left = metaLevels.left;
+            b.right = metaLevels.right;
+            b.caseBox = metaLevels.caseBox;
+            b.fillFromOverall();
+            b.source = "system-metadata";
+            b.timestamp = System.currentTimeMillis();
+            lastResult = b;
+            log("采用系统元数据 L=" + b.left + " R=" + b.right + " Case=" + b.caseBox);
+            return;
+        }
 
         List<Integer> vals = new ArrayList<>();
         List<String> labels = new ArrayList<>();
