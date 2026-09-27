@@ -74,6 +74,119 @@ public final class BatteryProbe {
         ctx = c.getApplicationContext();
     }
 
+    /**
+     * 轻量读取：只连 GATT 读标准 Battery Level（0x2A19），不做全量服务树 dump。
+     * 供每次耳机连接时自动调用——比完整探测快得多（通常 1~3 秒），
+     * 拿到值就写缓存，下次弹窗立刻显示。
+     * 回调一定会被调用（成功/失败/超时都会），调用方不必担心卡死。
+     */
+    @SuppressLint("MissingPermission")
+    public void quickRead(String address, BluetoothDevice device,
+                          java.util.function.Consumer<Integer> cb) {
+        BluetoothDevice target = device;
+        if (target == null) {
+            BluetoothAdapter a = BluetoothAdapter.getDefaultAdapter();
+            if (a == null) {
+                if (cb != null) cb.accept(-1);
+                return;
+            }
+            try {
+                target = a.getRemoteDevice(address);
+            } catch (Exception e) {
+                if (cb != null) cb.accept(-1);
+                return;
+            }
+        }
+
+        final boolean[] doneOnce = {false};
+        final BluetoothDevice t = target;
+
+        BluetoothGattCallback gc = new BluetoothGattCallback() {
+            @Override
+            public void onConnectionStateChange(BluetoothGatt g, int status, int newState) {
+                if (newState == BluetoothProfile.STATE_CONNECTED) {
+                    try {
+                        g.discoverServices();
+                    } catch (SecurityException e) {
+                        finishQuick(g, doneOnce, cb, -1);
+                    }
+                } else {
+                    finishQuick(g, doneOnce, cb, -1);
+                }
+            }
+
+            @Override
+            public void onServicesDiscovered(BluetoothGatt g, int status) {
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    finishQuick(g, doneOnce, cb, -1);
+                    return;
+                }
+                BluetoothGattCharacteristic ch = null;
+                for (BluetoothGattService svc : g.getServices()) {
+                    if (UUID_BATTERY_SERVICE.equals(svc.getUuid())) {
+                        for (BluetoothGattCharacteristic c : svc.getCharacteristics()) {
+                            if (UUID_BATTERY_LEVEL.equals(c.getUuid())) {
+                                ch = c;
+                                break;
+                            }
+                        }
+                    }
+                    if (ch != null) break;
+                }
+                if (ch == null) {
+                    finishQuick(g, doneOnce, cb, -1);
+                    return;
+                }
+                final BluetoothGattCharacteristic targetCh = ch;
+                try {
+                    boolean ok = g.readCharacteristic(targetCh);
+                    if (!ok) finishQuick(g, doneOnce, cb, -1);
+                } catch (SecurityException e) {
+                    finishQuick(g, doneOnce, cb, -1);
+                }
+            }
+
+            @Override
+            public void onCharacteristicRead(BluetoothGatt g, BluetoothGattCharacteristic ch,
+                                             int status) {
+                // 绝不能 ch.setValue()，会把刚读到的真实值覆盖掉
+                Integer v = decodeLevel(ch);
+                finishQuick(g, doneOnce, cb, v == null ? -1 : v);
+            }
+        };
+
+        BluetoothGatt g;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                g = t.connectGatt(ctx, false, gc, BluetoothDevice.TRANSPORT_LE);
+            } else {
+                g = t.connectGatt(ctx, false, gc);
+            }
+        } catch (SecurityException e) {
+            if (cb != null) cb.accept(-1);
+            return;
+        }
+        if (g == null) {
+            if (cb != null) cb.accept(-1);
+            return;
+        }
+        // 超时兜底：12 秒还没结果就断掉并回调 -1
+        new Handler(Looper.getMainLooper()).postDelayed(
+                () -> finishQuick(g, doneOnce, cb, -1), 12000);
+    }
+
+    private void finishQuick(BluetoothGatt g, boolean[] doneOnce,
+                             java.util.function.Consumer<Integer> cb, int value) {
+        if (doneOnce[0]) return;
+        doneOnce[0] = true;
+        try {
+            g.disconnect();
+            g.close();
+        } catch (Exception ignored) {
+        }
+        if (cb != null) cb.accept(value);
+    }
+
     private void log(String s) {
         log.append(s).append('\n');
     }
@@ -511,8 +624,9 @@ public final class BatteryProbe {
         b.overall = overall;
 
         // 系统元数据语义最准，优先采用
-        if (metaLevels != null && (metaLevels.left >= 0 || metaLevels.right >= 0
-                || metaLevels.caseBox >= 0)) {
+        if (metaLevels != null && (BatteryLevels.valid(metaLevels.left)
+                || BatteryLevels.valid(metaLevels.right)
+                || BatteryLevels.valid(metaLevels.caseBox))) {
             b.left = metaLevels.left;
             b.right = metaLevels.right;
             b.caseBox = metaLevels.caseBox;
