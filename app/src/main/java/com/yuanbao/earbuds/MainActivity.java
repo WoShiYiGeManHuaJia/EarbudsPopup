@@ -405,6 +405,30 @@ public class MainActivity extends AppCompatActivity {
                 runBatteryProbe();
             }
         });
+        // 充电盒电量推断开关：默认关闭（该字节未确认是电量，贸然显示会乱跳）
+        View rowCase = findViewById(R.id.rowPrivateCase);
+        if (rowCase != null) {
+            final android.widget.SwitchMaterial swCaseSrc =
+                    rowCase.findViewById(R.id.swPrivateCase);
+            final android.widget.TextView tvCaseDesc =
+                    rowCase.findViewById(R.id.tvPrivateCaseDesc);
+            if (swCaseSrc != null) {
+                swCaseSrc.setChecked(prefs.privateCaseEnabled());
+                swCaseSrc.setOnCheckedChangeListener((btn, on) -> {
+                    prefs.setPrivateCaseEnabled(on);
+                    if (tvCaseDesc != null) {
+                        tvCaseDesc.setText(on
+                                ? "开启：用私有特征读数当充电盒电量（未确认，可能不准）"
+                                : "关闭：充电盒显示 --%");
+                    }
+                });
+                if (tvCaseDesc != null) {
+                    tvCaseDesc.setText(prefs.privateCaseEnabled()
+                            ? "开启：用私有特征读数当充电盒电量（未确认，可能不准）"
+                            : "关闭：充电盒显示 --%");
+                }
+            }
+        }
         findViewById(R.id.rowInfo).setOnClickListener(v -> showAbout());
 
         watch(etTitle, etSub);
