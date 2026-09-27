@@ -478,21 +478,34 @@ public class PopupService extends Service {
             return;
         }
 
-        // 智能模式：先试系统级 Activity，800ms 后确认没起来就降级悬浮窗
+        // 智能模式：先试系统级 Activity，确认没起来才降级悬浮窗。
+        //
+        // 之前确认窗口只有 800ms：系统级 Activity 走 AMS 调度本来就慢，
+        // 经常 800ms 还没起，于是又弹一个悬浮窗 —— 两个弹窗叠着出现，
+        // 用户看到的就是「闪两下」。同时 autoRefreshBattery 被调了两次，
+        // 多一次 GATT 连接，白白拖慢弹窗速度。
+        //
+        // 现在：确认窗口放宽到 1600ms，且探测只做一次。
         PopupActivity.lastShownAt = 0L;
+        final boolean[] probed = {false};
+        Runnable doProbe = () -> {
+            if (probed[0]) return;
+            probed[0] = true;
+            autoRefreshBattery(address, dev);
+        };
         try {
             startActivity(PopupActivity.makeIntent(this, name, levels));
         } catch (Exception e) {
             if (canOverlay) showOverlay(name, address, levels);
-            autoRefreshBattery(address, dev);
+            doProbe.run();
             return;
         }
         main.postDelayed(() -> {
             if (PopupActivity.lastShownAt <= 0L && canOverlay) {
                 showOverlay(name, address, levels);
             }
-            autoRefreshBattery(address, dev);
-        }, 800);
+            doProbe.run();
+        }, 1600);
     }
 
     /**
