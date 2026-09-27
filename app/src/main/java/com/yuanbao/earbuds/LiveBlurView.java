@@ -45,6 +45,8 @@ public class LiveBlurView extends View {
     private int dimColor = 0x8C000000;
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /** API 31+ 且 RenderEffect 设置成功的标记（避免直接调高版本方法） */
+    private boolean hwBlurEnabled = false;
     private Drawable.Callback originalCallback;
     private Drawable attached;
 
@@ -91,10 +93,12 @@ public class LiveBlurView extends View {
     }
 
     private void applyEffect() {
+        hwBlurEnabled = false;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             try {
                 setRenderEffect(android.graphics.RenderEffect.createBlurEffect(
                         blurRadiusPx, blurRadiusPx, Shader.TileMode.CLAMP));
+                hwBlurEnabled = true;
             } catch (Throwable ignored) {
                 // 设备不支持就退回逐帧降采样
             }
@@ -175,8 +179,9 @@ public class LiveBlurView extends View {
             attachCallback(dr);
         }
 
-        boolean hwBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-                && getRenderEffect() != null;
+        // 用标记判断，不直接调 getRenderEffect()（那是 API 31 方法，
+        // 在 minSdk 26 的工程里直接引用会导致编译期找不到符号）
+        boolean hwBlur = hwBlurEnabled;
 
         if (hwBlur) {
             // API 31+：直接画，RenderEffect 会在合成时逐帧模糊
