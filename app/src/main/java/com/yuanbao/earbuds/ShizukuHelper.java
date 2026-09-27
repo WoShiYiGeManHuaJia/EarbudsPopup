@@ -149,20 +149,46 @@ public final class ShizukuHelper {
             });
             t1.start();
             t2.start();
-            // 必须带超时：某些命令（如 dumpsys）可能挂起，
-            // waitFor() 无超时会让整个单线程池永久卡死，表现为「一键设置一直转圈」
-            boolean finished = p.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);
-            if (!finished) {
+
+            // 看门狗模式。
+            // 上一版错误地用了 p.waitFor(15, SECONDS)：Shizuku 返回的远程 Process
+            // 不支持带超时的 waitFor，会直接抛 UnsupportedOperationException，
+            // 表现为 "ERR: process hasn't exited"，整条 dumpsys 路径失效。
+            // 正确做法是：主线程 waitFor() 不带超时，另起一个看门狗线程，
+            // 超时后 destroy 进程，迫使 waitFor() 返回。
+            final boolean[] timedOut = {false};
+            Thread watchdog = new Thread(() -> {
+                try {
+                    Thread.sleep(15000);
+                } catch (InterruptedException e) {
+                    return;
+                }
+                timedOut[0] = true;
+                try {
+                    p.destroy();
+                } catch (Exception ignored) {
+                }
                 try {
                     p.destroyForcibly();
                 } catch (Exception ignored) {
                 }
-                t1.join(1000);
-                t2.join(1000);
-                return (res(out, err) + "\n[超时] 命令执行超过 15 秒，已强制终止").trim();
+            });
+            watchdog.setDaemon(true);
+            watchdog.start();
+
+            try {
+                p.waitFor();          // 无超时，靠看门狗打断
+            } catch (InterruptedException e) {
+                timedOut[0] = true;
             }
+            watchdog.interrupt();
             t1.join(3000);
             t2.join(3000);
+
+            if (timedOut[0]) {
+                return (res(out, err)
+                        + "\n[超时] 命令执行超过 15 秒，已被看门狗终止").trim();
+            }
 
             StringBuilder res = new StringBuilder(out);
             if (err.length() > 0) res.append("[stderr] ").append(err);
