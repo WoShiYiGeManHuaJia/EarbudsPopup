@@ -38,6 +38,13 @@ public class PopupActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // 若 3 秒内刚显示过悬浮窗，说明智能模式已经降级过一次，
+        // 这个 Activity 是迟到启动的，会与悬浮窗叠成「闪两下」，直接结束自己。
+        if (System.currentTimeMillis() - PopupService.lastOverlayShownAt < 3000L) {
+            finish();
+            overridePendingTransition(0, 0);
+            return;
+        }
         // 必须先初始化 PrefsHolder：
         // 图片的缩放/偏移存在这里，若 Activity 先于 Service 启动而没初始化，
         // 渲染时拿到 null 会回退成默认 1 倍，用户设的缩放就丢了。
