@@ -103,15 +103,20 @@ public final class PopupRenderer {
 
         String deviceName = prettyName(rawName);
         String head = fill(prefs.titleText(), deviceName);
+        // 文字分档配色：没单独设过就退回通用文字色
+        int titleC = resolveColor(prefs.titleColor(), textColor);
+        int statusC = resolveColor(prefs.statusColor(), textColor);
+        int battC = resolveColor(prefs.batteryColor(), textColor);
+
         if (tvDeviceName != null) {
             tvDeviceName.setText(head.isEmpty() ? deviceName : head);
-            tvDeviceName.setTextColor(textColor);
+            tvDeviceName.setTextColor(titleC);
         }
-        if (tipText != null) tipText.setTextColor(applyAlpha(textColor, 0.6f));
+        if (tipText != null) tipText.setTextColor(applyAlpha(statusC, 0.6f));
 
         // ---------- 电量（带图标） ----------
         if (levels != null) levels.sanitize();
-        int sub = applyAlpha(textColor, 0.9f);
+        int sub = applyAlpha(battC, 0.95f);
         if (tvBattery != null) {
             tvBattery.setText(batteryText(levels));
             tvBattery.setTextColor(sub);
@@ -421,6 +426,16 @@ public final class PopupRenderer {
         levels.sanitize();
         if (tvBattery != null) tvBattery.setText(batteryText(levels));
         if (tvBatteryRight != null) tvBatteryRight.setText(batteryTextRight(levels));
+    }
+
+    /** 分档色没设过（空串/解析失败）时退回通用文字色 */
+    private static int resolveColor(String hex, int fallback) {
+        if (hex == null || hex.trim().isEmpty()) return fallback;
+        try {
+            return Color.parseColor(hex.trim());
+        } catch (Exception e) {
+            return fallback;
+        }
     }
 
     private static String fill(String tpl, String dev) {
