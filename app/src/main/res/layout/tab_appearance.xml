@@ -148,7 +148,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
                 android:layout_marginStart="56dp"
-                android:background="?attr/colorSurfaceVariant" />
+                android:background="@color/ui_divider" />
 
             <LinearLayout
                 android:id="@+id/rowRadius"
@@ -175,7 +175,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
                 android:layout_marginStart="56dp"
-                android:background="?attr/colorSurfaceVariant" />
+                android:background="@color/ui_divider" />
 
             <LinearLayout
                 android:id="@+id/rowImgH"
@@ -205,7 +205,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
                 android:layout_marginStart="56dp"
-                android:background="?attr/colorSurfaceVariant" />
+                android:background="@color/ui_divider" />
 
             <LinearLayout
                 android:id="@+id/rowDuration"
@@ -235,7 +235,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
                 android:layout_marginStart="56dp"
-                android:background="?attr/colorSurfaceVariant" />
+                android:background="@color/ui_divider" />
 
             <LinearLayout
                 android:id="@+id/rowPos"
@@ -262,7 +262,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
                 android:layout_marginStart="56dp"
-                android:background="?attr/colorSurfaceVariant" />
+                android:background="@color/ui_divider" />
 
             <LinearLayout
                 android:id="@+id/rowAnim"
