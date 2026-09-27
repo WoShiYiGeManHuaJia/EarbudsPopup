@@ -62,7 +62,7 @@ public class Prefs {
     }
 
     public String titleText() {
-        return sp.getString("title", "耳机已连接");
+        return sp.getString("title", "Buds 5 Pro 电竞版");
     }
 
     public void setTitleText(String s) {
@@ -70,7 +70,7 @@ public class Prefs {
     }
 
     public String subText() {
-        return sp.getString("sub", "%s");
+        return sp.getString("sub", "%s 已连接");
     }
 
     public void setSubText(String s) {
@@ -78,7 +78,7 @@ public class Prefs {
     }
 
     public String bgColor() {
-        return sp.getString("bg", "#E6222426");
+        return sp.getString("bg", "#F2141620");
     }
 
     public void setBgColor(String s) {
@@ -89,12 +89,21 @@ public class Prefs {
         return sp.getString("text_color", "#FFFFFFFF");
     }
 
+    /** 电竞风强调色（电量条 / 顶部高亮条） */
+    public String accentColor() {
+        return sp.getString("accent", "#FF00E5A0");
+    }
+
+    public void setAccentColor(String s) {
+        sp.edit().putString("accent", s).apply();
+    }
+
     public void setTextColor(String s) {
         sp.edit().putString("text_color", s).apply();
     }
 
     public int radiusDp() {
-        return sp.getInt("radius", 24);
+        return sp.getInt("radius", 28);
     }
 
     public void setRadiusDp(int v) {
@@ -102,7 +111,7 @@ public class Prefs {
     }
 
     public int widthDp() {
-        return sp.getInt("width", 300);
+        return sp.getInt("width", 320);
     }
 
     public void setWidthDp(int v) {
@@ -110,7 +119,7 @@ public class Prefs {
     }
 
     public int imageHeightDp() {
-        return sp.getInt("img_h", 150);
+        return sp.getInt("img_h", 170);
     }
 
     public void setImageHeightDp(int v) {
@@ -136,7 +145,7 @@ public class Prefs {
     }
 
     public int durationMs() {
-        return sp.getInt("duration", 4000);
+        return sp.getInt("duration", 4500);
     }
 
     public void setDurationMs(int v) {
