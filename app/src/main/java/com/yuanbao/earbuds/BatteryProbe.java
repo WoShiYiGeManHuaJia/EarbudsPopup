@@ -515,7 +515,6 @@ public final class BatteryProbe {
             }
 
             @Override
-            @Override
             public void onCharacteristicChanged(BluetoothGatt g,
                                                 BluetoothGattCharacteristic ch) {
                 // 耳机主动推送的数据包 —— 充电盒电量很可能只在推送里出现，
