@@ -224,9 +224,11 @@ public class PopupService extends Service {
         }
         if (!connected) return;
 
-        String name = safeName(dev);
         String addr = dev.getAddress();
         if (!prefs.isAllowed(addr)) return;
+        String custom = prefs.deviceName(addr);
+        String name = (custom != null && !custom.trim().isEmpty())
+                ? custom.trim() : safeName(dev);
         BatteryLevels cached = new BatteryStore(this).load(addr);
         int sys = readBattery(dev);
         if (sys >= 0) cached.overall = sys;
