@@ -68,6 +68,7 @@ public class MainActivity extends AppCompatActivity {
     private SeekBar sbDim, sbBlur;
     private TextView tvDim, tvBlur;
     private SwitchMaterial swLock, swNoFocus, swCase, swAutoColor;
+    private SwitchMaterial swPowerSave, swHideNoti;
     private SwitchMaterial swMaster, swWired, swAutoStart, swBattery;
 
     // 实时预览
@@ -145,6 +146,8 @@ public class MainActivity extends AppCompatActivity {
         swLock = findViewById(R.id.swLock);
         swCase = findViewById(R.id.swCase);
         swAutoColor = findViewById(R.id.swAutoColor);
+        swPowerSave = findViewById(R.id.swPowerSave);
+        swHideNoti = findViewById(R.id.swHideNoti);
         swNoFocus = findViewById(R.id.swNoFocus);
         swMaster = findViewById(R.id.swMaster);
         swWired = findViewById(R.id.swWired);
@@ -169,6 +172,8 @@ public class MainActivity extends AppCompatActivity {
         sbDim.setProgress((int) (prefs.dimAmount() * 100));
         sbBlur.setProgress(prefs.blurRadius());
         swLock.setChecked(prefs.showOnLock());
+        if (swPowerSave != null) swPowerSave.setChecked(prefs.powerSave());
+        if (swHideNoti != null) swHideNoti.setChecked(prefs.hideNotification());
         swNoFocus.setChecked(prefs.notFocusable());
         swMaster.setChecked(prefs.masterEnabled());
         swWired.setChecked(prefs.wiredEnabled());
@@ -250,6 +255,25 @@ public class MainActivity extends AppCompatActivity {
             public void onNothingSelected(AdapterView<?> p) {
             }
         });
+        if (swPowerSave != null) {
+            swPowerSave.setOnCheckedChangeListener((b, checked) -> {
+                if (!bindingUi) {
+                    prefs.setPowerSave(checked);
+                    restartService();
+                }
+            });
+        }
+        if (swHideNoti != null) {
+            swHideNoti.setOnCheckedChangeListener((b, checked) -> {
+                if (!bindingUi) {
+                    prefs.setHideNotification(checked);
+                    restartService();
+                }
+            });
+        }
+        findViewById(R.id.btnNotiSettings).setOnClickListener(v -> openNotificationSettings());
+        findViewById(R.id.btnBattery).setOnClickListener(v -> requestBatteryWhitelist());
+
         watch(etTitle, etSub, etBg, etTextColor, etAccent);
         spEngine.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             public void onItemSelected(AdapterView<?> p, View v, int i, long id) {
@@ -656,6 +680,60 @@ public class MainActivity extends AppCompatActivity {
         }
         Toast.makeText(this, "请在 设置 → 应用设置 → 本应用 → 省电策略 选择「无限制」",
                 Toast.LENGTH_LONG).show();
+    }
+
+    /** 跳转系统通知设置，用户可手动彻底关闭通知渠道 */
+    private void openNotificationSettings() {
+        try {
+            Intent i;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                i = new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+                i.putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, getPackageName());
+            } else {
+                i = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                i.setData(Uri.parse("package:" + getPackageName()));
+            }
+            startActivity(i);
+            Toast.makeText(this, "把通知开关关掉即可，服务仍会运行", Toast.LENGTH_LONG).show();
+        } catch (Exception e) {
+            Toast.makeText(this, "无法打开设置，请手动在系统设置里关闭本 App 的通知",
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    /** 加入电池优化白名单，防止服务被系统杀掉 */
+    private void requestBatteryWhitelist() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                android.os.PowerManager pm =
+                        (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
+                if (pm != null && pm.isIgnoringBatteryOptimizations(getPackageName())) {
+                    Toast.makeText(this, "已在白名单中", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                Intent i = new Intent(
+                        android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                i.setData(Uri.parse("package:" + getPackageName()));
+                startActivity(i);
+            }
+        } catch (Exception e) {
+            try {
+                startActivity(new Intent(
+                        android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    /** 设置变更后重启服务，让新策略生效 */
+    private void restartService() {
+        try {
+            Intent s = new Intent(this, PopupService.class);
+            s.setAction(PopupService.ACTION_RESTART);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(s);
+            else startService(s);
+        } catch (Exception ignored) {
+        }
     }
 
     private void copyMiuiPermCommands() {
