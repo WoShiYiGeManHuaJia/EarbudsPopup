@@ -79,6 +79,26 @@ public final class ShizukuHelper {
         }
     }
 
+    /**
+     * Shizuku API 13 起把 newProcess 改成了 private，
+     * 这里用反射调用（社区通用做法），失败时降级到其它途径。
+     */
+    private static Process newProcessViaReflection(String[] argv) throws Exception {
+        try {
+            java.lang.reflect.Method m = Shizuku.class.getDeclaredMethod(
+                    "newProcess", String[].class, String[].class, String.class);
+            m.setAccessible(true);
+            return (Process) m.invoke(null, argv, null, null);
+        } catch (NoSuchMethodException e) {
+            // 某些版本签名不同，退回到 Object 变体
+            java.lang.reflect.Method m = Shizuku.class.getDeclaredMethod(
+                    "newProcess", String[].class, String[].class, String.class);
+            m.setAccessible(true);
+            Object o = m.invoke(null, (Object) argv, null, null);
+            return (Process) o;
+        }
+    }
+
     /** 执行一条 shell 命令，返回合并后的 stdout+stderr */
     public static String exec(String cmd) {
         return exec(new String[]{"sh", "-c", cmd});
@@ -88,7 +108,7 @@ public final class ShizukuHelper {
         if (!hasPermission()) return "ERR: 未获得 Shizuku 授权";
         Process p = null;
         try {
-            p = Shizuku.newProcess(argv, null, null);
+            p = newProcessViaReflection(argv);
             final StringBuilder out = new StringBuilder();
             final StringBuilder err = new StringBuilder();
 
