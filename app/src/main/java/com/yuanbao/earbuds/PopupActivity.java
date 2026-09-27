@@ -125,9 +125,17 @@ public class PopupActivity extends AppCompatActivity {
 
     private void close() {
         main.removeCallbacksAndMessages(null);
-        if (!isFinishing()) {
+        if (isFinishing()) return;
+        View card = findViewById(R.id.card);
+        if (card != null) {
+            // 先播完退场动画再 finish，让用户真的看见动画
+            PopupRenderer.applyExit(card, prefs.animStyle(), () -> {
+                finish();
+                overridePendingTransition(0, 0);
+            });
+        } else {
             finish();
-            overridePendingTransition(0, R.anim.popup_out);
+            overridePendingTransition(0, 0);
         }
     }
 
