@@ -111,7 +111,7 @@ public class Prefs {
     }
 
     public int widthDp() {
-        return sp.getInt("width", 320);
+        return sp.getInt("width", 296);
     }
 
     public void setWidthDp(int v) {
@@ -119,7 +119,7 @@ public class Prefs {
     }
 
     public int imageHeightDp() {
-        return sp.getInt("img_h", 170);
+        return sp.getInt("img_h", 165);
     }
 
     public void setImageHeightDp(int v) {
