@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Material 3 配色，暖橙主色；Android 12+ 会被壁纸动态配色覆盖 -->
+    <color name="md_primary">#FF9B4A00</color>
+    <color name="md_on_primary">#FFFFFFFF</color>
+    <color name="md_primary_container">#FFFFDCC2</color>
+    <color name="md_on_primary_container">#FF2E1500</color>
+
+    <color name="md_secondary_container">#FFF3DDD3</color>
+    <color name="md_on_secondary_container">#FF2B1710</color>
+
+    <color name="md_tertiary_container">#FFD8E9D6</color>
+    <color name="md_on_tertiary_container">#FF10200F</color>
+
+    <color name="md_error">#FFBA1A1A</color>
+    <color name="md_error_container">#FFFFDAD6</color>
+    <color name="md_on_error_container">#FF410002</color>
+
+    <color name="md_background">#FFFDF8F5</color>
+    <color name="md_surface">#FFFFFFFF</color>
+</resources>
