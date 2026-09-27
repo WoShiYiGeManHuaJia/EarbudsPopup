@@ -42,6 +42,12 @@ import com.bumptech.glide.Glide;
  */
 public class PopupService extends Service {
 
+    /** 悬浮窗最近一次显示的时间戳。
+     *  智能模式下 Activity 启动可能慢于降级判定，导致两个弹窗先后出现
+     *  （用户看到的「闪两下」）。PopupActivity 会读这个值，
+     *  若发现刚刚已有悬浮窗显示，就直接结束自己。 */
+    public static volatile long lastOverlayShownAt = 0L;
+
     /** 沉底模式距屏幕底部的边距（dp） */
     public static final int BOTTOM_MARGIN_DP = 28;
 
@@ -577,6 +583,7 @@ public class PopupService extends Service {
 
     private void showOverlay(String name, String address, BatteryLevels levels) {
         dismiss();
+        lastOverlayShownAt = System.currentTimeMillis();
         if (!android.provider.Settings.canDrawOverlays(this)) return;
 
         View v = LayoutInflater.from(this).inflate(R.layout.popup_card, null);
