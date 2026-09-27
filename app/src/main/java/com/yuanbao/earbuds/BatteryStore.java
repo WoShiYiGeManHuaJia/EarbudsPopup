@@ -20,7 +20,10 @@ public final class BatteryStore {
     private static final String KEY_SCHEMA = "__schema";
     private static final int SCHEMA = 2;
 
-    private static final long TTL = 6 * 60 * 60 * 1000L; // 6 小时
+    /** 缓存有效期：30 分钟。超过就认为陈旧，不再当实时电量显示 */
+    public static final long STALE_MS = 30 * 60 * 1000L;
+
+    private static final long TTL = 30 * 60 * 1000L; // 与 STALE_MS 一致
 
     private final SharedPreferences sp;
 
