@@ -364,25 +364,19 @@ public class PopupService extends Service {
         }
         current = v;
 
-        // 入场动画
-        int style = prefs.animStyle();
-        if (style == 1) {
-            v.setTranslationY(dp(220));
-            v.setAlpha(0f);
-            v.animate().translationY(0).alpha(1f).setDuration(340)
-                    .setInterpolator(new DecelerateInterpolator()).start();
-        } else if (style == 2) {
-            v.setTranslationY(-dp(220));
-            v.setAlpha(0f);
-            v.animate().translationY(0).alpha(1f).setDuration(340)
-                    .setInterpolator(new DecelerateInterpolator()).start();
-        } else {
-            v.setScaleX(0.86f);
-            v.setScaleY(0.86f);
-            v.setAlpha(0f);
-            v.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(300)
-                    .setInterpolator(new DecelerateInterpolator()).start();
-        }
+        // 入场动画：Y -50dp → 0，scale 0.93 → 1，340ms
+        v.setTranslationY(-50 * getResources().getDisplayMetrics().density);
+        v.setScaleX(0.93f);
+        v.setScaleY(0.93f);
+        v.setAlpha(0.3f);
+        v.animate()
+                .translationY(0)
+                .scaleX(1f)
+                .scaleY(1f)
+                .alpha(1f)
+                .setDuration(340)
+                .setInterpolator(new DecelerateInterpolator())
+                .start();
 
         v.postDelayed(this::dismiss, prefs.durationMs());
     }
