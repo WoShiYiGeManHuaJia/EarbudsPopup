@@ -66,6 +66,9 @@ public final class BatteryProbe {
     private BluetoothGatt gatt;
     private final AtomicBoolean done = new AtomicBoolean(false);
     private volatile BatteryLevels metaLevels;
+    /** 保存每个特征读到的真实值，避免后续被覆盖 */
+    private final java.util.Map<BluetoothGattCharacteristic, Integer> readValues =
+            new java.util.HashMap<>();
 
     public BatteryProbe(Context c) {
         ctx = c.getApplicationContext();
@@ -379,13 +382,13 @@ public final class BatteryProbe {
             @Override
             public void onCharacteristicRead(BluetoothGatt g, BluetoothGattCharacteristic ch,
                                              int status) {
-                // 异步读取由 readNext 串行驱动，这里通过共享列表收值
-                synchronized (levels) {
-                    Integer v = decodeLevel(ch);
-                    ch.setValue(new byte[]{0});
-                    log("读取 " + ch.getUuid() + " = " + (v == null ? "null" : v)
-                            + " status=" + status);
-                }
+                // 注意：这里绝不能调用 ch.setValue()，否则会把刚读到的真实值覆盖掉。
+                // 之前多写了 ch.setValue(new byte[]{0})，导致读到 100 却记成 0。
+                Integer v = decodeLevel(ch);
+                readValues.put(ch, v);
+                log("读取 " + ch.getUuid() + " = " + (v == null ? "null" : v)
+                        + " status=" + status
+                        + (v != null ? "  raw=" + hex(ch.getValue()) : ""));
                 int idx = indexOf(levels, ch);
                 if (idx >= 0) {
                     readNext(g, levels, idx + 1, overall, cb);
@@ -431,13 +434,58 @@ public final class BatteryProbe {
         }, 15000);
     }
 
+    /**
+     * 遍历所有私有（非 SIG 标准）服务里具备 READ 属性的特征，逐个读取并 dump 原始字节。
+     * 目的是找到左/右/盒电量到底藏在哪个特征的第几个字节。
+     */
+    @SuppressLint("MissingPermission")
+    private void dumpPrivateChars(BluetoothGatt g, int overall,
+                                  List<BluetoothGattCharacteristic> levels, Callback cb) {
+        List<BluetoothGattCharacteristic> readable = new ArrayList<>();
+        for (BluetoothGattService svc : g.getServices()) {
+            String u = svc.getUuid().toString().toLowerCase(Locale.ROOT);
+            // 只关心私有服务：标准服务的 UUID 都是 0000xxxx-0000-1000-8000-00805f9b34fb
+            boolean isSig = u.startsWith("0000") && u.endsWith("-0000-1000-8000-00805f9b34fb");
+            if (isSig) continue;
+            for (BluetoothGattCharacteristic ch : svc.getCharacteristics()) {
+                if ((ch.getProperties() & BluetoothGattCharacteristic.PROPERTY_READ) != 0) {
+                    readable.add(ch);
+                }
+            }
+        }
+        log("私有可读特征数 = " + readable.size());
+        dumpNext(g, readable, 0, overall, levels, cb);
+    }
+
+    @SuppressLint("MissingPermission")
+    private void dumpNext(BluetoothGatt g, List<BluetoothGattCharacteristic> list, int i,
+                          int overall, List<BluetoothGattCharacteristic> levels, Callback cb) {
+        if (i >= list.size()) {
+            finalizeLevels(levels, overall, cb);
+            closeAndFinish(g, overall, cb);
+            return;
+        }
+        BluetoothGattCharacteristic ch = list.get(i);
+        final int next = i + 1;
+        try {
+            g.readCharacteristic(ch);
+            // 读到的值在 onCharacteristicRead 里统一 log（含 raw hex）
+            main.postDelayed(() -> dumpNext(g, list, next, overall, levels, cb), 350);
+        } catch (SecurityException e) {
+            log("读私有特征缺权限: " + e.getMessage());
+            finalizeLevels(levels, overall, cb);
+            closeAndFinish(g, overall, cb);
+        }
+    }
+
     @SuppressLint("MissingPermission")
     private void readNext(BluetoothGatt g, List<BluetoothGattCharacteristic> list,
                           int i, int overall, Callback cb) {
         if (i >= list.size()) {
-            // 全部读完，汇总
-            finalizeLevels(list, overall, cb);
-            closeAndFinish(g, overall, cb);
+            // 标准电量读完后，再把私有服务里所有可读特征读一遍并 dump。
+            // Redmi Buds 5 Pro 用的是 Airoha 私有服务（UUID 前 4 字节是 ASCII "PRIM"），
+            // 左右耳电量很可能就在里面；标准 0x180F 只有单实例，拿不到分离值。
+            dumpPrivateChars(g, overall, list, cb);
             return;
         }
         BluetoothGattCharacteristic ch = list.get(i);
@@ -479,7 +527,8 @@ public final class BatteryProbe {
         List<Integer> vals = new ArrayList<>();
         List<String> labels = new ArrayList<>();
         for (BluetoothGattCharacteristic ch : list) {
-            Integer v = decodeLevel(ch);
+            Integer v = readValues.get(ch);
+            if (v == null) v = decodeLevel(ch);
             vals.add(v == null ? -1 : v);
             labels.add(semantic(ch));
         }
@@ -509,7 +558,12 @@ public final class BatteryProbe {
         } else if (b.anyKnown()) {
             b.source = "gatt-labeled";
         } else if (vals.size() == 1 && vals.get(0) >= 0) {
-            b.left = b.right = vals.get(0);
+            // 只有一个标准实例：这是整机值，不是左右耳
+            int v = vals.get(0);
+            b.overall = v;
+            // 0 通常是「未上报」而不是真的没电，按未知处理
+            b.left = v > 0 ? v : -1;
+            b.right = v > 0 ? v : -1;
             b.source = "gatt-single";
         } else {
             b.fillFromOverall();
