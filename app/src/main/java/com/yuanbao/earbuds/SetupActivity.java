@@ -103,8 +103,16 @@ public class SetupActivity extends AppCompatActivity {
                     append("\n=== ② 探测 MIUI 扩展权限编号 ===");
                     List<String[]> ops = ShizukuHelper.probeOps();
                     for (String[] r : ops) {
-                        append("opcode " + r[0] + " : " + r[1]
-                                + (r[1].equals("OK") ? "  ← 有效，已设为 allow" : ""));
+                        append("opcode " + r[0] + " : " + r[1]);
+                    }
+
+                    append("\n=== ③ 验证实际生效状态 ===");
+                    for (String v : ShizukuHelper.verifyKeyPerms()) {
+                        append(v);
+                        if (v.contains("ignore") || v.contains("deny")
+                                || v.contains("default")) {
+                            append("   ⚠ 这项没生效，弹窗可能因此无法显示");
+                        }
                     }
                 }
 
