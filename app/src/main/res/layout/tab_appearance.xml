@@ -331,43 +331,106 @@
         <LinearLayout
             style="@style/AppGroup"
             android:layout_marginTop="8dp"
-            android:elevation="1dp"
-            android:padding="16dp">
+            android:elevation="1dp">
 
-            <TextView
-                style="@style/TextLabel"
-                android:text="卡片背景色（自动配色开启时无效）" />
+            <LinearLayout
+                android:id="@+id/rowBg"
+                style="@style/AppRow">
 
-            <EditText
-                android:id="@+id/etBg"
-                style="@style/AppEditText"
-                android:hint="#F2141620"
-                android:inputType="text"
-                android:singleLine="true" />
+                <View
+                    android:id="@+id/swatchBg"
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:layout_gravity="center_vertical"
+                    android:background="@drawable/bg_thumb" />
 
-            <TextView
-                style="@style/TextLabel"
-                android:layout_marginTop="14dp"
-                android:text="文字颜色" />
+                <LinearLayout style="@style/AppRowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="卡片背景色" />
+                    <TextView
+                        android:id="@+id/tvBg"
+                        style="@style/TextRowSub"
+                        android:text="#1FFFFFFF" />
+                </LinearLayout>
 
-            <EditText
-                android:id="@+id/etTextColor"
-                style="@style/AppEditText"
-                android:hint="#FFFFFFFF"
-                android:inputType="text"
-                android:singleLine="true" />
+                <ImageView
+                    style="@style/AppRowIcon"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription="前往"
+                    android:src="@drawable/ic_chevron" />
+            </LinearLayout>
 
-            <TextView
-                style="@style/TextLabel"
-                android:layout_marginTop="14dp"
-                android:text="强调色（电量圆环）" />
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="@color/ui_divider" />
 
-            <EditText
-                android:id="@+id/etAccent"
-                style="@style/AppEditText"
-                android:hint="#FF00E5A0"
-                android:inputType="text"
-                android:singleLine="true" />
+            <LinearLayout
+                android:id="@+id/rowTextColor"
+                style="@style/AppRow">
+
+                <View
+                    android:id="@+id/swatchText"
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:layout_gravity="center_vertical"
+                    android:background="@drawable/bg_thumb" />
+
+                <LinearLayout style="@style/AppRowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="文字颜色" />
+                    <TextView
+                        android:id="@+id/tvTextColor"
+                        style="@style/TextRowSub"
+                        android:text="#FFFFFFFF" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/AppRowIcon"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription="前往"
+                    android:src="@drawable/ic_chevron" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="@color/ui_divider" />
+
+            <LinearLayout
+                android:id="@+id/rowAccent"
+                style="@style/AppRow">
+
+                <View
+                    android:id="@+id/swatchAccent"
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:layout_gravity="center_vertical"
+                    android:background="@drawable/bg_thumb" />
+
+                <LinearLayout style="@style/AppRowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="强调色" />
+                    <TextView
+                        android:id="@+id/tvAccent"
+                        style="@style/TextRowSub"
+                        android:text="#FF00E5A0" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/AppRowIcon"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription="前往"
+                    android:src="@drawable/ic_chevron" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- ===== 弹窗音效 ===== -->
