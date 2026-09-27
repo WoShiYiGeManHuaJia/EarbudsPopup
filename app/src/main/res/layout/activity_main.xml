@@ -856,6 +856,90 @@
                 android:textSize="11sp" />
         </LinearLayout>
 
+        <!-- ===================== 后台管理 ===================== -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card"
+            android:elevation="2dp"
+            android:orientation="vertical"
+            android:padding="14dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <View
+                    android:layout_width="3dp"
+                    android:layout_height="16dp"
+                    android:background="@drawable/bg_accent_bar" />
+
+                <TextView
+                    style="@style/TextSectionTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="后台与省电" />
+            </LinearLayout>
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/swPowerSave"
+                style="@style/Widget.App.Switch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="省电模式（熄屏时不弹窗、不唤醒屏幕）" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="0.5dp"
+                android:background="#14000000" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/swHideNoti"
+                style="@style/Widget.App.Switch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="隐藏后台通知" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:alpha="0.6"
+                android:lineSpacingExtra="2dp"
+                android:text="Android 8 起系统强制前台服务显示通知。打开后本 App 会把通知降到最低级别，再点下面的按钮去系统设置里关掉它，通知栏就彻底不显示了，服务照常运行。"
+                android:textSize="11sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnNotiSettings"
+                style="@style/Widget.App.Button.Outlined"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="去系统设置关闭通知" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnBattery"
+                style="@style/Widget.App.Button.Outlined"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="加入电池优化白名单（防被杀）" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:alpha="0.6"
+                android:lineSpacingExtra="2dp"
+                android:text="想让服务更稳又不费电：保留省电模式 + 白名单。本 App 只在耳机连接事件发生时唤醒，平时不轮询、不联网、不定位，待机耗电接近于零。"
+                android:textSize="11sp" />
+        </LinearLayout>
+
         <!-- ===================== 底部提示 ===================== -->
         <TextView
             android:layout_width="match_parent"
