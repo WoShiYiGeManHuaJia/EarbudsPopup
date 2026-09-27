@@ -199,9 +199,12 @@ public final class PopupRenderer {
             detailArea.animate().cancel();
             detailArea.setAlpha(0f);
             detailArea.setTranslationY(18 * d);
-            final RoundedCardLayout fCard = card;
             main.postDelayed(() -> {
-                setupLiveBlur(detailBlurBg, img, cardBg);
+                // 模糊失败也必须让文字出现，否则用户看到的是"没有文字"
+                try {
+                    setupLiveBlur(detailBlurBg, img, cardBg);
+                } catch (Throwable ignored) {
+                }
                 detailArea.animate()
                         .alpha(1f)
                         .translationY(0f)
