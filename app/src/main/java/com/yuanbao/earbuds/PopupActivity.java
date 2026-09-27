@@ -46,6 +46,7 @@ public class PopupActivity extends AppCompatActivity {
 
         String name = getIntent().getStringExtra(PopupService.EXTRA_NAME);
         int battery = getIntent().getIntExtra(PopupService.EXTRA_BATTERY, -1);
+        int caseBattery = getIntent().getIntExtra(PopupService.EXTRA_CASE, -1);
 
         View card = findViewById(R.id.card);
         if (card != null) {
@@ -60,7 +61,8 @@ public class PopupActivity extends AppCompatActivity {
             card.setLayoutParams(lp);
         }
 
-        PopupRenderer.bind(this, findViewById(R.id.popupRoot), name, battery, prefs, this::close);
+        PopupRenderer.bind(this, findViewById(R.id.popupRoot), name, battery, caseBattery,
+                prefs, this::close);
 
         main.postDelayed(this::close, prefs.durationMs());
     }
@@ -132,7 +134,7 @@ public class PopupActivity extends AppCompatActivity {
     }
 
     /** 供服务调用：构造启动 Intent */
-    static Intent makeIntent(Context c, String name, int battery) {
+    static Intent makeIntent(Context c, String name, int battery, int caseBattery) {
         Intent i = new Intent(c, PopupActivity.class);
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                 | Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -140,6 +142,7 @@ public class PopupActivity extends AppCompatActivity {
                 | Intent.FLAG_ACTIVITY_NO_USER_ACTION);
         i.putExtra(PopupService.EXTRA_NAME, name);
         i.putExtra(PopupService.EXTRA_BATTERY, battery);
+        i.putExtra(PopupService.EXTRA_CASE, caseBattery);
         return i;
     }
 }
