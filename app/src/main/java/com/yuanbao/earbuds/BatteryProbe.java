@@ -833,10 +833,15 @@ public final class BatteryProbe {
             b.right = vals.get(1);
             b.caseBox = vals.get(2);
             b.source = "gatt-3instances";
-        } else if (b.anyKnown()) {
+        } else if (BatteryLevels.valid(b.left) || BatteryLevels.valid(b.right)
+                || BatteryLevels.valid(b.caseBox)) {
+            // 注意：这里【不能】用 b.anyKnown()。
+            // anyKnown() 把 overall 也算进去，而 overall 在开头就被赋成 100，
+            // 于是这个分支永远为真，下面的 gatt-single 分支永远执行不到，
+            // left / right 一直是 -1 —— 这就是「L:--% R:--% 但整机明明是 100」的原因。
             b.source = "gatt-labeled";
-        } else if (vals.size() == 1 && vals.get(0) >= 0) {
-            // 只有一个标准实例：这是整机值，不是左右耳
+        } else if (vals.size() >= 1 && vals.get(0) >= 0) {
+            // 只有标准电量实例：这是整机值，不是左右耳分别的读数
             int v = vals.get(0);
             b.overall = v;
             // 0 通常是「未上报」而不是真的没电，按未知处理
@@ -847,6 +852,9 @@ public final class BatteryProbe {
             b.fillFromOverall();
             b.source = overall >= 0 ? "system-single" : "none";
         }
+
+        // 统一兜底：无论走哪个分支，左右耳缺失且整机值有效时用整机值补齐
+        b.fillFromOverall();
 
         b.timestamp = System.currentTimeMillis();
         lastResult = b;
