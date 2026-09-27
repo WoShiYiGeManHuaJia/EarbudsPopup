@@ -8,20 +8,20 @@ import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.RectF;
 import android.util.AttributeSet;
-import android.widget.LinearLayout;
+import android.widget.FrameLayout;
 
 /**
  * 圆角卡片容器（离屏合成，抗锯齿）。
  *
- * 为什么需要它：
- *   之前把卡片的 setClipToOutline(true) 去掉了（系统几何裁剪有锯齿），
- *   但 LinearLayout 不会裁剪子 View，结果铺满卡片的图片和渐变层
- *   把卡片自身的四个圆角盖成了直角 —— 用户看到「顶部没有圆角」。
+ * 必须是 FrameLayout，不能用 LinearLayout：
+ *   布局里媒体区是 match_parent 铺满、详情区用 layout_gravity="bottom" 叠加。
+ *   LinearLayout 是顺序排列，第一个子 View 占满后，后面的子 View 会被挤出可视区域
+ *   —— 这正是「文字不见了、弹窗比例变得长不长圆不圆」的原因。
  *
- * 这里改成：整个卡片连同所有子内容一起走一次 DST_IN 圆角合成，
- * 四角（含顶部两角）一律是抗锯齿圆角。
+ * 圆角做法：在 dispatchDraw 里把【所有子内容】画进离屏层，再用 DST_IN
+ * 画一个抗锯齿圆角矩形。子 View 只绘制这一次，不会被画两遍盖掉圆角。
  */
-public class RoundedCardLayout extends LinearLayout {
+public class RoundedCardLayout extends FrameLayout {
 
     private final Path roundPath = new Path();
     private final RectF rect = new RectF();
@@ -51,6 +51,7 @@ public class RoundedCardLayout extends LinearLayout {
     }
 
     private void init() {
+        // 关闭「不绘制」优化，保证 dispatchDraw 一定被调用
         setWillNotDraw(false);
     }
 
@@ -64,36 +65,31 @@ public class RoundedCardLayout extends LinearLayout {
     }
 
     @Override
-    protected void onDraw(Canvas canvas) {
+    protected void dispatchDraw(Canvas canvas) {
         int w = getWidth();
         int h = getHeight();
-        if (w <= 0 || h <= 0) return;
+        if (w <= 0 || h <= 0 || radiusPx <= 0f) {
+            super.dispatchDraw(canvas);
+            return;
+        }
 
         rect.set(0f, 0f, w, h);
         roundPath.rewind();
         roundPath.addRoundRect(rect, radiusPx, radiusPx, Path.Direction.CW);
 
-        if (radiusPx <= 0f) {
-            super.onDraw(canvas);
-            return;
-        }
-
-        // ① 自己画底色和描边（Canvas 绘制，天然抗锯齿，不再依赖 GradientDrawable）
+        // ① 底色（Canvas 绘制，天然抗锯齿）
         bgPaint.setStyle(Paint.Style.FILL);
         bgPaint.setColor(bgColor);
         canvas.drawPath(roundPath, bgPaint);
 
+        // ② 离屏层：子内容画进去
         int saved = canvas.saveLayer(0f, 0f, w, h, null);
+        super.dispatchDraw(canvas);
 
-        // ② 画所有子内容（图片 / 渐变 / 文字）
-        //    直接调用默认的绘制流程，避免 super.onDraw 与子 View 顺序混乱
-        drawChildren(canvas);
-
-        // ③ DST_IN 圆角遮罩：把四角外的内容变成透明，边缘带抗锯齿过渡
+        // ③ DST_IN 圆角遮罩：四角外变透明，边缘抗锯齿
         maskPaint.setXfermode(dstIn);
         canvas.drawPath(roundPath, maskPaint);
         maskPaint.setXfermode(null);
-
         canvas.restoreToCount(saved);
 
         // ④ 描边画在最上层
@@ -102,14 +98,6 @@ public class RoundedCardLayout extends LinearLayout {
             bgPaint.setColor(strokeColor);
             bgPaint.setStrokeWidth(strokeWidth);
             canvas.drawPath(roundPath, bgPaint);
-        }
-    }
-
-    private void drawChildren(Canvas canvas) {
-        for (int i = 0; i < getChildCount(); i++) {
-            android.view.View child = getChildAt(i);
-            if (child.getVisibility() != VISIBLE) continue;
-            drawChild(canvas, child, getDrawingTime());
         }
     }
 }
