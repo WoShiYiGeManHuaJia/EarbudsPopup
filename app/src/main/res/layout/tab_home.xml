@@ -104,7 +104,7 @@
                         android:padding="5dp"
                         android:background="@drawable/bg_glass_stroke">
 
-                        <ImageView
+                        <com.yuanbao.earbuds.RoundedImageView
                             android:id="@+id/pvImage"
                             android:layout_width="match_parent"
                             android:layout_height="match_parent"
