@@ -299,7 +299,9 @@ public final class PopupRenderer {
             sb.append(" · ").append(s.contains("%s") ? String.format(s, name) : s);
         }
         if (b == null) return sb.toString();
-        if (b.left >= 0 || b.right >= 0 || b.caseBox >= 0 || b.overall >= 0) {
+        // 只有存在有效电量（1~100）时才显示这一段；全未知就整段省略，
+        // 避免出现 "L:0% R:0%" 这种明显不对的显示
+        if (b.anyKnown()) {
             sb.append("  |  ");
             sb.append("L:").append(BatteryLevels.fmt(b.left));
             sb.append("  R:").append(BatteryLevels.fmt(b.right));
