@@ -214,10 +214,23 @@ public final class PopupRenderer {
         int vw = img.getWidth();
         int vh = img.getHeight();
         if (dr == null || vw <= 0 || vh <= 0) {
-            // 尺寸还没测出来，下一帧再试
-            img.post(() -> applyImageMatrix(img));
+            // 尺寸还没测出来就等下一帧。
+            // 但不能无限 post 自己：若 View 一直没被 attach（宽高恒为 0），
+            // 会往主线程消息队列里无限塞任务，把 UI 线程堵死。
+            Integer tries = (Integer) img.getTag(R.id.tag_matrix_retry);
+            int t = (tries == null) ? 0 : tries;
+            if (t >= 8) return;                 // 最多重试 8 次
+            img.setTag(R.id.tag_matrix_retry, t + 1);
+            img.post(() -> {
+                if (img.getWidth() > 0 && img.getHeight() > 0) {
+                    img.setTag(R.id.tag_matrix_retry, 0);
+                }
+                applyImageMatrix(img);
+            });
             return;
         }
+        // 成功应用，清空重试计数，下次换图还能正常重试
+        img.setTag(R.id.tag_matrix_retry, 0);
         int dw = dr.getIntrinsicWidth();
         int dh = dr.getIntrinsicHeight();
         if (dw <= 0 || dh <= 0) dw = dh = 1;
