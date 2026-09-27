@@ -116,7 +116,7 @@ public class SetupActivity extends AppCompatActivity {
                     }
                 }
 
-                append("\n=== ③ 屏蔽小米原生弹窗 ===");
+                append("\n=== ④ 屏蔽小米原生弹窗 ===");
                 runCmds(ShizukuHelper.blockMiuiCommands());
 
                 append("\n=== 完成 ===");
