@@ -318,20 +318,33 @@ public class LiveBlurView extends View {
         // 现在反过来：先生成模糊位图 → 构造圆角形状 → 用 BitmapShader
         // 把位图填充进形状。形状自带圆角，drawPath 带抗锯齿，
         // 圆角必然生效、边缘平滑，不依赖任何合成模式。
-        Bitmap blurred = renderBlurredBitmap(dr, sw, sh, vw, vh);
-        if (blurred == null) {
-            canvas.drawColor(dimColor);
-            return;
+        // 关键兜底：先确保圆角路径一定存在。
+        // 之前 blurred==null 时直接 drawColor(整块矩形) 就 return 了 ——
+        // 一旦模糊失败，用户看到的就是「一块没有圆角的纯色」，
+        // 这正是「没有圆角 + 几乎透明」同时出现的现象。
+        // 现在无论模糊成功与否，都走同一个圆角形状。
+        ensureCornerPath(vw, vh);
+        android.graphics.Path shape = cornerPath;
+        if (shape == null) {
+            shape = new android.graphics.Path();
+            shape.addRect(0f, 0f, vw, vh, android.graphics.Path.Direction.CW);
         }
 
-        ensureCornerPath(vw, vh);
-        shaderPaint.setShader(new android.graphics.BitmapShader(
-                blurred, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP));
-        shaderPaint.setAntiAlias(true);
-        canvas.drawPath(cornerPath, shaderPaint);
+        Bitmap blurred = null;
+        try {
+            blurred = renderBlurredBitmap(dr, sw, sh, vw, vh);
+        } catch (Throwable t) {
+            blurred = null;
+        }
 
-        // 半透明压暗，保证文字可读
-        canvas.drawPath(cornerPath, dimPaint);
+        if (blurred != null) {
+            shaderPaint.setShader(new android.graphics.BitmapShader(
+                    blurred, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP));
+            shaderPaint.setAntiAlias(true);
+            canvas.drawPath(shape, shaderPaint);
+        }
+        // 压暗始终画在圆角形状内（模糊失败时这就是可见的底板）
+        canvas.drawPath(shape, dimPaint);
 
         // ---- 顶部渐隐：擦掉上沿，露出下面清晰的动画 ----
         if (fadeRatio > 0f) {
