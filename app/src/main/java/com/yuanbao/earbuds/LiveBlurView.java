@@ -153,27 +153,21 @@ public class LiveBlurView extends View {
         }
         if (cornerPath != null) return;
         float r = Math.min(bottomRadiusPx, Math.min(w, h) / 2f);
+
+        // 底部两角圆角、顶部两角直角的矩形路径。
+        // 配合 DST_IN：圆角外的角落内容被裁掉。
         android.graphics.Path p = new android.graphics.Path();
-
-        // 左下角：方块(0,h-r)-(r,h) 减去 以(r,h-r)为圆心半径r的圆
-        android.graphics.Path sq1 = new android.graphics.Path();
-        sq1.addRect(0f, h - r, r, h, android.graphics.Path.Direction.CW);
-        android.graphics.Path c1 = new android.graphics.Path();
-        c1.addCircle(r, h - r, r, android.graphics.Path.Direction.CW);
-        sq1.op(c1, android.graphics.Path.Op.DIFFERENCE);
-        p.addPath(sq1);
-
-        // 右下角：方块(w-r,h-r)-(w,h) 减去 以(w-r,h-r)为圆心半径r的圆
-        android.graphics.Path sq2 = new android.graphics.Path();
-        sq2.addRect(w - r, h - r, w, h, android.graphics.Path.Direction.CW);
-        android.graphics.Path c2 = new android.graphics.Path();
-        c2.addCircle(w - r, h - r, r, android.graphics.Path.Direction.CW);
-        sq2.op(c2, android.graphics.Path.Op.DIFFERENCE);
-        p.addPath(sq2);
+        p.moveTo(0f, 0f);
+        p.lineTo(w, 0f);
+        p.lineTo(w, h - r);
+        p.arcTo(new android.graphics.RectF(w - 2 * r, h - 2 * r, w, h), 0f, 90f);
+        p.lineTo(r, h);
+        p.arcTo(new android.graphics.RectF(0f, h - 2 * r, 2 * r, h), 90f, 90f);
+        p.close();
 
         cornerPath = p;
         cornerPaint.setXfermode(new android.graphics.PorterDuffXfermode(
-                android.graphics.PorterDuff.Mode.DST_OUT));
+                android.graphics.PorterDuff.Mode.DST_IN));
     }
 
     /** 设置顶部渐隐带高度（0 = 不做渐隐，即硬边） */
@@ -207,19 +201,21 @@ public class LiveBlurView extends View {
     }
 
     private void applyEffect() {
-        // 必须启用 RenderEffect（GPU 高斯模糊）。
-        // 关掉它就会退回手动降采样 —— 那本质是把像素块拉大，就是马赛克。
+        // 彻底禁用 RenderEffect。
+        //
+        // 原因：RenderEffect 与 clipToOutline 在【alpha 动画期间】互相干扰。
+        // 本 View 要做 alpha 0→1 淡入，Android 为带 alpha 的 View 走独立
+        // layer 渲染路径，此时 outline 裁剪时有时无 ——
+        // 表现为「一瞬间有圆角，下一瞬间又没了」。
+        //
+        // 关掉后走手动 StackBlur（真高斯，不是降采样马赛克），
+        // 圆角改在 onDraw 里用 Xfermode 裁，稳定可控。
         hwBlurEnabled = false;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            try {
-                setRenderEffect(android.graphics.RenderEffect.createBlurEffect(
-                        blurRadiusPx, blurRadiusPx, Shader.TileMode.CLAMP));
-                hwBlurEnabled = true;
-            } catch (Throwable ignored) {
-                // 设备不支持才退回逐帧降采样
-            }
+        try {
+            setRenderEffect(null);
+        } catch (Throwable ignored) {
         }
-        applyCornerClip();
+        setClipToOutline(false);
     }
 
     /**
@@ -236,7 +232,9 @@ public class LiveBlurView extends View {
      * 包含 RenderEffect 的产物，所以圆角不会被糊平。
      */
     private void applyCornerClip() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+        // outline 裁剪已弃用（与 alpha 动画/RenderEffect 冲突），
+        // 圆角改由 onDraw 内的 Xfermode 处理，这里不再开启裁剪。
+        if (false && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             setClipToOutline(true);
             setOutlineProvider(new ViewOutlineProvider() {
                 @Override
@@ -307,12 +305,11 @@ public class LiveBlurView extends View {
 
         // 始终自行模糊（原因见 applyEffect 注释）
 
-        if (hwBlurEnabled) {
-            // API 31+：直接画源内容，RenderEffect 在合成阶段逐帧做 GPU 模糊
-            drawSource(canvas, dr, sw, sh, vh);
-        } else {
-            drawManualBlur(canvas, dr, sw, sh, vw, vh);
-        }
+        // 整个绘制包进离屏图层，末尾用 DST_IN 裁出底部两角。
+        // 没有 RenderEffect 干扰时，View.onDraw 里的 saveLayer 是可靠的。
+        int layerSaved = canvas.saveLayer(0f, 0f, vw, vh, null);
+
+        drawManualBlur(canvas, dr, sw, sh, vw, vh);
         // 叠一层半透明色，保证文字可读
         canvas.drawColor(dimColor);
 
@@ -345,10 +342,17 @@ public class LiveBlurView extends View {
             }
         }
 
-        // 圆角【不在本 View 内处理】。
-        // 本 View 是 RoundedCardLayout 的直接子 View，
-        // 父容器的 clipToOutline 会把所有子 View 一起裁成圆角。
-        // 自己再做 DST_OUT / outline 反而会与父裁剪冲突，且都被 RenderEffect 破坏。
+        // ---- 底部两角圆角 ----
+        // DST_IN：只保留「已画内容 ∩ 圆角矩形路径」的部分，
+        // 底部两角外侧被裁掉，与卡片圆角一致。
+        // 用抗锯齿 Path 绘制，边缘平滑无锯齿。
+        if (bottomRadiusPx > 0f) {
+            ensureCornerPath(vw, vh);
+            if (cornerPath != null) {
+                canvas.drawPath(cornerPath, cornerPaint);
+            }
+        }
+        canvas.restoreToCount(layerSaved);
     }
 
     /** 最小重绘间隔（ms）：把模糊重算限制在 ~30fps，降低 CPU 占用 */
@@ -642,7 +646,8 @@ public class LiveBlurView extends View {
         drawSource(smallCanvas, dr, sw, sh, vh);
         smallCanvas.restore();
 
-        int radius = Math.max(4, Math.min(16, Math.round(blurRadiusPx / 5f)));
+        // 半径足够大才是真模糊；太小就成了马赛克。
+        int radius = Math.max(8, Math.min(28, Math.round(blurRadiusPx / 4f)));
         try {
             stackBlur(smallBuf, radius);
         } catch (Throwable t) {
