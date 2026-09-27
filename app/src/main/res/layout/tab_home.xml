@@ -100,8 +100,8 @@
                         android:id="@+id/pvImageArea"
                         android:layout_width="match_parent"
                         android:layout_height="0dp"
-                        android:layout_weight="76"
-                        android:padding="7dp"
+                        android:layout_weight="1"
+                        android:padding="5dp"
                         android:background="@drawable/bg_glass_stroke">
 
                         <ImageView
@@ -117,26 +117,31 @@
                     <TextView
                         android:id="@+id/pvInfo"
                         android:layout_width="match_parent"
-                        android:layout_height="0dp"
-                        android:layout_weight="16"
+                        android:layout_height="wrap_content"
                         android:gravity="center"
+                        android:includeFontPadding="false"
                         android:lines="1"
+                        android:paddingStart="10dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="10dp"
+                        android:paddingBottom="2dp"
                         android:singleLine="true"
                         android:text="已连接"
                         android:textColor="#D1FFFFFF"
-                        android:textSize="11sp" />
+                        android:textSize="9.5sp" />
 
                     <TextView
                         android:id="@+id/pvTip"
                         android:layout_width="match_parent"
-                        android:layout_height="0dp"
-                        android:layout_weight="8"
+                        android:layout_height="wrap_content"
                         android:gravity="center"
+                        android:includeFontPadding="false"
                         android:lines="1"
+                        android:paddingBottom="5dp"
                         android:singleLine="true"
                         android:text="轻触关闭弹窗"
                         android:textColor="#8CFFFFFF"
-                        android:textSize="9.5sp" />
+                        android:textSize="8sp" />
                 </LinearLayout>
             </FrameLayout>
 
@@ -193,7 +198,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
                 android:layout_marginStart="56dp"
-                android:background="?attr/colorSurfaceVariant" />
+                android:background="@color/ui_divider" />
 
             <LinearLayout
                 android:id="@+id/rowAdb"
