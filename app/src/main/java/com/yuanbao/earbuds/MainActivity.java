@@ -702,28 +702,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /** 加入电池优化白名单，防止服务被系统杀掉 */
-    private void requestBatteryWhitelist() {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                android.os.PowerManager pm =
-                        (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
-                if (pm != null && pm.isIgnoringBatteryOptimizations(getPackageName())) {
-                    Toast.makeText(this, "已在白名单中", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                Intent i = new Intent(
-                        android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-                i.setData(Uri.parse("package:" + getPackageName()));
-                startActivity(i);
-            }
-        } catch (Exception e) {
-            try {
-                startActivity(new Intent(
-                        android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
-            } catch (Exception ignored) {
-            }
-        }
-    }
 
     /** 设置变更后重启服务，让新策略生效 */
     private void restartService() {
