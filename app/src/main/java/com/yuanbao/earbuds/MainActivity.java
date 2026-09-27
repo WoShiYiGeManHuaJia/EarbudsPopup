@@ -420,8 +420,8 @@ public class MainActivity extends AppCompatActivity {
                     prefs.setPrivateCaseEnabled(on);
                     if (tvCaseDesc != null) {
                         tvCaseDesc.setText(on
-                                ? "开启：用私有特征读数当充电盒电量（未确认，可能不准）"
-                                : "关闭：充电盒显示 --%");
+                                ? "开启：用私有特征读数（已验证恒为32，非电量，仅调试用）"
+                                : "关闭：充电盒显示 --%（该特征值已被证实不是电量）");
                     }
                 });
                 if (tvCaseDesc != null) {
