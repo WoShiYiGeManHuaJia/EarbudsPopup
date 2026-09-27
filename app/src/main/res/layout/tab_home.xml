@@ -54,7 +54,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnSetup"
-                style="@style/Widget.App.Button"
+                style="@style/AppButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
@@ -176,7 +176,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnTest"
-                style="@style/Widget.App.Button"
+                style="@style/AppButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
@@ -193,20 +193,20 @@
             android:text="快捷操作" />
 
         <LinearLayout
-            style="@style/Widget.App.Group"
+            style="@style/AppGroup"
             android:layout_marginTop="10dp"
             android:elevation="1dp">
 
             <LinearLayout
                 android:id="@+id/rowBlockMi"
-                style="@style/Widget.App.Row">
+                style="@style/AppRow">
 
                 <ImageView
-                    style="@style/Widget.App.RowIcon"
+                    style="@style/AppRowIcon"
                     android:contentDescription="屏蔽"
                     android:src="@drawable/ic_shield" />
 
-                <LinearLayout style="@style/Widget.App.RowText">
+                <LinearLayout style="@style/AppRowText">
                     <TextView
                         style="@style/TextRowTitle"
                         android:text="屏蔽小米原生弹窗" />
@@ -216,7 +216,7 @@
                 </LinearLayout>
 
                 <ImageView
-                    style="@style/Widget.App.RowIcon"
+                    style="@style/AppRowIcon"
                     android:layout_width="20dp"
                     android:layout_height="20dp"
                     android:contentDescription="前往"
@@ -231,14 +231,14 @@
 
             <LinearLayout
                 android:id="@+id/rowAdb"
-                style="@style/Widget.App.Row">
+                style="@style/AppRow">
 
                 <ImageView
-                    style="@style/Widget.App.RowIcon"
+                    style="@style/AppRowIcon"
                     android:contentDescription="命令"
                     android:src="@drawable/ic_bluetooth" />
 
-                <LinearLayout style="@style/Widget.App.RowText">
+                <LinearLayout style="@style/AppRowText">
                     <TextView
                         style="@style/TextRowTitle"
                         android:text="复制授权命令" />
@@ -248,7 +248,7 @@
                 </LinearLayout>
 
                 <ImageView
-                    style="@style/Widget.App.RowIcon"
+                    style="@style/AppRowIcon"
                     android:layout_width="20dp"
                     android:layout_height="20dp"
                     android:contentDescription="前往"
