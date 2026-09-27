@@ -231,8 +231,12 @@ public class PopupService extends Service {
                 ? custom.trim() : safeName(dev);
         BatteryLevels cached = new BatteryStore(this).load(addr);
         int sys = readBattery(dev);
-        if (sys >= 0) cached.overall = sys;
-        cached.fillFromOverall();
+        // 只有有效值才采用；0 是「未上报」，不能当 0% 显示
+        if (BatteryLevels.valid(sys)) {
+            cached.overall = sys;
+            cached.fillFromOverall();
+        }
+        cached.sanitize();
         show(name, addr, cached, dev);
     }
 
@@ -301,6 +305,7 @@ public class PopupService extends Service {
         if (!prefs.showBattery() || address == null) return;
         new BatteryProbe(this).probe(address, dev, (levels, diagnostic) -> {
             lastDiagnostic = diagnostic;
+            if (levels != null) levels.sanitize();
             new BatteryStore(PopupService.this).save(address, levels);
             if (currentRoot != null && current != null) {
                 PopupRenderer.updateInfo(currentRoot, currentName, levels, prefs);
@@ -337,9 +342,12 @@ public class PopupService extends Service {
         int engine = prefs.engine();
         boolean canOverlay = android.provider.Settings.canDrawOverlays(this);
 
+        // 无论走哪个引擎，都必须启动自动电量探测。
+        // 之前只有 engine==1（悬浮窗）分支调用了 startProbe，
+        // 系统级和智能模式下压根不会自动探测，所以用户只能手动点——这是根因。
         if (engine == 1) {
             showOverlay(name, address, levels);
-            startProbe(name, address, dev);
+            autoRefreshBattery(address, dev);
             return;
         }
 
@@ -349,6 +357,7 @@ public class PopupService extends Service {
             } catch (Exception e) {
                 if (canOverlay) showOverlay(name, address, levels);
             }
+            autoRefreshBattery(address, dev);
             return;
         }
 
@@ -358,14 +367,40 @@ public class PopupService extends Service {
             startActivity(PopupActivity.makeIntent(this, name, levels));
         } catch (Exception e) {
             if (canOverlay) showOverlay(name, address, levels);
+            autoRefreshBattery(address, dev);
             return;
         }
         main.postDelayed(() -> {
             if (PopupActivity.lastShownAt <= 0L && canOverlay) {
                 showOverlay(name, address, levels);
             }
-            startProbe(name, address, dev);
+            autoRefreshBattery(address, dev);
         }, 800);
+    }
+
+    /**
+     * 连接时自动刷新电量：先做一次轻量 GATT 读取（快），
+     * 拿到值就写缓存并原地刷新弹窗信息条；下次连接立刻就能显示。
+     */
+    private void autoRefreshBattery(String address, BluetoothDevice dev) {
+        if (!prefs.showBattery() || address == null) return;
+        new BatteryProbe(this).quickRead(address, dev, value -> {
+            BatteryLevels b = new BatteryStore(this).load(address);
+            int v = BatteryLevels.norm(value);
+            if (BatteryLevels.valid(v)) {
+                b.overall = v;
+                b.fillFromOverall();
+                b.timestamp = System.currentTimeMillis();
+                b.source = "gatt-auto";
+                new BatteryStore(this).save(address, b);
+            } else {
+                b.sanitize();
+            }
+            // 原地刷新弹窗上的电量（不重建弹窗，GIF 不会重新播）
+            if (currentRoot != null) {
+                PopupRenderer.updateInfo(currentRoot, currentName, b, prefs);
+            }
+        });
     }
 
     private void showOverlay(String name, String address, BatteryLevels levels) {
