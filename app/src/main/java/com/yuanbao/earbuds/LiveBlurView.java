@@ -3,6 +3,7 @@ package com.yuanbao.earbuds;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Outline;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Shader;
@@ -12,6 +13,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.AttributeSet;
 import android.view.View;
+import android.view.ViewOutlineProvider;
 import android.widget.ImageView;
 
 /**
@@ -118,6 +120,7 @@ public class LiveBlurView extends View {
     public void setBottomCornerRadius(float px) {
         this.bottomRadiusPx = Math.max(0f, px);
         cornerPath = null;
+        applyCornerClip();
         invalidate();
     }
 
@@ -183,15 +186,52 @@ public class LiveBlurView extends View {
     }
 
     private void applyEffect() {
-        // 关键：绝不能启用 RenderEffect。
-        //
-        // 设置了 RenderEffect 的 View 会走独立的渲染节点路径，
-        // 从而【绕过父容器 RoundedCardLayout 的 clipToOutline 裁剪】
-        // —— 这就是圆角连续六次都不生效的真正原因：
-        // 卡片明明裁剪了所有子 View，唯独这个模糊层裁不住。
-        //
-        // 改为手动模糊（普通 View 绘制），父容器裁剪即可正常生效。
+        // 必须启用 RenderEffect（GPU 高斯模糊）。
+        // 关掉它就会退回手动降采样 —— 那本质是把像素块拉大，就是马赛克。
         hwBlurEnabled = false;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                setRenderEffect(android.graphics.RenderEffect.createBlurEffect(
+                        blurRadiusPx, blurRadiusPx, Shader.TileMode.CLAMP));
+                hwBlurEnabled = true;
+            } catch (Throwable ignored) {
+                // 设备不支持才退回逐帧降采样
+            }
+        }
+        applyCornerClip();
+    }
+
+    /**
+     * 模糊层【自身】的底部两角圆角。
+     *
+     * 之前一直想让父容器 RoundedCardLayout 的 clipToOutline 来裁，
+     * 但设了 RenderEffect 的 View 走独立渲染节点，会绕过父容器的裁剪。
+     *
+     * 所以改成 View 自己裁剪自己的输出：
+     *   outline 用一个【向上延伸】的圆角矩形 ——
+     *   顶部两角的圆弧落在 View 边界之外（y<0），因此顶边保持直角；
+     *   底部两角正常圆角。
+     * View 自身的 clipToOutline 作用于它自己的渲染结果，
+     * 包含 RenderEffect 的产物，所以圆角不会被糊平。
+     */
+    private void applyCornerClip() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            setClipToOutline(true);
+            setOutlineProvider(new ViewOutlineProvider() {
+                @Override
+                public void getOutline(View view, Outline outline) {
+                    float r = bottomRadiusPx;
+                    if (r <= 0f) {
+                        outline.setRect(0, 0, view.getWidth(), view.getHeight());
+                        return;
+                    }
+                    // 向上延伸 r：顶边成直角，只保留底部两角
+                    outline.setRoundRect(0, (int) -r, view.getWidth(),
+                            view.getHeight(), r);
+                }
+            });
+            invalidateOutline();
+        }
     }
 
     private void detachCallback() {
