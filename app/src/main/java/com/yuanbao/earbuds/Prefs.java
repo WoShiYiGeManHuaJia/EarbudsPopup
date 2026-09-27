@@ -181,7 +181,11 @@ public class Prefs {
      * 显示一个确定错误的数字比显示 --% 更糟，所以默认关闭。
      */
     public boolean privateCaseEnabled() {
-        return sp.getBoolean("private_case", false);
+        // 已证伪并【永久关闭】：该私有特征恒为 32（0x20），多次探测都是 32，
+        // 而用户实测充电盒实际是 90%。恒定值不可能是电量。
+        // 保留字段只为兼容旧配置，实际永远返回 false。
+        sp.edit().putBoolean("private_case", false).apply();
+        return false;
     }
 
     public void setPrivateCaseEnabled(boolean v) {
