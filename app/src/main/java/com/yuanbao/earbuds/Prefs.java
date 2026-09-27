@@ -128,7 +128,7 @@ public class Prefs {
 
     /** 0=居中缩放淡入 1=底部上滑 2=顶部下滑 */
     public int animStyle() {
-        return sp.getInt("anim", 0);
+        return sp.getInt("anim", 1);   // 默认底部上滑
     }
 
     public void setAnimStyle(int v) {
@@ -300,6 +300,83 @@ public class Prefs {
     public void clearDeviceName(String addr) {
         if (addr == null || addr.isEmpty()) return;
         sp.edit().remove("dname_" + addr).apply();
+    }
+
+
+    // ---------- 图片变换（双指缩放 / 拖动 / 旋转） ----------
+
+    /** 用户缩放倍数，1 = 原始 fitCenter 大小 */
+    public float imageScale() {
+        return sp.getFloat("img_scale", 1.0f);
+    }
+
+    public void setImageScale(float v) {
+        sp.edit().putFloat("img_scale", Math.max(0.2f, Math.min(8f, v))).apply();
+    }
+
+    /** 用户拖动偏移，单位 dp */
+    public float imageOffsetX() {
+        return sp.getFloat("img_dx", 0f);
+    }
+
+    public void setImageOffsetX(float v) {
+        sp.edit().putFloat("img_dx", v).apply();
+    }
+
+    public float imageOffsetY() {
+        return sp.getFloat("img_dy", 0f);
+    }
+
+    public void setImageOffsetY(float v) {
+        sp.edit().putFloat("img_dy", v).apply();
+    }
+
+    /** 旋转角度（度） */
+    public float imageRotation() {
+        return sp.getFloat("img_rot", 0f);
+    }
+
+    public void setImageRotation(float v) {
+        sp.edit().putFloat("img_rot", v).apply();
+    }
+
+    /** 重置图片变换 */
+    public void resetImageTransform() {
+        sp.edit()
+                .putFloat("img_scale", 1.0f)
+                .putFloat("img_dx", 0f)
+                .putFloat("img_dy", 0f)
+                .putFloat("img_rot", 0f)
+                .apply();
+    }
+
+    // ---------- 弹窗音效 ----------
+
+    /** 弹窗时是否播放声音 */
+    public boolean soundEnabled() {
+        return sp.getBoolean("sound_on", false);
+    }
+
+    public void setSoundEnabled(boolean v) {
+        sp.edit().putBoolean("sound_on", v).apply();
+    }
+
+    /** 自定义音效的 Uri 字符串；空表示用系统默认提示音 */
+    public String soundUri() {
+        return sp.getString("sound_uri", "");
+    }
+
+    public void setSoundUri(String s) {
+        sp.edit().putString("sound_uri", s == null ? "" : s).apply();
+    }
+
+    /** 音量 0~1 */
+    public float soundVolume() {
+        return sp.getFloat("sound_vol", 0.8f);
+    }
+
+    public void setSoundVolume(float v) {
+        sp.edit().putFloat("sound_vol", Math.max(0f, Math.min(1f, v))).apply();
     }
 
     // ---------- 设备白名单 ----------
