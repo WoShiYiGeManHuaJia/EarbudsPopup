@@ -275,6 +275,24 @@ public class Prefs {
         sp.edit().putBoolean("noti_dismissed", v).apply();
     }
 
+    // ---------- 设备显示名 ----------
+
+    /** 用户为该设备指定的弹窗显示名；为空表示用系统蓝牙名 */
+    public String deviceName(String addr) {
+        if (addr == null || addr.isEmpty()) return "";
+        return sp.getString("dname_" + addr, "");
+    }
+
+    public void setDeviceName(String addr, String name) {
+        if (addr == null || addr.isEmpty()) return;
+        sp.edit().putString("dname_" + addr, name == null ? "" : name).apply();
+    }
+
+    public void clearDeviceName(String addr) {
+        if (addr == null || addr.isEmpty()) return;
+        sp.edit().remove("dname_" + addr).apply();
+    }
+
     // ---------- 设备白名单 ----------
     /** 返回 null 或空集表示“所有设备都弹” */
     public Set<String> allowedDevices() {
