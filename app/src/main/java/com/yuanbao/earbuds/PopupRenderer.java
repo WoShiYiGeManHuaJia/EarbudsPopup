@@ -26,6 +26,11 @@ import com.bumptech.glide.Glide;
  */
 public final class PopupRenderer {
 
+    /** 动画样式索引，与 Prefs.animStyle() 一致 */
+    public static final int ANIM_SCALE = 0;   // 缩放淡入
+    public static final int ANIM_BOTTOM = 1;  // 底部上滑
+    public static final int ANIM_TOP = 2;     // 顶部下滑
+
     /** 卡片总高 = 宽度 × 该比例；三区再按 76 / 16 / 8 分配 */
     private static final float CARD_H_RATIO = 1.15f;
 
@@ -116,6 +121,87 @@ public final class PopupRenderer {
         root.setOnClickListener(v -> {
             if (onClose != null) onClose.close();
         });
+
+        // 入场动画（显式对卡片执行，不依赖系统窗口动画）
+        if (card != null) applyEnter(card, prefs.animStyle());
+    }
+
+    /**
+     * 入场动画：按用户选择的样式执行。
+     * 之前三种样式被写死成同一种（从上方滑入），且系统级引擎依赖 windowAnimationStyle，
+     * 从后台启动时系统经常直接跳过窗口动画，所以表现为「直接变出来」。
+     * 现在改为对卡片 View 显式执行，两个引擎表现一致。
+     */
+    public static void applyEnter(View card, int style) {
+        if (card == null) return;
+        float d = card.getResources().getDisplayMetrics().density;
+        card.animate().cancel();
+
+        switch (style) {
+            case ANIM_BOTTOM:   // 底部上滑
+                card.setTranslationY(120 * d);
+                card.setScaleX(1f);
+                card.setScaleY(1f);
+                card.setAlpha(0.2f);
+                card.animate()
+                        .translationY(0)
+                        .alpha(1f)
+                        .setDuration(340)
+                        .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                        .start();
+                break;
+
+            case ANIM_TOP:      // 顶部下滑
+                card.setTranslationY(-120 * d);
+                card.setScaleX(1f);
+                card.setScaleY(1f);
+                card.setAlpha(0.2f);
+                card.animate()
+                        .translationY(0)
+                        .alpha(1f)
+                        .setDuration(340)
+                        .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                        .start();
+                break;
+
+            default:            // 缩放淡入
+                card.setTranslationY(-50 * d);
+                card.setScaleX(0.93f);
+                card.setScaleY(0.93f);
+                card.setAlpha(0.3f);
+                card.animate()
+                        .translationY(0)
+                        .scaleX(1f)
+                        .scaleY(1f)
+                        .alpha(1f)
+                        .setDuration(340)
+                        .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                        .start();
+                break;
+        }
+    }
+
+    /** 退场动画：反向收回 */
+    public static void applyExit(View card, int style, Runnable after) {
+        if (card == null) {
+            if (after != null) after.run();
+            return;
+        }
+        float d = card.getResources().getDisplayMetrics().density;
+        card.animate().cancel();
+
+        android.view.ViewPropertyAnimator a = card.animate()
+                .setDuration(260)
+                .setInterpolator(new android.view.animation.AccelerateInterpolator())
+                .alpha(0f);
+
+        if (style == ANIM_BOTTOM) {
+            a.translationY(120 * d);
+        } else {
+            a.translationY(-50 * d).scaleX(0.93f).scaleY(0.93f);
+        }
+        if (after != null) a.withEndAction(after);
+        a.start();
     }
 
     /** 组装信息窄条：菠萝耳机 5pro · 已连接  |  L:68%  R:66%  Case:59% */
