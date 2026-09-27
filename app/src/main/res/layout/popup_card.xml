@@ -1,32 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  弹窗卡片（类 realme 排版）：
-    ① 媒体区（图片 / GIF）—— 占满除详情外的全部空间
-    ② 底部渐变 —— 图片与详情之间的过渡，让两者融合
-    ③ 详情区 —— 设备名 + 电量 + 提示，弹出 0.8 秒后缓慢升起
+  弹窗卡片（类小米：靠底沉底、顶部两角圆角、详情区叠在底部）。
 
-  关键：详情区「始终占位」，只做 alpha + translationY 动画，绝不用 GONE。
-       一旦用 GONE 会在升起时触发重新测量，导致 ImageView 重建、GIF 被打断重置。
-  无关闭按钮，点击卡片任意位置关闭。
+  结构变化（本次关键修正）：
+    - 媒体区铺满【整个卡片】，不再给详情区预留空白条。
+      之前详情区占位留白，用户看到「下面空一段等文字浮上来」，很难看。
+    - 详情区改为 overlay，叠在卡片底部；出现时先把该区域做模糊，再淡入文字。
+    - 卡片本身用 RoundedCardLayout 做圆角合成，保证顶部两角也是圆角。
+
+  信息行带耳机图标与充电仓图标。
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <LinearLayout
+    <com.yuanbao.earbuds.RoundedCardLayout
         android:id="@+id/card"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <!-- ① 媒体区 -->
+        <!-- 媒体区：铺满整张卡片 -->
         <FrameLayout
             android:id="@+id/gifWrap"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1">
+            android:layout_height="match_parent">
 
-            <!-- scaleType=matrix：由代码用 Matrix 应用 fitCenter + 用户双指变换 -->
             <com.yuanbao.earbuds.RoundedImageView
                 android:id="@+id/popupImage"
                 android:layout_width="match_parent"
@@ -34,11 +33,10 @@
                 android:contentDescription="弹窗动画"
                 android:scaleType="matrix" />
 
-            <!-- ② 底部渐变：让图片自然过渡到详情区 -->
             <View
                 android:id="@+id/gradientFade"
                 android:layout_width="match_parent"
-                android:layout_height="76dp"
+                android:layout_height="96dp"
                 android:layout_gravity="bottom"
                 android:importantForAccessibility="no" />
 
@@ -50,16 +48,26 @@
                 android:visibility="gone" />
         </FrameLayout>
 
-        <!-- ③ 详情区（始终占位，靠动画升起） -->
+        <!-- 详情区：叠在底部，不占位 -->
         <LinearLayout
             android:id="@+id/detailArea"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
             android:orientation="vertical"
-            android:paddingStart="18dp"
-            android:paddingEnd="18dp"
-            android:paddingTop="4dp"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:paddingTop="10dp"
             android:paddingBottom="16dp">
+
+            <!-- 模糊背景层：运行时填入底部区域模糊图 -->
+            <ImageView
+                android:id="@+id/detailBlurBg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription=""
+                android:scaleType="centerCrop"
+                android:visibility="gone" />
 
             <TextView
                 android:id="@+id/tvDeviceName"
@@ -71,33 +79,74 @@
                 android:singleLine="true"
                 android:text="耳机"
                 android:textColor="#FFFFFFFF"
-                android:textSize="17sp"
+                android:textSize="18sp"
                 android:textStyle="bold" />
 
-            <TextView
-                android:id="@+id/infoBar"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:includeFontPadding="false"
-                android:lines="1"
-                android:singleLine="true"
-                android:text="已连接"
-                android:textColor="#D9FFFFFF"
-                android:textSize="12.5sp" />
+                android:layout_marginTop="5dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:id="@+id/icEarbuds"
+                    android:layout_width="15dp"
+                    android:layout_height="15dp"
+                    android:contentDescription="耳机电量"
+                    android:src="@drawable/ic_earbuds" />
+
+                <TextView
+                    android:id="@+id/tvBattery"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:includeFontPadding="false"
+                    android:lines="1"
+                    android:singleLine="true"
+                    android:text="--%"
+                    android:textColor="#E6FFFFFF"
+                    android:textSize="12.5sp" />
+
+                <ImageView
+                    android:id="@+id/icCase"
+                    android:layout_width="15dp"
+                    android:layout_height="15dp"
+                    android:layout_marginStart="12dp"
+                    android:contentDescription="充电盒电量"
+                    android:src="@drawable/ic_case" />
+
+                <TextView
+                    android:id="@+id/tvCase"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:includeFontPadding="false"
+                    android:lines="1"
+                    android:singleLine="true"
+                    android:text="--%"
+                    android:textColor="#E6FFFFFF"
+                    android:textSize="12.5sp" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/tipText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
+                android:layout_marginTop="7dp"
                 android:includeFontPadding="false"
                 android:lines="1"
                 android:singleLine="true"
                 android:text="轻触关闭弹窗"
-                android:textColor="#8CFFFFFF"
+                android:textColor="#99FFFFFF"
                 android:textSize="10sp" />
+
+            <TextView
+                android:id="@+id/infoBar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:visibility="gone" />
         </LinearLayout>
 
-    </LinearLayout>
+    </com.yuanbao.earbuds.RoundedCardLayout>
 </FrameLayout>
