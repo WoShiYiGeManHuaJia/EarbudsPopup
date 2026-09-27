@@ -691,9 +691,11 @@ public class MainActivity extends AppCompatActivity {
 
         float d = getResources().getDisplayMetrics().density;
         // 预览按屏幕比例缩小，比例与真实弹窗一致
-        int w = (int) (prefs.widthDp() * d * 0.78f);
+        float pvw = prefs.widthDp() * d;
+        // 预览缩放系数：卡片变宽后要留足边距，取 0.82
+        int w = (int) (pvw * 0.82f);
         float ratio = Math.max(0.40f, Math.min(0.94f, prefs.imageRatio()));
-        float cardRatio = 0.42f + ratio * 1.05f;
+        float cardRatio = 0.45f + ratio * 0.33f;
         int h = (int) (w * cardRatio);
         ViewGroup.LayoutParams lp = pvCard.getLayoutParams();
         lp.width = w;
@@ -702,11 +704,22 @@ public class MainActivity extends AppCompatActivity {
 
         GradientDrawable gd = new GradientDrawable();
         gd.setShape(GradientDrawable.RECTANGLE);
-        gd.setCornerRadius(prefs.radiusDp() * d * 0.78f);
+        gd.setCornerRadius(prefs.radiusDp() * d * 0.82f);
         gd.setColor(cardColor);
         gd.setStroke(Math.max(1, (int) d), 0x33FFFFFF);
         pvCard.setBackground(gd);
         pvCard.setElevation(12 * d);
+        // 与真实弹窗一致：框架级裁剪，保证铺满的图片不盖掉圆角
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            final float pr = prefs.radiusDp() * d * 0.82f;
+            pvCard.setOutlineProvider(new android.view.ViewOutlineProvider() {
+                @Override
+                public void getOutline(android.view.View v, android.graphics.Outline o) {
+                    o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), pr);
+                }
+            });
+            pvCard.setClipToOutline(true);
+        }
         // 与真实弹窗一致：不用系统 clipToOutline（有锯齿），靠背景自身圆角
 
         // GIF 区吃掉全部剩余空间，文字区保持紧凑（与真实弹窗一致）
