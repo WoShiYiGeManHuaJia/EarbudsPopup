@@ -107,7 +107,7 @@
                     android:layout_width="15dp"
                     android:layout_height="15dp"
                     android:contentDescription="左耳电量"
-                    android:src="@drawable/ic_earbud_tws" />
+                    android:src="@drawable/ic_earbud_left" />
 
                 <TextView
                     android:id="@+id/tvBattery"
@@ -131,7 +131,7 @@
                     android:layout_height="15dp"
                     android:layout_marginStart="14dp"
                     android:contentDescription="右耳电量"
-                    android:src="@drawable/ic_earbud_tws" />
+                    android:src="@drawable/ic_earbud_right" />
 
                 <TextView
                     android:id="@+id/tvBatteryRight"
