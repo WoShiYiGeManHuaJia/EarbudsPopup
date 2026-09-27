@@ -494,7 +494,7 @@ public class MainActivity extends AppCompatActivity {
         if (!uri.isEmpty()) {
             pvImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
             try {
-                Glide.with(this).load(Uri.parse(uri)).fitCenter().into(pvImage);
+                Glide.with(this).load(Uri.parse(uri)).dontTransform().into(pvImage);
             } catch (Exception e) {
                 pvImage.setImageResource(R.drawable.ic_headphone);
             }
@@ -588,25 +588,90 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         for (BluetoothDevice d : bonded) {
-            MaterialCheckBox cb = new MaterialCheckBox(this);
-            String name;
+            final String addr = d.getAddress();
+            final String[] sysName = new String[1];
             try {
-                name = d.getName();
+                sysName[0] = d.getName();
             } catch (SecurityException e) {
-                name = null;
+                sysName[0] = null;
             }
-            cb.setText((name == null ? "未知设备" : name) + "\n" + d.getAddress());
-            cb.setChecked(allowSet.isEmpty() || allowSet.contains(d.getAddress()));
+            String custom = prefs.deviceName(addr);
+            String shown = (custom != null && !custom.trim().isEmpty()) ? custom.trim() : sysName[0];
+
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            row.setPadding(0, 6, 0, 6);
+
+            MaterialCheckBox cb = new MaterialCheckBox(this);
+            cb.setText((shown == null ? "未知设备" : shown) + "\n" + addr);
+            cb.setChecked(allowSet.isEmpty() || allowSet.contains(addr));
             cb.setOnCheckedChangeListener((b, checked) -> {
-                String addr = d.getAddress();
                 if (checked) allowSet.add(addr);
                 else allowSet.remove(addr);
                 prefs.setAllowedDevices(allowSet);
             });
-            deviceList.addView(cb, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams cbLp = new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            row.addView(cb, cbLp);
+
+            // 改名：弹窗上显示什么名字，由这里决定，优先级高于系统蓝牙名
+            com.google.android.material.button.MaterialButton rename =
+                    new com.google.android.material.button.MaterialButton(this,
+                            null, com.google.android.material.R.attr.materialButtonOutlinedStyle);
+            rename.setText("改名");
+            rename.setMinWidth(0);
+            rename.setMinimumWidth(0);
+            rename.setPadding(12, 0, 12, 0);
+            rename.setTextSize(11);
+            rename.setOnClickListener(v -> showRenameDialog(addr, sysName[0], (name, addr2) -> {
+                refreshDevices();
+            }));
+            row.addView(rename, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            deviceList.addView(row, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
         deviceList.addView(hintText("全部取消勾选 = 所有设备都弹窗"));
+        deviceList.addView(hintText("点「改名」可自定义弹窗上显示的名字，优先级高于系统蓝牙名"));
+    }
+
+    private void showRenameDialog(String addr, String sysName, RenameDone done) {
+        String cur = prefs.deviceName(addr);
+        android.widget.EditText input = new android.widget.EditText(this);
+        input.setSingleLine(true);
+        input.setHint(sysName == null ? "留空则用系统蓝牙名" : sysName);
+        input.setText(cur == null ? "" : cur);
+        input.setSelection(input.getText().length());
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(48, 24, 48, 0);
+        box.addView(input);
+
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle("弹窗显示名")
+                .setMessage("设备 " + addr + "\n留空则跟随系统蓝牙名（" + sysName + "）")
+                .setView(box)
+                .setNeutralButton("清空", (d, w) -> {
+                    prefs.clearDeviceName(addr);
+                    Toast.makeText(this, "已恢复为系统蓝牙名", Toast.LENGTH_SHORT).show();
+                    if (done != null) done.onDone("", addr);
+                })
+                .setNegativeButton("取消", null)
+                .setPositiveButton("保存", (d, w) -> {
+                    String v = input.getText().toString().trim();
+                    prefs.setDeviceName(addr, v);
+                    Toast.makeText(this, v.isEmpty() ? "已恢复为系统蓝牙名" : "已保存：" + v,
+                            Toast.LENGTH_SHORT).show();
+                    if (done != null) done.onDone(v, addr);
+                })
+                .show();
+    }
+
+    private interface RenameDone {
+        void onDone(String name, String addr);
     }
 
     private TextView hintText(String s) {
