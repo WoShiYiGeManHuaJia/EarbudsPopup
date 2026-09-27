@@ -61,7 +61,7 @@ public class MainActivity extends AppCompatActivity {
     private View pvCard;
     private FrameLayout pvImageArea;
     private RoundedImageView pvImage;
-    private TextView pvInfo, pvTip, pvDeviceName;
+    private TextView pvInfo, pvTip, pvDeviceName, pvBattery, pvCase;
     private View pvGradient;
 
     // 外观
@@ -186,6 +186,8 @@ public class MainActivity extends AppCompatActivity {
         pvImage = findViewById(R.id.pvImage);
         pvInfo = findViewById(R.id.pvInfo);
         pvDeviceName = findViewById(R.id.pvDeviceName);
+        pvBattery = findViewById(R.id.pvBattery);
+        pvCase = findViewById(R.id.pvCase);
         pvGradient = findViewById(R.id.pvGradient);
         pvTip = findViewById(R.id.pvTip);
 
@@ -720,17 +722,12 @@ public class MainActivity extends AppCompatActivity {
         int cas = (swBattery.isChecked() && swCase.isChecked()) ? 65 : -1;
         String devName = etTitle.getText().toString().trim();
         if (devName.isEmpty()) devName = "我的耳机";
-        StringBuilder sb = new StringBuilder(devName);
-        String sub = etSub.getText().toString().trim();
-        if (!sub.isEmpty()) sb.append(" · ").append(sub.contains("%s")
-                ? String.format(sub, devName) : sub);
-        if (bat >= 0 || cas >= 0) {
-            sb.append("  |  L:").append(bat >= 0 ? bat + "%" : "--%")
-              .append("  R:").append(bat >= 0 ? bat + "%" : "--%")
-              .append("  Case:").append(cas >= 0 ? cas + "%" : "--%");
+        if (pvBattery != null) pvBattery.setText(bat >= 0 ? bat + "%" : "--%");
+        if (pvCase != null) {
+            pvCase.setText(cas >= 0 ? cas + "%" : "--%");
+            pvCase.setVisibility(cas >= 0 ? View.VISIBLE : View.GONE);
         }
-        pvInfo.setText(sb.toString());
-        pvInfo.setTextColor(adjustAlpha(textColor, 0.82f));
+        if (pvInfo != null) pvInfo.setText(devName);
         pvTip.setTextColor(adjustAlpha(textColor, 0.55f));
         if (pvDeviceName != null) {
             pvDeviceName.setText(devName);
