@@ -95,10 +95,12 @@ public class PopupActivity extends AppCompatActivity {
             int h = (int) (w * (0.45f + r * 0.33f));
             android.widget.FrameLayout.LayoutParams lp =
                     new android.widget.FrameLayout.LayoutParams(w, h);
-            lp.gravity = gravityByPos(prefs.position());
-            int m = marginForPos(prefs.position());
-            lp.topMargin = (prefs.position() == 0) ? m : 0;
-            lp.bottomMargin = (prefs.position() == 2) ? m : 0;
+            // 与悬浮窗引擎一致：连续垂直位置（0=贴顶 100=贴底）
+            lp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+            int screenH = getResources().getDisplayMetrics().heightPixels;
+            lp.topMargin = PopupService.topOffsetForVPos(
+                    prefs.verticalPos(), h, screenH, dens);
+            lp.bottomMargin = 0;
             card.setLayoutParams(lp);
             // 复用时残留的位移/透明度/缩放要清掉，否则第二次弹窗位置会飘
             card.setTranslationX(0);
