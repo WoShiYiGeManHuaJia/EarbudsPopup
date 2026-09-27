@@ -6,9 +6,11 @@
     ③ 操作提示区    8%
   无关闭按钮、无标题栏，点击卡片任意位置关闭。
 -->
+<!-- 根容器必须 match_parent：卡片的 gravity（上/中/下）是相对它算的，
+     一旦缩成 wrap_content 会被父 FrameLayout 贴到左上角，定位全部失效 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content">
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
 
     <LinearLayout
         android:id="@+id/card"
