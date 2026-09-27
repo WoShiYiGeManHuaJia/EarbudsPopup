@@ -220,6 +220,14 @@ public class LiveBlurView extends View {
         } catch (Throwable ignored) {
         }
         setClipToOutline(false);
+        // 强制软件渲染：本 View 只是一条约 52dp 高的窄条，开销可忽略。
+        // 软件层下 saveLayer / PorterDuff / BitmapShader 行为确定，
+        // 不会受硬件 RenderNode、alpha layer 干扰（之前圆角时有时无、
+        // 合成失效都源于此）。
+        try {
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+        } catch (Throwable ignored) {
+        }
     }
 
     /**
@@ -337,24 +345,34 @@ public class LiveBlurView extends View {
             blurred = null;
         }
 
-        if (blurred != null) {
-            shaderPaint.setShader(new android.graphics.BitmapShader(
-                    blurred, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP));
-            shaderPaint.setAntiAlias(true);
-            canvas.drawPath(shape, shaderPaint);
-        }
-        // 压暗始终画在圆角形状内（模糊失败时这就是可见的底板）
-        canvas.drawPath(shape, dimPaint);
-
-        // ---- 顶部渐隐：擦掉上沿，露出下面清晰的动画 ----
-        if (fadeRatio > 0f) {
-            float fh = vh * fadeRatio;
-            ensureGradient(vw, vh);
-            if (fadeGradient != null && fh > 0f) {
-                int saved = canvas.saveLayer(0f, 0f, vw, fh, null);
-                canvas.drawRect(0f, 0f, vw, fh, fadePaint);
-                canvas.restoreToCount(saved);
+        //
+        // 渐隐之前完全无效：saveLayer(0,0,vw,fh) 建的是【空白】图层，
+        // 在图为空的图层上做 DST_OUT，dst 本来就是 0，怎么擦都是 0。
+        //
+        // 正确顺序：开一个覆盖整个 View 的图层 → 把模糊内容和压暗画进去
+        // → 再在同一个图层里用 DST_OUT 擦顶部。此时图层里已有内容，
+        // 擦除才真正生效：上边缘全擦（露出清晰动画），往下渐弱。
+        //
+        int saved = canvas.saveLayer(0f, 0f, vw, vh, null);
+        try {
+            if (blurred != null) {
+                shaderPaint.setShader(new android.graphics.BitmapShader(
+                        blurred, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP));
+                shaderPaint.setAntiAlias(true);
+                canvas.drawPath(shape, shaderPaint);
             }
+            // 压暗画在圆角形状内（模糊失败时这就是可见的底板）
+            canvas.drawPath(shape, dimPaint);
+
+            if (fadeRatio > 0f) {
+                float fh = vh * fadeRatio;
+                ensureGradient(vw, vh);
+                if (fadeGradient != null && fh > 0f) {
+                    canvas.drawRect(0f, 0f, vw, fh, fadePaint);
+                }
+            }
+        } finally {
+            canvas.restoreToCount(saved);
         }
     }
 
@@ -439,7 +457,10 @@ public class LiveBlurView extends View {
         int divsum = (div + 1) >> 1;
         divsum *= divsum;
         int[] dv = bufDv;
-        if (dv.length < 256 * divsum) {
+        // 致命 bug：bufDv 初始为 null，之前直接 dv.length 会每帧抛 NPE，
+        // 异常被 renderBlurredBitmap 的 catch 吞掉 → 模糊从未生效过，
+        // 只剩「降采样 + 压暗色」= 用户看到的淡黑块。
+        if (dv == null || dv.length < 256 * divsum) {
             dv = new int[256 * divsum];
             bufDv = dv;
         }
@@ -654,8 +675,11 @@ public class LiveBlurView extends View {
 
         // 半径按小图尺寸动态算：固定上限在高分屏上糊得不够，
         // 固定下限又成了马赛克，所以取「不小于 6、不超过短边 1/3」。
-        int radius = Math.round(blurRadiusPx / 2f);
-        radius = Math.max(6, Math.min(Math.min(bw, bh) / 3, radius));
+        // 半径必须相对【小图尺寸】来定。小图高度只有 vh/2（约 70px），
+        // 之前取 min(bw,bh)/3 ≈ 23，在 70px 高的图上等于整体糊成一片纯色。
+        // 现在上限收紧到短边的 1/8，模糊依旧明显但保留结构。
+        int maxR = Math.max(4, Math.min(bw, bh) / 8);
+        int radius = Math.min(maxR, Math.max(5, Math.round(blurRadiusPx / 8f)));
         try {
             stackBlur(smallBuf, radius);
         } catch (Throwable t) {
