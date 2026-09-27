@@ -1034,6 +1034,7 @@ public class MainActivity extends AppCompatActivity {
                     + "（" + levels.source + "）");
         }
         String summary = "设备: " + (name == null ? addr : name) + " (" + addr + ")\n"
+                + "系统栈(dumpsys): " + BatterySysQuery.lastEvidence + "\n"
                 + "结果: L=" + BatteryLevels.fmt(levels.left)
                 + "  R=" + BatteryLevels.fmt(levels.right)
                 + "  Case=" + BatteryLevels.fmt(levels.caseBox)
