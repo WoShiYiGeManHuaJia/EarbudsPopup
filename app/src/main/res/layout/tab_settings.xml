@@ -130,6 +130,38 @@
             android:layout_marginTop="10dp"
             android:elevation="1dp">
 
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="?attr/colorSurfaceVariant" />
+
+            <LinearLayout
+                android:id="@+id/rowClearBattery"
+                style="@style/AppRow">
+
+                <ImageView
+                    style="@style/AppRowIcon"
+                    android:contentDescription="重置"
+                    android:src="@drawable/ic_refresh" />
+
+                <LinearLayout style="@style/AppRowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="重置电量缓存" />
+                    <TextView
+                        style="@style/TextRowSub"
+                        android:text="清掉旧的电量数据，下次连接重新读" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/AppRowIcon"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription="前往"
+                    android:src="@drawable/ic_chevron" />
+            </LinearLayout>
+
             <LinearLayout
                 android:id="@+id/rowProbe"
                 style="@style/AppRow">
