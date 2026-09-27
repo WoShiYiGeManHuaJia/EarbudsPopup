@@ -61,7 +61,8 @@ public class MainActivity extends AppCompatActivity {
     private View pvCard;
     private FrameLayout pvImageArea;
     private RoundedImageView pvImage;
-    private TextView pvInfo, pvTip;
+    private TextView pvInfo, pvTip, pvDeviceName;
+    private View pvGradient;
 
     // 外观
     private RoundedImageView pvFrameImage;
@@ -69,7 +70,9 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvSoundName;
     private TextView tvSoundVol;
     private SwitchMaterial swSound;
-    private EditText etTitle, etSub, etBg, etTextColor, etAccent;
+    private EditText etTitle, etSub;
+    private View swatchBg, swatchText, swatchAccent;
+    private TextView tvBg, tvTextColor, tvAccent;
     private TextView tvWidth, tvRadius, tvImgH, tvDuration, tvPos, tvAnim;
     private SwitchMaterial swAutoColor;
 
@@ -182,6 +185,8 @@ public class MainActivity extends AppCompatActivity {
         pvImageArea = findViewById(R.id.pvImageArea);
         pvImage = findViewById(R.id.pvImage);
         pvInfo = findViewById(R.id.pvInfo);
+        pvDeviceName = findViewById(R.id.pvDeviceName);
+        pvGradient = findViewById(R.id.pvGradient);
         pvTip = findViewById(R.id.pvTip);
 
         pvFrameImage = findViewById(R.id.pvFrameImage);
@@ -202,9 +207,13 @@ public class MainActivity extends AppCompatActivity {
         }
         etTitle = findViewById(R.id.etTitle);
         etSub = findViewById(R.id.etSub);
-        etBg = findViewById(R.id.etBg);
-        etTextColor = findViewById(R.id.etTextColor);
-        etAccent = findViewById(R.id.etAccent);
+        swatchBg = findViewById(R.id.swatchBg);
+        swatchText = findViewById(R.id.swatchText);
+        swatchAccent = findViewById(R.id.swatchAccent);
+        tvBg = findViewById(R.id.tvBg);
+        tvTextColor = findViewById(R.id.tvTextColor);
+        tvAccent = findViewById(R.id.tvAccent);
+        setupColorPickers();
         tvWidth = findViewById(R.id.tvWidth);
         tvRadius = findViewById(R.id.tvRadius);
         tvImgH = findViewById(R.id.tvImgH);
@@ -239,9 +248,7 @@ public class MainActivity extends AppCompatActivity {
 
         etTitle.setText(prefs.titleText());
         etSub.setText(prefs.subText());
-        etBg.setText(prefs.bgColor());
-        etTextColor.setText(prefs.textColor());
-        etAccent.setText(prefs.accentColor());
+        syncColorSwatches();
 
         swMaster.setChecked(prefs.masterEnabled());
         swWired.setChecked(prefs.wiredEnabled());
@@ -266,12 +273,7 @@ public class MainActivity extends AppCompatActivity {
         String t = etTitle.getText().toString().trim();
         prefs.setTitleText(t.isEmpty() ? "耳机已连接" : t);
         prefs.setSubText(etSub.getText().toString());
-        String bg = etBg.getText().toString().trim();
-        prefs.setBgColor(bg.isEmpty() ? "#1FFFFFFF" : bg);
-        String tc = etTextColor.getText().toString().trim();
-        prefs.setTextColor(tc.isEmpty() ? "#FFFFFFFF" : tc);
-        String ac = etAccent.getText().toString().trim();
-        prefs.setAccentColor(ac.isEmpty() ? "#FF00E5A0" : ac);
+        // 颜色现在由色彩盘写入 Prefs，这里不再从输入框读取
         prefs.setAllowedDevices(allowSet);
         syncValueLabels();
     }
@@ -405,7 +407,7 @@ public class MainActivity extends AppCompatActivity {
         });
         findViewById(R.id.rowInfo).setOnClickListener(v -> showAbout());
 
-        watch(etTitle, etSub, etBg, etTextColor, etAccent);
+        watch(etTitle, etSub);
     }
 
     private void bindSwitch(SwitchMaterial sw, java.util.function.Consumer<Boolean> save,
@@ -527,6 +529,134 @@ public class MainActivity extends AppCompatActivity {
         return Math.max(min, Math.min(max, v));
     }
 
+    // ---------------- 色彩盘 ----------------
+
+    /**
+     * 三个颜色项改为「点开色彩盘」。
+     * 用户明确要求：不要填颜色代码，要能直观看到颜色。
+     * 这里弹一个含 HSV 色彩盘的对话框，拖动即时预览并存进 Prefs。
+     */
+    private void setupColorPickers() {
+        bindColorRow(R.id.rowBg, swatchBg, prefs::bgColor, prefs::setBgColor);
+        bindColorRow(R.id.rowTextColor, swatchText, prefs::textColor, prefs::setTextColor);
+        bindColorRow(R.id.rowAccent, swatchAccent, prefs::accentColor, prefs::setAccentColor);
+    }
+
+    private void bindColorRow(int rowId, View swatch,
+                              java.util.function.Supplier<String> getter,
+                              java.util.function.Consumer<String> setter) {
+        View row = findViewById(rowId);
+        if (row == null) return;
+        row.setOnClickListener(v -> showColorPicker(getter.get(), setter));
+    }
+
+    private void showColorPicker(String currentHex,
+                                 java.util.function.Consumer<String> setter) {
+        int initial;
+        try {
+            initial = Color.parseColor(currentHex);
+        } catch (Exception e) {
+            initial = 0xFFFFFFFF;
+        }
+
+        final int[] picked = {initial};
+
+        ColorPickerView picker = new ColorPickerView(this);
+        picker.setColor(initial);
+
+        int pad = (int) (18 * getResources().getDisplayMetrics().density);
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(pad, pad, pad, pad / 2);
+
+        // 色彩盘本身（高度固定，宽度铺满）
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, (int) (230 * dp(1)));
+        box.addView(picker, lp);
+
+        // 实时数值 + 大色块预览
+        LinearLayout previewRow = new LinearLayout(this);
+        previewRow.setOrientation(LinearLayout.HORIZONTAL);
+        previewRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        previewRow.setPadding(0, pad / 2, 0, pad / 2);
+
+        final View bigSwatch = new View(this);
+        int sz = (int) (44 * dp(1));
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(sz, sz);
+        slp.setMarginEnd(pad / 2);
+        previewRow.addView(bigSwatch, slp);
+
+        final TextView tvHex = new TextView(this);
+        tvHex.setTextSize(13f);
+        tvHex.setTextColor(0xFF666666);
+        previewRow.addView(tvHex, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        box.addView(previewRow, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        Runnable[] refresh = new Runnable[1];
+        refresh[0] = () -> {
+            int c = picked[0];
+            GradientDrawable g = new GradientDrawable();
+            g.setShape(GradientDrawable.OVAL);
+            g.setColor(c);
+            g.setStroke(Math.max(1, (int) dp(1)), 0x33000000);
+            bigSwatch.setBackground(g);
+            tvHex.setText(String.format("#%08X", c));
+        };
+        refresh[0].run();
+
+        picker.setOnColorChangedListener(c -> {
+            picked[0] = c;
+            refresh[0].run();
+            // 实时应用，预览卡片立刻变色
+            setter.accept(String.format("#%08X", c));
+            syncColorSwatches();
+            updatePreview();
+        });
+
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle("选择颜色")
+                .setView(box)
+                .setNegativeButton("取消", (d, w) -> {
+                    // 拖动时已实时改过，取消要还原
+                    setter.accept(currentHex);
+                    syncColorSwatches();
+                    updatePreview();
+                })
+                .setPositiveButton("确定", (d, w) -> {
+                    setter.accept(String.format("#%08X", picked[0]));
+                    syncColorSwatches();
+                    updatePreview();
+                })
+                .show();
+    }
+
+    /** 把三个色块和文字同步成当前配置值 */
+    private void syncColorSwatches() {
+        applySwatch(swatchBg, prefs.bgColor(), tvBg);
+        applySwatch(swatchText, prefs.textColor(), tvTextColor);
+        applySwatch(swatchAccent, prefs.accentColor(), tvAccent);
+    }
+
+    private void applySwatch(View v, String hex, TextView label) {
+        if (v == null) return;
+        int c;
+        try {
+            c = Color.parseColor(hex);
+        } catch (Exception e) {
+            c = 0xFF888888;
+        }
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.OVAL);
+        g.setColor(c);
+        g.setStroke(Math.max(1, (int) dp(1)), 0x33000000);
+        v.setBackground(g);
+        if (label != null) label.setText(hex.toUpperCase());
+    }
+
     // ---------------- 预览 ----------------
 
     private int parseColor(String v, int fallback) {
@@ -602,6 +732,17 @@ public class MainActivity extends AppCompatActivity {
         pvInfo.setText(sb.toString());
         pvInfo.setTextColor(adjustAlpha(textColor, 0.82f));
         pvTip.setTextColor(adjustAlpha(textColor, 0.55f));
+        if (pvDeviceName != null) {
+            pvDeviceName.setText(devName);
+            pvDeviceName.setTextColor(textColor);
+        }
+        // 渐变层：透明 → 卡片底色，与真实弹窗一致
+        if (pvGradient != null) {
+            GradientDrawable fade = new GradientDrawable(
+                    GradientDrawable.Orientation.BOTTOM_TOP,
+                    new int[]{cardColor, Color.TRANSPARENT});
+            pvGradient.setBackground(fade);
+        }
 
         String uri = prefs.imageUri();
         pvImage.setScaleType(ImageView.ScaleType.MATRIX);
