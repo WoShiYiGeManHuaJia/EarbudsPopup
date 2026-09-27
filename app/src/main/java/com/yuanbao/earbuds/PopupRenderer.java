@@ -37,7 +37,7 @@ public final class PopupRenderer {
     }
 
     public static void bind(Context c, View root, String rawName,
-                            int battery, int caseBattery,
+                            BatteryLevels levels,
                             Prefs prefs, OnClose onClose) {
         View card = root.findViewById(R.id.card);
         FrameLayout gifWrap = root.findViewById(R.id.gifWrap);
@@ -83,8 +83,7 @@ public final class PopupRenderer {
         tipText.setTextColor(applyAlpha(textColor, 0.55f));
 
         // ---------- ② 信息窄条：名称 · 状态 | L / R / Case ----------
-        infoBar.setText(buildInfo(prettyName(rawName), prefs.subText(),
-                battery, caseBattery));
+        infoBar.setText(buildInfo(prettyName(rawName), prefs.subText(), levels));
 
         // ---------- ① GIF / 图片 ----------
         String uri = prefs.imageUri();
@@ -118,22 +117,33 @@ public final class PopupRenderer {
     }
 
     /** 组装信息窄条：菠萝耳机 5pro · 已连接  |  L:68%  R:66%  Case:59% */
-    private static String buildInfo(String name, String sub,
-                                    int battery, int caseBattery) {
+    private static String buildInfo(String name, String sub, BatteryLevels b) {
         StringBuilder sb = new StringBuilder();
         sb.append(name);
         String s = sub == null ? "" : sub.trim();
         if (!s.isEmpty()) {
             sb.append(" · ").append(s.contains("%s") ? String.format(s, name) : s);
         }
-        boolean hasBat = battery >= 0 || caseBattery >= 0;
-        if (hasBat) {
+        if (b == null) return sb.toString();
+        if (b.left >= 0 || b.right >= 0 || b.caseBox >= 0 || b.overall >= 0) {
             sb.append("  |  ");
-            sb.append("L:").append(battery >= 0 ? battery + "%" : "--%");
-            sb.append("  R:").append(battery >= 0 ? battery + "%" : "--%");
-            sb.append("  Case:").append(caseBattery >= 0 ? caseBattery + "%" : "--%");
+            sb.append("L:").append(BatteryLevels.fmt(b.left));
+            sb.append("  R:").append(BatteryLevels.fmt(b.right));
+            sb.append("  Case:").append(BatteryLevels.fmt(b.caseBox));
         }
         return sb.toString();
+    }
+
+    /**
+     * 只刷新信息窄条，用于电量探测异步返回后原地更新弹窗，
+     * 避免重建整个弹窗导致 GIF 重新播放。
+     */
+    public static void updateInfo(View root, String rawName, BatteryLevels levels, Prefs prefs) {
+        if (root == null || levels == null) return;
+        TextView infoBar = root.findViewById(R.id.infoBar);
+        if (infoBar == null) return;
+        infoBar.setText(buildInfo(prettyName(rawName),
+                prefs == null ? "" : prefs.subText(), levels));
     }
 
     /** 流光：一条斜向高光带从左扫到右 */
