@@ -669,7 +669,7 @@ public class LiveBlurView extends View {
         return outBuf;
     }
 
-
+    /**
      * 手动模糊（RenderEffect 不可用时的兜底）：
      * 降采样 → StackBlur → 放大。小图像素少，逐帧开销可控。
      */
