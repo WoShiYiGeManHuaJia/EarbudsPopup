@@ -1,12 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 退场：Y 0 → -50dp，scale 1 → 0.93，opacity → 0，260ms -->
 <set xmlns:android="http://schemas.android.com/apk/res/android"
-    android:interpolator="@android:interpolator/accelerate_quad">
+    android:interpolator="@android:interpolator/accelerate_cubic">
     <translate
-        android:duration="200"
+        android:duration="260"
         android:fromYDelta="0"
-        android:toYDelta="-10%" />
+        android:toYDelta="-50dp" />
+    <scale
+        android:duration="260"
+        android:fromXScale="1.0"
+        android:fromYScale="1.0"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:toXScale="0.93"
+        android:toYScale="0.93" />
     <alpha
-        android:duration="180"
+        android:duration="260"
         android:fromAlpha="1.0"
         android:toAlpha="0.0" />
 </set>
