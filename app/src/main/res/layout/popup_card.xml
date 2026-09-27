@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="14dp">
+
+    <ImageView
+        android:id="@+id/popupImage"
+        android:layout_width="match_parent"
+        android:layout_height="150dp"
+        android:adjustViewBounds="true"
+        android:contentDescription="弹窗动画"
+        android:scaleType="centerCrop" />
+
+    <TextView
+        android:id="@+id/popupTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center"
+        android:text="耳机已连接"
+        android:textColor="#FFFFFFFF"
+        android:textSize="17sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/popupSub"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:alpha="0.85"
+        android:gravity="center"
+        android:text="设备名"
+        android:textColor="#FFFFFFFF"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/popupBattery"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:alpha="0.75"
+        android:gravity="center"
+        android:text="电量 80%"
+        android:textColor="#FFFFFFFF"
+        android:textSize="12sp" />
+
+</LinearLayout>
