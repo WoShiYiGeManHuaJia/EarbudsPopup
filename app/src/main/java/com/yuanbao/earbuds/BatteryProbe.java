@@ -863,7 +863,10 @@ public final class BatteryProbe {
         // 私有服务 CHAR-0A 读到 32（0x20）。
         // 私有特征里出现一个 1..100 且【不等于整机值】的数，
         // 它几乎不可能是耳机（耳机就是整机 100），最合理的解释就是充电盒。
-        if (!BatteryLevels.valid(b.caseBox)) {
+        // 只有用户在设置里明确开启才启用。
+        // 默认关闭：该字节未确认是电量，贸然显示会出现乱跳的数字。
+        if (!BatteryLevels.valid(b.caseBox) && ctx != null
+                && new Prefs(ctx).privateCaseEnabled()) {
             for (java.util.Map.Entry<BluetoothGattCharacteristic, Integer> e
                     : readValues.entrySet()) {
                 BluetoothGattCharacteristic ch = e.getKey();
