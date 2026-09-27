@@ -75,6 +75,11 @@ public final class BatteryProbe {
         log.append(s).append('\n');
     }
 
+    /** 取当前累积日志（即使探测还没结束也能取，用于超时兜底） */
+    public String currentLog() {
+        return log.toString();
+    }
+
     @SuppressLint("MissingPermission")
     public void probe(String address, BluetoothDevice device, Callback cb) {
         log("========== 电量探测 ==========");
