@@ -13,10 +13,33 @@ public class Prefs {
 
     private static final String NAME = "earbuds_popup";
 
-    private final SharedPreferences sp;
+    private SharedPreferences sp;
+
+    /** 尺寸默认值的版本标记；数值变更时递增，用于一次性迁移旧配置 */
+    private static final int SIZE_SCHEMA = 3;
 
     public Prefs(Context c) {
         sp = c.getSharedPreferences(NAME, Context.MODE_PRIVATE);
+        migrateSizeDefaults();
+    }
+
+    /**
+     * 迁移：把旧的尺寸默认值强制更新。
+     *
+     * 为什么必须有：SharedPreferences 的 getInt(key, 默认值) 只在 key
+     * 【不存在】时才返回默认值。用户设备上早就存过 width=356，
+     * 所以单纯改代码里的默认值对已安装用户完全无效 —— 这就是
+     * 「我明明把宽度调大了，用户看到的却没变」的原因。
+     * 这里按版本标记做一次性强制写入。
+     */
+    private void migrateSizeDefaults() {
+        if (sp.getInt("size_schema", 0) >= SIZE_SCHEMA) return;
+        sp.edit()
+                .putInt("width", 390)          // 整体放大：占屏宽约 95%
+                .putInt("radius", 28)
+                .putFloat("img_ratio", 0.70f)  // 配合放大后的高度
+                .putInt("size_schema", SIZE_SCHEMA)
+                .apply();
     }
 
     // ---------- 开关 ----------
