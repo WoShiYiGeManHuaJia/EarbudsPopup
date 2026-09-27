@@ -54,6 +54,13 @@ public class PopupService extends Service {
     /** 系统隐藏广播：耳机电量变化 */
     public static final String ACTION_BATTERY_CHANGED =
             "android.bluetooth.device.action.BATTERY_LEVEL_CHANGED";
+    /**
+     * 电量值的 extra 名。
+     * BluetoothDevice.EXTRA_BATTERY_LEVEL 是隐藏 API，编译期不可见，
+     * 所以这里直接写字面量（值与系统一致）。
+     */
+    public static final String EXTRA_BATTERY_LEVEL =
+            "android.bluetooth.device.extra.BATTERY_LEVEL";
 
     private static final String CHANNEL_ID = "popup_service";
     private static final String CHANNEL_SILENT = "popup_service_silent";
@@ -242,7 +249,7 @@ public class PopupService extends Service {
         // 电量变化广播：立刻写入缓存，下次弹窗就是最新值
         if (ACTION_BATTERY_CHANGED.equals(action)) {
             BluetoothDevice bd = i.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-            int lvl = i.getIntExtra(BluetoothDevice.EXTRA_BATTERY_LEVEL, -1);
+            int lvl = i.getIntExtra(EXTRA_BATTERY_LEVEL, -1);
             if (bd != null && BatteryLevels.valid(lvl)) {
                 String a2 = bd.getAddress();
                 BatteryLevels bl = new BatteryStore(this).load(a2);
