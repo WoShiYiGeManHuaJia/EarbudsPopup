@@ -42,6 +42,7 @@ import com.bumptech.glide.Glide;
 public class PopupService extends Service {
 
     public static final String ACTION_SHOW = "com.yuanbao.earbuds.ACTION_SHOW";
+    public static final String ACTION_RESTART = "com.yuanbao.earbuds.ACTION_RESTART";
     public static final String EXTRA_NAME = "name";
     public static final String EXTRA_BATTERY = "battery";
     public static final String EXTRA_CASE = "case_battery";
@@ -49,12 +50,14 @@ public class PopupService extends Service {
     public static final String EXTRA_WIRED = "wired";
 
     private static final String CHANNEL_ID = "popup_service";
+    private static final String CHANNEL_SILENT = "popup_service_silent";
     private static final int NOTI_ID = 1001;
 
     private WindowManager wm;
     private View current;
     private final Handler main = new Handler(Looper.getMainLooper());
     private Prefs prefs;
+    private volatile boolean screenOn = true;
 
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override
@@ -69,6 +72,7 @@ public class PopupService extends Service {
         prefs = new Prefs(this);
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         startForeground(NOTI_ID, buildNotification());
+        refreshNotificationVisibility();
 
         IntentFilter f = new IntentFilter();
         f.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
@@ -77,6 +81,12 @@ public class PopupService extends Service {
         f.addAction(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED);
         f.addAction(Intent.ACTION_HEADSET_PLUG);
         f.addAction(ACTION_SHOW);
+        f.addAction(ACTION_RESTART);
+        // 省电：监听屏幕开关，熄屏时按设置决定是否弹窗，避免无谓唤醒
+        if (prefs.powerSave()) {
+            f.addAction(Intent.ACTION_SCREEN_ON);
+            f.addAction(Intent.ACTION_SCREEN_OFF);
+        }
         registerReceiver(receiver, f);
     }
 
@@ -93,12 +103,31 @@ public class PopupService extends Service {
     }
 
     private Notification buildNotification() {
+        boolean hide = prefs.hideNotification();
+        String useChannel = hide && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? CHANNEL_SILENT : CHANNEL_ID;
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel ch = new NotificationChannel(
-                    CHANNEL_ID, "耳机弹窗服务", NotificationManager.IMPORTANCE_LOW);
-            ch.setDescription("保持弹窗服务在后台运行");
             NotificationManager nm = getSystemService(NotificationManager.class);
-            if (nm != null) nm.createNotificationChannel(ch);
+            if (nm != null) {
+                if (hide) {
+                    NotificationChannel ch = new NotificationChannel(
+                            CHANNEL_SILENT, "后台服务（静默）",
+                            NotificationManager.IMPORTANCE_MIN);
+                    ch.setDescription("不显示通知，仅保持服务运行");
+                    ch.setShowBadge(false);
+                    ch.enableLights(false);
+                    ch.enableVibration(false);
+                    ch.setSound(null, null);
+                    nm.createNotificationChannel(ch);
+                } else {
+                    NotificationChannel ch = new NotificationChannel(
+                            CHANNEL_ID, "耳机弹窗服务", NotificationManager.IMPORTANCE_LOW);
+                    ch.setDescription("保持弹窗服务在后台运行");
+                    ch.setShowBadge(false);
+                    nm.createNotificationChannel(ch);
+                }
+            }
         }
         Intent open = new Intent(this, MainActivity.class);
         open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -107,18 +136,44 @@ public class PopupService extends Service {
                 (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
                         ? android.app.PendingIntent.FLAG_IMMUTABLE
                         : 0);
-        return new NotificationCompat.Builder(this, CHANNEL_ID)
+        return new NotificationCompat.Builder(this, useChannel)
                 .setContentTitle("耳机弹窗已就绪")
                 .setContentText("连接耳机时会显示自定义弹窗")
                 .setSmallIcon(R.drawable.ic_stat_notify)
                 .setContentIntent(pi)
-                .setOngoing(true)
+                .setOngoing(!hide)
+                .setSilent(true)
+                .setPriority(hide ? NotificationCompat.PRIORITY_MIN
+                        : NotificationCompat.PRIORITY_LOW)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .build();
     }
 
     private void handle(Intent i) {
         if (i == null || i.getAction() == null) return;
+
+        // 省电：熄屏时跳过弹窗，避免唤醒屏幕白白耗电
+        if (prefs.powerSave() && Intent.ACTION_SCREEN_OFF.equals(i.getAction())) {
+            screenOn = false;
+            return;
+        }
+        if (Intent.ACTION_SCREEN_ON.equals(i.getAction())) {
+            screenOn = true;
+            return;
+        }
+        if (prefs.powerSave() && !screenOn
+                && !ACTION_SHOW.equals(i.getAction())
+                && !ACTION_RESTART.equals(i.getAction())) {
+            return;
+        }
+
+        // 重新加载设置并应用（通知可见性 / 省电策略变了）
+        if (ACTION_RESTART.equals(i.getAction())) {
+            prefs = new Prefs(this);
+            refreshNotificationVisibility();
+            startForeground(NOTI_ID, buildNotification());
+            return;
+        }
         if (!prefs.masterEnabled()) return;
 
         String action = i.getAction();
@@ -180,6 +235,38 @@ public class PopupService extends Service {
         if (low.contains("buds 4 pro")) return "Xiaomi Buds 4 Pro";
         if (low.contains("airpods")) return "AirPods";
         return n;
+    }
+
+    /**
+     * 后台通知可见性。
+     * Android 8+ 系统强制前台服务必须带通知，App 无法凭空取消；
+     * 但可以把渠道重要性降到最低、并引导用户在系统设置里彻底关闭，
+     * 关掉后通知栏不再显示，服务照常运行。
+     */
+    private void refreshNotificationVisibility() {
+        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        if (nm == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+        boolean hide = prefs.hideNotification();
+        if (hide) {
+            NotificationChannel c = new NotificationChannel(
+                    CHANNEL_SILENT, "后台服务（已隐藏）",
+                    NotificationManager.IMPORTANCE_MIN);
+            c.setShowBadge(false);
+            c.setSound(null, null);
+            c.enableVibration(false);
+            c.enableLights(false);
+            nm.createNotificationChannel(c);
+        }
+    }
+
+    /** 省电：把服务降级为普通后台服务并撤销前台通知（会略微降低优先级） */
+    private void applyPowerSave() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && prefs.hideNotification()) {
+            try {
+                stopForeground(STOP_FOREGROUND_DETACH);
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     /** 安卓没有公开的耳机电量 API，用反射读隐藏方法；失败返回 -1（不显示电量） */
