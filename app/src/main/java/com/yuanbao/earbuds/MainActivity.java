@@ -53,7 +53,10 @@ public class MainActivity extends AppCompatActivity {
     private EditText etTitle, etSub, etBg, etTextColor, etAccent;
     private SeekBar sbWidth, sbRadius, sbImgH, sbDuration;
     private TextView tvWidth, tvRadius, tvImgH, tvDuration;
-    private Spinner spPos, spAnim;
+    private Spinner spPos, spAnim, spEngine;
+    private SeekBar sbDim, sbBlur;
+    private TextView tvDim, tvBlur;
+    private SwitchMaterial swLock, swNoFocus;
     private SwitchMaterial swMaster, swWired, swAutoStart, swBattery;
 
     private final Set<String> allowSet = new LinkedHashSet<>();
@@ -103,6 +106,13 @@ public class MainActivity extends AppCompatActivity {
         tvDuration = findViewById(R.id.tvDuration);
         spPos = findViewById(R.id.spPos);
         spAnim = findViewById(R.id.spAnim);
+        spEngine = findViewById(R.id.spEngine);
+        sbDim = findViewById(R.id.sbDim);
+        sbBlur = findViewById(R.id.sbBlur);
+        tvDim = findViewById(R.id.tvDim);
+        tvBlur = findViewById(R.id.tvBlur);
+        swLock = findViewById(R.id.swLock);
+        swNoFocus = findViewById(R.id.swNoFocus);
         swMaster = findViewById(R.id.swMaster);
         swWired = findViewById(R.id.swWired);
         swAutoStart = findViewById(R.id.swAutoStart);
@@ -122,6 +132,11 @@ public class MainActivity extends AppCompatActivity {
         sbDuration.setProgress(prefs.durationMs() / 500 - 1);
         spPos.setSelection(prefs.position());
         spAnim.setSelection(prefs.animStyle());
+        spEngine.setSelection(prefs.engine());
+        sbDim.setProgress((int) (prefs.dimAmount() * 100));
+        sbBlur.setProgress(prefs.blurRadius());
+        swLock.setChecked(prefs.showOnLock());
+        swNoFocus.setChecked(prefs.notFocusable());
         swMaster.setChecked(prefs.masterEnabled());
         swWired.setChecked(prefs.wiredEnabled());
         swAutoStart.setChecked(prefs.autoStart());
@@ -175,6 +190,8 @@ public class MainActivity extends AppCompatActivity {
         sbRadius.setOnSeekBarChangeListener(sl);
         sbImgH.setOnSeekBarChangeListener(sl);
         sbDuration.setOnSeekBarChangeListener(sl);
+        sbDim.setOnSeekBarChangeListener(sl);
+        sbBlur.setOnSeekBarChangeListener(sl);
 
         spPos.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             public void onItemSelected(AdapterView<?> p, View v, int i, long id) {
@@ -187,6 +204,14 @@ public class MainActivity extends AppCompatActivity {
         spAnim.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             public void onItemSelected(AdapterView<?> p, View v, int i, long id) {
                 if (!bindingUi) prefs.setAnimStyle(i);
+            }
+
+            public void onNothingSelected(AdapterView<?> p) {
+            }
+        });
+        spEngine.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            public void onItemSelected(AdapterView<?> p, View v, int i, long id) {
+                if (!bindingUi) prefs.setEngine(i);
             }
 
             public void onNothingSelected(AdapterView<?> p) {
@@ -207,6 +232,13 @@ public class MainActivity extends AppCompatActivity {
         swBattery.setOnCheckedChangeListener((b, checked) -> {
             if (!bindingUi) prefs.setShowBattery(checked);
         });
+        swLock.setOnCheckedChangeListener((b, checked) -> {
+            if (!bindingUi) prefs.setShowOnLock(checked);
+        });
+        swNoFocus.setOnCheckedChangeListener((b, checked) -> {
+            if (!bindingUi) prefs.setNotFocusable(checked);
+        });
+        findViewById(R.id.btnMiPerm).setOnClickListener(v -> copyMiuiPermCommands());
     }
 
     private void syncSeekLabels() {
@@ -214,6 +246,11 @@ public class MainActivity extends AppCompatActivity {
         tvRadius.setText("圆角 " + sbRadius.getProgress() + "dp");
         tvImgH.setText("图片高度 " + (sbImgH.getProgress() + 60) + "dp");
         tvDuration.setText("显示时长 " + ((sbDuration.getProgress() + 1) * 500) + "ms");
+        if (sbDim != null) tvDim.setText("背景压暗 " + sbDim.getProgress() + "%");
+        if (sbBlur != null) {
+            int b = sbBlur.getProgress();
+            tvBlur.setText(b == 0 ? "背景模糊 关闭" : "背景模糊半径 " + b + "dp");
+        }
     }
 
     private void loadPreview() {
@@ -243,6 +280,8 @@ public class MainActivity extends AppCompatActivity {
         prefs.setRadiusDp(sbRadius.getProgress());
         prefs.setImageHeightDp(sbImgH.getProgress() + 60);
         prefs.setDurationMs((sbDuration.getProgress() + 1) * 500);
+        prefs.setDimAmount(sbDim.getProgress() / 100f);
+        prefs.setBlurRadius(sbBlur.getProgress());
         prefs.setAllowedDevices(allowSet);
     }
 
@@ -384,6 +423,28 @@ public class MainActivity extends AppCompatActivity {
         }
         Toast.makeText(this, "请在 设置 → 应用设置 → 本应用 → 省电策略 选择「无限制」",
                 Toast.LENGTH_LONG).show();
+    }
+
+    private void copyMiuiPermCommands() {
+        String cmds =
+                "# 小米「后台弹出界面」——系统级引擎在 MIUI/HyperOS 上的额外一道闸\n"
+                + "# opcode 10021，先试设置再读值验证\n"
+                + "adb shell appops set com.yuanbao.earbuds 10021 allow\n"
+                + "adb shell appops get com.yuanbao.earbuds 10021\n\n"
+                + "# 锁屏显示（部分版本用 10023/10024，报错就换一个试）\n"
+                + "adb shell appops set com.yuanbao.earbuds 10023 allow\n"
+                + "adb shell appops set com.yuanbao.earbuds 10024 allow\n\n"
+                + "# 基础权限\n"
+                + "adb shell appops set com.yuanbao.earbuds SYSTEM_ALERT_WINDOW allow\n"
+                + "adb shell pm grant com.yuanbao.earbuds android.permission.BLUETOOTH_CONNECT\n"
+                + "adb shell pm grant com.yuanbao.earbuds android.permission.POST_NOTIFICATIONS\n"
+                + "adb shell dumpsys deviceidle whitelist +com.yuanbao.earbuds\n\n"
+                + "# 验证：把上面 get 的结果发我，我来确认 opcode 对不对";
+        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (cm != null) {
+            cm.setPrimaryClip(ClipData.newPlainText("adb", cmds));
+            Toast.makeText(this, "已复制。执行后把 get 的结果发我确认", Toast.LENGTH_LONG).show();
+        }
     }
 
     private void showMiPopupGuide() {
