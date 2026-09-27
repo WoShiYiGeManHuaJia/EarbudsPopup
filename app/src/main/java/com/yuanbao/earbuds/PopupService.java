@@ -461,7 +461,17 @@ public class PopupService extends Service {
      * 之所以能从后台启动 Activity：已授予 SYSTEM_ALERT_WINDOW 的应用
      * 属于 Android 10+ 后台启动 Activity 限制的官方例外之一。
      */
+    /** 上次真正弹出弹窗的时间，用于防抖 */
+    private static volatile long lastLaunchAt = 0L;
+
     private void launch(String name, String address, BatteryLevels levels, BluetoothDevice dev) {
+        // 防抖：蓝牙连接会连发多个广播（ACL_CONNECTED、A2DP_CONNECTED、
+        // HFP_CONNECTED…），导致 launch() 被连续调用多次，
+        // 于是弹窗被创建了两个 —— 用户看到的「闪两次」。
+        // 3 秒内只弹一次。
+        long now = System.currentTimeMillis();
+        if (now - lastLaunchAt < 3000L) return;
+        lastLaunchAt = now;
         int engine = prefs.engine();
         boolean canOverlay = android.provider.Settings.canDrawOverlays(this);
 
