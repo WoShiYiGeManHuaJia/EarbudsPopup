@@ -106,9 +106,12 @@ public final class ShizukuHelper {
 
     public static String exec(String[] argv) {
         if (!hasPermission()) return "ERR: 未获得 Shizuku 授权";
-        Process p = null;
+        Process proc;
+        final Process[] holder = new Process[1];
         try {
-            p = newProcessViaReflection(argv);
+            proc = newProcessViaReflection(argv);
+            holder[0] = proc;
+            final Process p = proc;
             final StringBuilder out = new StringBuilder();
             final StringBuilder err = new StringBuilder();
 
@@ -144,9 +147,9 @@ public final class ShizukuHelper {
         } catch (Throwable t) {
             return "ERR: " + t.getMessage();
         } finally {
-            if (p != null) {
+            if (holder[0] != null) {
                 try {
-                    p.destroy();
+                    holder[0].destroy();
                 } catch (Exception ignored) {
                 }
             }
