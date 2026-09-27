@@ -8,7 +8,11 @@
     android:paddingStart="16dp"
     android:paddingTop="8dp"
     android:paddingEnd="16dp"
-    android:paddingBottom="24dp">
+    android:paddingBottom="96dp">
+
+    <!-- paddingBottom 96dp：底部导航栏悬浮在内容之上（CoordinatorLayout
+         里 bottom gravity 不参与滚动），24dp 会被导航条压住，
+         导致最后一部分内容点不到 / 看不见。 -->
 
     <LinearLayout
         android:layout_width="match_parent"
