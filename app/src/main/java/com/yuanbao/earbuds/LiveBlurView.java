@@ -114,7 +114,8 @@ public class LiveBlurView extends View {
             return;
         }
         if (fadeGradient == null) {
-            // 从 y=0（完全透明）到 y=fh（完全不透明）
+            // y=0 处 alpha=0 → 不擦除（保持清晰原图）
+            // y=fh 处 alpha=255 → 全部擦除（露出底层的模糊内容）
             fadeGradient = new android.graphics.LinearGradient(
                     0f, 0f, 0f, fh,
                     0x00000000, 0xFF000000, Shader.TileMode.CLAMP);
@@ -243,13 +244,25 @@ public class LiveBlurView extends View {
         // 叠一层半透明色，保证文字可读
         canvas.drawColor(dimColor);
 
-        // 顶部渐隐：用 DST_OUT 把上沿擦成透明，
-        // 模糊层与上方清晰画面之间就有了平滑过渡，不再是硬边一刀切
+        // ---- 清晰 → 模糊 的平滑过渡 ----
+        //
+        // 上一版错在两处：
+        //   1) saveLayer 在内容画完之后调用 —— saveLayer 创建的是【空白】离屏层，
+        //      已画的内容不在里面，DST_OUT 擦了个寂寞，完全无效。
+        //   2) 渐变方向反了（顶部不擦/底部全擦），即便生效也会把底部抹掉。
+        //
+        // 正确做法：在顶部 fh 区域【先】saveLayer，然后在图层内画一遍清晰原图，
+        // 再用 DST_OUT 渐变从上（不擦=保持清晰）到下（全擦=露出底层模糊）。
+        // 于是顶部是清晰画面，向下平滑过渡到模糊，没有硬边。
         if (fadeRatio > 0f) {
+            float fh = vh * fadeRatio;
             ensureGradient(vw, vh);
-            if (fadeGradient != null) {
-                int saved = canvas.saveLayer(0f, 0f, vw, vh, null);
-                canvas.drawRect(0f, 0f, vw, vh * fadeRatio, fadePaint);
+            if (fadeGradient != null && fh > 0f) {
+                int saved = canvas.saveLayer(0f, 0f, vw, fh, null);
+                // 图层内：画清晰源内容（不加模糊）
+                drawSource(canvas, dr, sw, sh, vh);
+                // 顶部不擦(清晰) → 底部全擦(露出模糊)
+                canvas.drawRect(0f, 0f, vw, fh, fadePaint);
                 canvas.restoreToCount(saved);
             }
         }
