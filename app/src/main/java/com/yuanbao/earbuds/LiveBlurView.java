@@ -125,11 +125,14 @@ public class LiveBlurView extends View {
             return;
         }
         if (fadeGradient == null) {
-            // y=0 处 alpha=0 → 不擦除（保持清晰原图）
-            // y=fh 处 alpha=255 → 全部擦除（露出底层的模糊内容）
+            // 方向修正（之前正好写反了，所以看不到过渡）：
+            //   本 View 覆盖的是【底部文字区】，它盖在清晰动画之上。
+            //   y=0（上边缘）→ alpha=255 全擦除 → 透明 → 露出清晰的动画
+            //   y=fh（往下） → alpha=0   不擦除  → 保留模糊层
+            // 于是顶边柔和地融进动画，越往下越模糊。
             fadeGradient = new android.graphics.LinearGradient(
                     0f, 0f, 0f, fh,
-                    0x00000000, 0xFF000000, Shader.TileMode.CLAMP);
+                    0xFF000000, 0x00000000, Shader.TileMode.CLAMP);
             fadePaint.setShader(fadeGradient);
             fadePaint.setXfermode(new android.graphics.PorterDuffXfermode(
                     android.graphics.PorterDuff.Mode.DST_OUT));
