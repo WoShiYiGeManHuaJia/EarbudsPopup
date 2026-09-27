@@ -134,6 +134,18 @@
 
         <include layout="@layout/row_private_case" />
 
+        <!-- ===== 充电盒电量推断（实验性，默认关闭） ===== -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="充电盒电量"
+            android:textColor="#FF9800"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <include layout="@layout/row_private_case" />
+
         <!-- ===== 电量探测 ===== -->
         <TextView
             style="@style/TextSectionTitle"
