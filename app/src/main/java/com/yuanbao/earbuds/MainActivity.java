@@ -408,7 +408,7 @@ public class MainActivity extends AppCompatActivity {
         // 充电盒电量推断开关：默认关闭（该字节未确认是电量，贸然显示会乱跳）
         View rowCase = findViewById(R.id.rowPrivateCase);
         if (rowCase != null) {
-            final android.widget.SwitchMaterial swCaseSrc =
+            final com.google.android.material.materialswitch.MaterialSwitch swCaseSrc =
                     rowCase.findViewById(R.id.swPrivateCase);
             final android.widget.TextView tvCaseDesc =
                     rowCase.findViewById(R.id.tvPrivateCaseDesc);
