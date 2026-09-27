@@ -72,8 +72,12 @@ public final class PopupRenderer {
 
         // ---------- 卡片尺寸 ----------
         int widthPx = (int) (prefs.widthDp() * d);
+        // 比例依据：小米官方自定义弹窗背景时建议图片比例 16:9（横向宽扁）。
+        // 之前 cardRatio 约 1.28（竖高），所以看起来「长不长圆不圆方不方」。
+        // 这里改成 0.58~0.76 的横向区间，默认约 0.72：接近 16:9 稍高一点，
+        // 好容纳底部叠加的详情区。
         float ratio = Math.max(0.40f, Math.min(0.94f, prefs.imageRatio()));
-        float cardRatio = 0.42f + ratio * 1.05f;
+        float cardRatio = 0.45f + ratio * 0.33f;
         int heightPx = (int) (widthPx * cardRatio);
 
         int cardBg = parseColor(
@@ -130,6 +134,9 @@ public final class PopupRenderer {
         String uri = prefs.imageUri();
         if (img != null) {
             img.setScaleType(ImageView.ScaleType.MATRIX);
+            // 半径与卡片完全一致：图片自身的抗锯齿圆角正好落在卡片裁剪边界上，
+            // 既不内缩露直角，也不外溢。
+            img.setRadius(prefs.radiusDp() * d);
             if (!uri.isEmpty()) {
                 try {
                     Glide.with(c.getApplicationContext())
