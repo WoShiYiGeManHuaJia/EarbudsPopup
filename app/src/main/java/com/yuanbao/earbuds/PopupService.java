@@ -410,19 +410,8 @@ public class PopupService extends Service {
         }
         current = v;
 
-        // 入场动画：Y -50dp → 0，scale 0.93 → 1，340ms
-        v.setTranslationY(-50 * getResources().getDisplayMetrics().density);
-        v.setScaleX(0.93f);
-        v.setScaleY(0.93f);
-        v.setAlpha(0.3f);
-        v.animate()
-                .translationY(0)
-                .scaleX(1f)
-                .scaleY(1f)
-                .alpha(1f)
-                .setDuration(340)
-                .setInterpolator(new DecelerateInterpolator())
-                .start();
+        // 入场动画：按用户选择的样式（缩放淡入 / 底部上滑 / 顶部下滑）
+        PopupRenderer.applyEnter(v, prefs.animStyle());
 
         v.postDelayed(this::dismiss, prefs.durationMs());
     }
