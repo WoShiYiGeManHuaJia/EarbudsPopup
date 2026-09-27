@@ -275,6 +275,15 @@ public class Prefs {
         sp.edit().putBoolean("noti_dismissed", v).apply();
     }
 
+    /** 是否在最近任务（多任务列表）里隐藏本 App */
+    public boolean hideFromRecents() {
+        return sp.getBoolean("hide_recents", true);
+    }
+
+    public void setHideFromRecents(boolean v) {
+        sp.edit().putBoolean("hide_recents", v).apply();
+    }
+
     // ---------- 设备显示名 ----------
 
     /** 用户为该设备指定的弹窗显示名；为空表示用系统蓝牙名 */
