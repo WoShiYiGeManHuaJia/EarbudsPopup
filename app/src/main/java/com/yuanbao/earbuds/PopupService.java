@@ -42,6 +42,9 @@ import com.bumptech.glide.Glide;
  */
 public class PopupService extends Service {
 
+    /** 沉底模式距屏幕底部的边距（dp） */
+    public static final int BOTTOM_MARGIN_DP = 28;
+
     public static final String ACTION_SHOW = "com.yuanbao.earbuds.ACTION_SHOW";
     public static final String ACTION_RESTART = "com.yuanbao.earbuds.ACTION_RESTART";
     public static final String EXTRA_NAME = "name";
@@ -559,8 +562,9 @@ public class PopupService extends Service {
             p.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
             p.y = (int) dp(72);
         } else if (pos == 2) {
+            // 沉底：真正的靠底，只留一点安全边距（类小米官方弹窗）
             p.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-            p.y = (int) dp(120);
+            p.y = (int) dp(BOTTOM_MARGIN_DP);
         } else {
             p.gravity = Gravity.CENTER;
             p.y = 0;
