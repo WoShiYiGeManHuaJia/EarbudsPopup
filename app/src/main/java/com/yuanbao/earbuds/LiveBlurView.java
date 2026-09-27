@@ -718,19 +718,40 @@ public class LiveBlurView extends View {
      * 平移 -(sh - vh) 让源的底部对齐到本 View 的位置。
      */
     private void drawSource(Canvas canvas, Drawable dr, int sw, int sh, int vh) {
-        // 严重 bug 修复：
-        // 之前用 dr.getIntrinsicWidth/Height 设 bounds，再 concat(getImageMatrix())。
-        // 但 centerCrop 模式下 ImageView 的 getImageMatrix() 是【单位阵】，
-        // 真正的缩放裁切发生在 ImageView.draw() 内部 ——
-        // 于是这里画的是「原图原始尺寸」，与屏幕上实际显示的区域完全不符，
-        // 底部那一带取到的往往是图外空白，表现就是「模糊几乎变透明」。
         //
-        // 正确做法：直接让 ImageView 自己画。
-        // src.draw(canvas) 会完整走它的 scaleType、自定义矩阵和圆角，
-        // 画出来的就是屏幕上真正看到的内容。
+        // 关键修复：上一版改用 src.draw(canvas)（让 ImageView 自己画），
+        // 但 View.draw() 在「软件 Bitmap canvas + 该 View 开了硬件裁剪」时
+        // 可能抛异常；异常冒泡到 onDraw 的 catch，就退化成 canvas.drawColor(dim)，
+        // 表现正是「只剩一层淡黑色盖着，没有模糊」。
+        //
+        // 改回手动绘制：完全可控、不抛异常。
+        //   drawable bounds = 原始尺寸
+        //   canvas.concat(src.getImageMatrix()) = ImageView MATRIX 模式的做法
+        // 只要矩阵是 applyImageMatrix 设过的，画出来就与屏幕一致。
         canvas.save();
         canvas.translate(0, -(sh - vh));
-        src.draw(canvas);
+        android.graphics.Matrix m = src.getImageMatrix();
+        if (m != null && !m.isIdentity()) {
+            canvas.concat(m);
+        } else {
+            // 矩阵还没设（GIF 首帧刚到 / 布局未完成）：
+            // 现算一个 centerCrop，保证底部区域一定有内容，不是空白
+            int iw = dr.getIntrinsicWidth();
+            int ih = dr.getIntrinsicHeight();
+            if (iw > 0 && ih > 0) {
+                float sc = Math.max((float) sw / iw, (float) sh / ih);
+                canvas.scale(sc, sc);
+                canvas.translate((sw - iw * sc) / 2f / sc, (sh - ih * sc) / 2f / sc);
+            }
+        }
+        int iw = dr.getIntrinsicWidth();
+        int ih = dr.getIntrinsicHeight();
+        if (iw <= 0 || ih <= 0) {
+            iw = sw;
+            ih = sh;
+        }
+        dr.setBounds(0, 0, iw, ih);
+        dr.draw(canvas);
         canvas.restore();
     }
 }
