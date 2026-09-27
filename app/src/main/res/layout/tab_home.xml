@@ -90,8 +90,8 @@
 
                 <LinearLayout
                     android:id="@+id/pvCard"
-                    android:layout_width="240dp"
-                    android:layout_height="wrap_content"
+                    android:layout_width="232dp"
+                    android:layout_height="267dp"
                     android:layout_gravity="center_horizontal"
                     android:elevation="8dp"
                     android:orientation="vertical">
@@ -99,78 +99,44 @@
                     <FrameLayout
                         android:id="@+id/pvImageArea"
                         android:layout_width="match_parent"
-                        android:layout_height="168dp">
+                        android:layout_height="0dp"
+                        android:layout_weight="76"
+                        android:padding="7dp"
+                        android:background="@drawable/bg_glass_stroke">
 
                         <ImageView
                             android:id="@+id/pvImage"
                             android:layout_width="match_parent"
                             android:layout_height="match_parent"
+                            android:layout_gravity="center"
                             android:contentDescription="弹窗图片"
-                            android:scaleType="centerCrop" />
+                            android:scaleType="fitCenter" />
 
-                        <View
-                            android:id="@+id/pvFade"
-                            android:layout_width="match_parent"
-                            android:layout_height="70dp"
-                            android:layout_gravity="bottom" />
                     </FrameLayout>
 
-                    <LinearLayout
+                    <TextView
+                        android:id="@+id/pvInfo"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:paddingStart="16dp"
-                        android:paddingTop="2dp"
-                        android:paddingEnd="16dp"
-                        android:paddingBottom="14dp">
+                        android:layout_height="0dp"
+                        android:layout_weight="16"
+                        android:gravity="center"
+                        android:lines="1"
+                        android:singleLine="true"
+                        android:text="已连接"
+                        android:textColor="#D1FFFFFF"
+                        android:textSize="11sp" />
 
-                        <TextView
-                            android:id="@+id/pvTitle"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:gravity="center"
-                            android:text="Buds 5 Pro 电竞版"
-                            android:textColor="#FFFFFFFF"
-                            android:textSize="14sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/pvSub"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:alpha="0.75"
-                            android:gravity="center"
-                            android:text="已连接"
-                            android:textColor="#FFFFFFFF"
-                            android:textSize="10.5sp" />
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="12dp"
-                            android:gravity="center"
-                            android:orientation="horizontal">
-
-                            <com.yuanbao.earbuds.BatteryRingView
-                                android:id="@+id/pvRingEarbud"
-                                android:layout_width="44dp"
-                                android:layout_height="44dp" />
-
-                            <LinearLayout
-                                android:id="@+id/pvBoxGroup"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginStart="24dp"
-                                android:orientation="vertical">
-
-                                <com.yuanbao.earbuds.BatteryRingView
-                                    android:id="@+id/pvRingBox"
-                                    android:layout_width="44dp"
-                                    android:layout_height="44dp" />
-                            </LinearLayout>
-                        </LinearLayout>
-                    </LinearLayout>
+                    <TextView
+                        android:id="@+id/pvTip"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="8"
+                        android:gravity="center"
+                        android:lines="1"
+                        android:singleLine="true"
+                        android:text="轻触关闭弹窗"
+                        android:textColor="#8CFFFFFF"
+                        android:textSize="9.5sp" />
                 </LinearLayout>
             </FrameLayout>
 
