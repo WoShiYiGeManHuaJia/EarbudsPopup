@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 用于 View.setTag 的键（不是 View id，只是资源 id 占位） -->
+    <item name="tag_matrix_retry" type="id" />
+</resources>
