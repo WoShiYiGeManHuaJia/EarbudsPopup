@@ -161,6 +161,18 @@ public class Prefs {
     }
 
     /** 0=顶部 1=居中 2=底部（距底部留 120dp） */
+    /**
+     * 连续垂直位置：0 = 贴顶，100 = 贴底，中间线性插值。
+     * 用户要求能自由调整弹窗上下位置，而不是只有上/中/下三档。
+     */
+    public int verticalPos() {
+        return sp.getInt("vpos", 100);
+    }
+
+    public void setVerticalPos(int v) {
+        sp.edit().putInt("vpos", Math.max(0, Math.min(100, v))).apply();
+    }
+
     public int position() {
         return sp.getInt("pos", 2);   // 默认沉底（类小米官方弹窗）
     }
