@@ -810,8 +810,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void doProbe(BluetoothDevice dev) {
-        String addr = dev.getAddress();
-        String n;
+        final String addr = dev.getAddress();
+        final String n;
         try {
             n = dev.getName();
         } catch (SecurityException e) {
