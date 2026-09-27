@@ -60,7 +60,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView permStatus, tvDevice;
     private View pvCard;
     private FrameLayout pvImageArea;
-    private ImageView pvImage;
+    private RoundedImageView pvImage;
     private TextView pvInfo, pvTip;
 
     // 外观
@@ -542,20 +542,14 @@ public class MainActivity extends AppCompatActivity {
         gd.setStroke(Math.max(1, (int) d), 0x33FFFFFF);
         pvCard.setBackground(gd);
         pvCard.setElevation(12 * d);
-        pvCard.setClipToOutline(true);
+        // 与真实弹窗一致：不用系统 clipToOutline（有锯齿），靠背景自身圆角
 
         // GIF 区吃掉全部剩余空间，文字区保持紧凑（与真实弹窗一致）
 
-        // 预览里的图片本身也要圆角（裁 ImageView，不是容器，否则圆角碰不到图片四角）
+        // 预览图片圆角：与真实弹窗一致，用抗锯齿离屏合成
         if (pvImage != null) {
-            final float pr = 16 * d * 0.78f;
-            pvImage.setOutlineProvider(new android.view.ViewOutlineProvider() {
-                @Override
-                public void getOutline(android.view.View v, android.graphics.Outline o) {
-                    o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), pr);
-                }
-            });
-            pvImage.setClipToOutline(true);
+            float pr = Math.max(0f, prefs.radiusDp() - 2) * d * 0.78f;
+            pvImage.setRadius(pr);
         }
 
         // 信息窄条：与真实弹窗同一套拼接逻辑
