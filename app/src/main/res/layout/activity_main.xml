@@ -58,6 +58,13 @@
                 android:text="复制ADB" />
         </LinearLayout>
 
+        <Button
+            android:id="@+id/btnBlockMi"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="屏蔽小米原生快连弹窗（K70 Pro 指引）" />
+
         <!-- ===== 开关 ===== -->
         <TextView
             android:layout_width="match_parent"
@@ -201,6 +208,14 @@
                     android:inputType="text"
                     android:textSize="13sp" />
             </LinearLayout>
+
+            <EditText
+                android:id="@+id/etAccent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="电竞强调色 #FF00E5A0（电量条/顶条）"
+                android:inputType="text"
+                android:textSize="13sp" />
 
             <TextView
                 android:id="@+id/tvWidth"
