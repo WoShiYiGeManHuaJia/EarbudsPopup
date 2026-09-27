@@ -13,6 +13,8 @@ import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
@@ -997,6 +999,24 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "已保存到 下载/电量探测日志.txt", Toast.LENGTH_LONG).show();
         } catch (Exception e) {
             Toast.makeText(this, "保存失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    /**
+     * 在最近任务（多任务列表）里隐藏/显示本 App。
+     * manifest 的 excludeFromRecents 是默认值，这里用 AppTask.setExcludeFromRecents
+     * 做运行时切换，开关一改立刻生效。
+     */
+    private void applyRecentsHidden(boolean hide) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return;
+        try {
+            android.app.ActivityManager am =
+                    (android.app.ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+            if (am == null) return;
+            for (android.app.ActivityManager.AppTask task : am.getAppTasks()) {
+                task.setExcludeFromRecents(hide);
+            }
+        } catch (Throwable ignored) {
         }
     }
 
