@@ -47,6 +47,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class BatteryProbe {
 
+    /** 私有特征 NOTIFY 推送上来的数据包（hex），用于找左右耳/充电盒 */
+    private final java.util.List<String> notifyPackets =
+            java.util.Collections.synchronizedList(new java.util.ArrayList<String>());
+
     // Bluetooth SIG 标准
     private static final UUID UUID_BATTERY_SERVICE = UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb");
     private static final UUID UUID_BATTERY_LEVEL = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb");
@@ -511,6 +515,20 @@ public final class BatteryProbe {
             }
 
             @Override
+            @Override
+            public void onCharacteristicChanged(BluetoothGatt g,
+                                                BluetoothGattCharacteristic ch) {
+                // 耳机主动推送的数据包 —— 充电盒电量很可能只在推送里出现，
+                // 单纯 read 是拿不到的（之前就是只读不订阅，所以 Case 永远 --%）
+                byte[] v = ch.getValue();
+                if (v != null && v.length > 0) {
+                    String hex = toHex(v);
+                    notifyPackets.add(hex);
+                    log("NOTIFY " + ch.getUuid().toString().substring(0, 8)
+                            + " len=" + v.length + " hex=" + hex);
+                }
+            }
+
             public void onDescriptorRead(BluetoothGatt g, BluetoothGattDescriptor d, int status) {
                 try {
                     byte[] v = d.getValue();
@@ -567,7 +585,53 @@ public final class BatteryProbe {
             }
         }
         log("私有可读特征数 = " + readable.size());
-        dumpNext(g, readable, 0, overall, levels, cb);
+
+        // 除了读，还要订阅 NOTIFY：
+        // Airoha 私有服务下 CHAR-0A/1A 带 NOTIFY 属性，左右耳与充电盒电量
+        // 大概率是耳机【主动推送】的，只读一次根本拿不到（这就是 Case 一直 --% 的原因）。
+        subscribeNotify(g, readable, overall, levels, cb, () ->
+                dumpNext(g, readable, 0, overall, levels, cb));
+    }
+
+    /**
+     * 对所有带 NOTIFY 的私有特征开启通知，等待一段时间后继续。
+     * 期间收到的包会由 onCharacteristicChanged 记录。
+     */
+    @SuppressLint("MissingPermission")
+    private void subscribeNotify(BluetoothGatt g,
+                                 List<BluetoothGattCharacteristic> chars,
+                                 int overall,
+                                 List<BluetoothGattCharacteristic> levels,
+                                 Callback cb, Runnable then) {
+        List<BluetoothGattCharacteristic> notifiable = new ArrayList<>();
+        for (BluetoothGattService svc : g.getServices()) {
+            String u = svc.getUuid().toString().toLowerCase(Locale.ROOT);
+            boolean isSig = u.startsWith("0000") && u.endsWith("-0000-1000-8000-00805f9b34fb");
+            if (isSig) continue;
+            for (BluetoothGattCharacteristic ch : svc.getCharacteristics()) {
+                if ((ch.getProperties() & BluetoothGattCharacteristic.PROPERTY_NOTIFY) != 0) {
+                    notifiable.add(ch);
+                }
+            }
+        }
+        log("私有可订阅(NOTIFY)特征数 = " + notifiable.size());
+        for (BluetoothGattCharacteristic ch : notifiable) {
+            try {
+                g.setCharacteristicNotification(ch, true);
+                BluetoothGattDescriptor ccc =
+                        ch.getDescriptor(java.util.UUID.fromString(
+                                "00002902-0000-1000-8000-00805f9b34fb"));
+                if (ccc != null) {
+                    ccc.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+                    g.writeDescriptor(ccc);
+                }
+                log("已订阅 " + ch.getUuid().toString().substring(0, 8));
+            } catch (Exception e) {
+                log("订阅失败 " + ch.getUuid().toString().substring(0, 8) + " : " + e.getMessage());
+            }
+        }
+        // 给耳机 6 秒时间推送数据
+        main.postDelayed(then, notifiable.isEmpty() ? 0 : 6000);
     }
 
     @SuppressLint("MissingPermission")
@@ -616,6 +680,47 @@ public final class BatteryProbe {
             log("读取缺权限: " + e.getMessage());
             closeAndFinish(g, overall, cb);
         }
+    }
+
+    /**
+     * 从 NOTIFY 推送的数据包里找电量。
+     * 思路：电量字节通常是连续的 1~100 三个值（L / R / Case）。
+     * 这里把所有包里的连续三元组候选都记下来，便于人工对照确认。
+     */
+    private void tryParseNotify(BatteryLevels b) {
+        if (notifyPackets.isEmpty()) {
+            log("未收到任何 NOTIFY 推送包");
+            return;
+        }
+        log("收到 NOTIFY 包 " + notifyPackets.size() + " 条，逐条列出：");
+        for (String hex : notifyPackets) log("  " + hex);
+
+        // 找连续三个落在 1..100 的字节
+        for (String hex : notifyPackets) {
+            String[] parts = hex.split(" ");
+            byte[] v = new byte[parts.length];
+            for (int i = 0; i < parts.length; i++) {
+                try {
+                    v[i] = (byte) Integer.parseInt(parts[i], 16);
+                } catch (Exception e) {
+                    v[i] = 0;
+                }
+            }
+            for (int i = 0; i + 2 < v.length; i++) {
+                int a = v[i] & 0xFF, c = v[i + 1] & 0xFF, d = v[i + 2] & 0xFF;
+                if (a >= 1 && a <= 100 && c >= 1 && c <= 100 && d >= 1 && d <= 100) {
+                    log("候选三元组 @字节" + i + ": L=" + a + " R=" + c + " Case=" + d);
+                    if (!BatteryLevels.valid(b.left)) b.left = a;
+                    if (!BatteryLevels.valid(b.right)) b.right = c;
+                    if (!BatteryLevels.valid(b.caseBox)) {
+                        b.caseBox = d;
+                        b.source = "notify-triplet";
+                    }
+                    return;
+                }
+            }
+        }
+        log("推送包中未找到连续三元组（可能不是电量数据或格式不同）");
     }
 
     private void finalizeLevels(List<BluetoothGattCharacteristic> list, int overall,
@@ -686,6 +791,11 @@ public final class BatteryProbe {
 
         b.timestamp = System.currentTimeMillis();
         lastResult = b;
+        // 标准/私有读取都没拿到完整三值时，再从 NOTIFY 推送包里试一次
+        if (!BatteryLevels.valid(b.caseBox) || !BatteryLevels.valid(b.left)
+                || !BatteryLevels.valid(b.right)) {
+            tryParseNotify(b);
+        }
         log("最终结果 L=" + b.left + " R=" + b.right + " Case=" + b.caseBox
                 + " 来源=" + b.source);
     }
@@ -725,6 +835,12 @@ public final class BatteryProbe {
             }
         }
         return -1;
+    }
+
+    private static String toHex(byte[] b) {
+        StringBuilder sb = new StringBuilder();
+        for (byte x : b) sb.append(String.format("%02X", x & 0xFF)).append(" ");
+        return sb.toString().trim();
     }
 
     private void closeAndFinish(BluetoothGatt g, int overall, Callback cb) {
