@@ -187,6 +187,15 @@ public class Prefs {
         sp.edit().putBoolean("private_case", v).apply();
     }
 
+    /** 最近一次弹窗/探测用到的设备 MAC，供预览读取缓存电量 */
+    public String lastAddress() {
+        return sp.getString("last_addr", "");
+    }
+
+    public void setLastAddress(String a) {
+        sp.edit().putString("last_addr", a == null ? "" : a).apply();
+    }
+
     public int position() {
         return sp.getInt("pos", 2);   // 默认沉底（类小米官方弹窗）
     }
