@@ -22,7 +22,7 @@
             android:text="弹窗图片" />
 
         <LinearLayout
-            style="@style/Widget.App.Group"
+            style="@style/AppGroup"
             android:layout_marginTop="10dp"
             android:elevation="1dp"
             android:padding="16dp">
@@ -49,7 +49,7 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnPickImage"
-                        style="@style/Widget.App.Button"
+                        style="@style/AppButton"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:minHeight="48dp"
@@ -60,7 +60,7 @@
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnClearImage"
-                        style="@style/Widget.App.Button.Tonal"
+                        style="@style/AppButtonTonal"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
@@ -79,7 +79,7 @@
             android:text="文案" />
 
         <LinearLayout
-            style="@style/Widget.App.Group"
+            style="@style/AppGroup"
             android:layout_marginTop="10dp"
             android:elevation="1dp"
             android:padding="16dp">
@@ -90,7 +90,7 @@
 
             <EditText
                 android:id="@+id/etTitle"
-                style="@style/Widget.App.EditText"
+                style="@style/AppEditText"
                 android:hint="Buds 5 Pro 电竞版"
                 android:inputType="text"
                 android:singleLine="true" />
@@ -102,7 +102,7 @@
 
             <EditText
                 android:id="@+id/etSub"
-                style="@style/Widget.App.EditText"
+                style="@style/AppEditText"
                 android:hint="%s 已连接"
                 android:inputType="text"
                 android:singleLine="true" />
@@ -116,20 +116,20 @@
             android:text="尺寸与动画" />
 
         <LinearLayout
-            style="@style/Widget.App.Group"
+            style="@style/AppGroup"
             android:layout_marginTop="10dp"
             android:elevation="1dp">
 
             <LinearLayout
                 android:id="@+id/rowWidth"
-                style="@style/Widget.App.Row">
+                style="@style/AppRow">
 
                 <ImageView
-                    style="@style/Widget.App.RowIcon"
+                    style="@style/AppRowIcon"
                     android:contentDescription="宽度"
                     android:src="@drawable/ic_size" />
 
-                <LinearLayout style="@style/Widget.App.RowText">
+                <LinearLayout style="@style/AppRowText">
                     <TextView
                         style="@style/TextRowTitle"
                         android:text="弹窗宽度" />
@@ -152,14 +152,14 @@
 
             <LinearLayout
                 android:id="@+id/rowRadius"
-                style="@style/Widget.App.Row">
+                style="@style/AppRow">
 
                 <ImageView
-                    style="@style/Widget.App.RowIcon"
+                    style="@style/AppRowIcon"
                     android:contentDescription="圆角"
                     android:src="@drawable/ic_layers" />
 
-                <LinearLayout style="@style/Widget.App.RowText">
+                <LinearLayout style="@style/AppRowText">
                     <TextView
                         style="@style/TextRowTitle"
                         android:text="卡片圆角" />
@@ -179,14 +179,14 @@
 
             <LinearLayout
                 android:id="@+id/rowImgH"
-                style="@style/Widget.App.Row">
+                style="@style/AppRow">
 
                 <ImageView
-                    style="@style/Widget.App.RowIcon"
+                    style="@style/AppRowIcon"
                     android:contentDescription="图片占比"
                     android:src="@drawable/ic_image" />
 
-                <LinearLayout style="@style/Widget.App.RowText">
+                <LinearLayout style="@style/AppRowText">
                     <TextView
                         style="@style/TextRowTitle"
                         android:text="图片占弹窗高度" />
@@ -209,14 +209,14 @@
 
             <LinearLayout
                 android:id="@+id/rowDuration"
-                style="@style/Widget.App.Row">
+                style="@style/AppRow">
 
                 <ImageView
-                    style="@style/Widget.App.RowIcon"
+                    style="@style/AppRowIcon"
                     android:contentDescription="时长"
                     android:src="@drawable/ic_animation" />
 
-                <LinearLayout style="@style/Widget.App.RowText">
+                <LinearLayout style="@style/AppRowText">
                     <TextView
                         style="@style/TextRowTitle"
                         android:text="显示时长" />
@@ -239,14 +239,14 @@
 
             <LinearLayout
                 android:id="@+id/rowPos"
-                style="@style/Widget.App.Row">
+                style="@style/AppRow">
 
                 <ImageView
-                    style="@style/Widget.App.RowIcon"
+                    style="@style/AppRowIcon"
                     android:contentDescription="位置"
                     android:src="@drawable/ic_preview" />
 
-                <LinearLayout style="@style/Widget.App.RowText">
+                <LinearLayout style="@style/AppRowText">
                     <TextView
                         style="@style/TextRowTitle"
                         android:text="弹出位置" />
@@ -266,14 +266,14 @@
 
             <LinearLayout
                 android:id="@+id/rowAnim"
-                style="@style/Widget.App.Row">
+                style="@style/AppRow">
 
                 <ImageView
-                    style="@style/Widget.App.RowIcon"
+                    style="@style/AppRowIcon"
                     android:contentDescription="动画"
                     android:src="@drawable/ic_animation" />
 
-                <LinearLayout style="@style/Widget.App.RowText">
+                <LinearLayout style="@style/AppRowText">
                     <TextView
                         style="@style/TextRowTitle"
                         android:text="入场动画" />
@@ -294,20 +294,20 @@
             android:text="配色" />
 
         <LinearLayout
-            style="@style/Widget.App.Group"
+            style="@style/AppGroup"
             android:layout_marginTop="10dp"
             android:elevation="1dp">
 
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/swAutoColor"
-                style="@style/Widget.App.Item"
+                style="@style/AppItem"
                 android:drawableStart="@drawable/ic_color"
                 android:text="根据图片自动配色"
                 android:textSize="15.5sp" />
         </LinearLayout>
 
         <LinearLayout
-            style="@style/Widget.App.Group"
+            style="@style/AppGroup"
             android:layout_marginTop="8dp"
             android:elevation="1dp"
             android:padding="16dp">
@@ -318,7 +318,7 @@
 
             <EditText
                 android:id="@+id/etBg"
-                style="@style/Widget.App.EditText"
+                style="@style/AppEditText"
                 android:hint="#F2141620"
                 android:inputType="text"
                 android:singleLine="true" />
@@ -330,7 +330,7 @@
 
             <EditText
                 android:id="@+id/etTextColor"
-                style="@style/Widget.App.EditText"
+                style="@style/AppEditText"
                 android:hint="#FFFFFFFF"
                 android:inputType="text"
                 android:singleLine="true" />
@@ -342,7 +342,7 @@
 
             <EditText
                 android:id="@+id/etAccent"
-                style="@style/Widget.App.EditText"
+                style="@style/AppEditText"
                 android:hint="#FF00E5A0"
                 android:inputType="text"
                 android:singleLine="true" />
