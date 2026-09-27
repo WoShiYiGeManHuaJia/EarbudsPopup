@@ -23,7 +23,6 @@
             android:id="@+id/popupImage"
             android:layout_width="match_parent"
             android:layout_height="170dp"
-            android:adjustViewBounds="true"
             android:contentDescription="弹窗动画"
             android:scaleType="centerCrop" />
 
