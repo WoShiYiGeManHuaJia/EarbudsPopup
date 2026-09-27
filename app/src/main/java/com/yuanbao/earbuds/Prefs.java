@@ -305,7 +305,10 @@ public class Prefs {
     // ---------- 设备白名单 ----------
     /** 返回 null 或空集表示“所有设备都弹” */
     public Set<String> allowedDevices() {
-        return sp.getStringSet("allowed", new HashSet<>());
+        // 必须返回拷贝：SharedPreferences.getStringSet 返回的是内部实例引用，
+        // 调用方一旦修改它，再存回去时会出现「改了但不生效」的诡异现象。
+        Set<String> v = sp.getStringSet("allowed", null);
+        return v == null ? new HashSet<>() : new HashSet<>(v);
     }
 
     public void setAllowedDevices(Set<String> s) {
