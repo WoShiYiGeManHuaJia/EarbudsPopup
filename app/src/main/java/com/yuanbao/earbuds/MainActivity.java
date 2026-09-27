@@ -286,7 +286,7 @@ public class MainActivity extends AppCompatActivity {
         tvRadius.setText(prefs.radiusDp() + " dp");
         tvImgH.setText(Math.round(prefs.imageRatio() * 100) + "%");
         tvDuration.setText(prefs.durationMs() + " ms");
-        tvPos.setText(new String[]{"顶部", "居中", "底部"}[prefs.position()]);
+        tvPos.setText(prefs.verticalPos() + "%");
         tvAnim.setText(new String[]{"缩放淡入", "底部上滑", "顶部下滑"}[prefs.animStyle()]);
         tvEngine.setText(new String[]{"系统级", "悬浮窗", "智能"}[prefs.engine()]);
         tvDim.setText(Math.round(prefs.dimAmount() * 100) + "%");
@@ -338,9 +338,7 @@ public class MainActivity extends AppCompatActivity {
                 0, 40, prefs.blurRadius(), val -> prefs.setBlurRadius(val)));
 
         // 单选项
-        findViewById(R.id.rowPos).setOnClickListener(v -> showChoice("弹出位置",
-                new String[]{"屏幕顶部", "屏幕居中", "屏幕底部"}, prefs.position(),
-                prefs::setPosition));
+        findViewById(R.id.rowPos).setOnClickListener(v -> showPositionSlider());
         findViewById(R.id.rowAnim).setOnClickListener(v -> showChoice("入场动画",
                 new String[]{"缩放淡入", "底部上滑", "顶部下滑"}, prefs.animStyle(),
                 prefs::setAnimStyle));
@@ -447,6 +445,100 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // ---------------- 对话框 ----------------
+
+    /**
+     * 垂直位置滑块，带【屏幕示意图实时预览】。
+     *
+     * 用户要求：拖动时能准确、实时地看到弹窗会落在屏幕的哪个位置。
+     * 所以这里画一个按比例缩小的手机屏幕轮廓，里面放一个卡片块，
+     * 拖动时卡片块按相同的百分比上下移动 —— 所见即所得。
+     */
+    private void showPositionSlider() {
+        final int[] value = {prefs.verticalPos()};
+        final int original = value[0];
+
+        float d = getResources().getDisplayMetrics().density;
+        int stageH = (int) (200 * d);   // 示意图高度
+        int stageW = (int) (110 * d);
+
+        // 屏幕外框
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        box.setPadding(16, 8, 16, 0);
+
+        TextView label = new TextView(this);
+        label.setText("距顶部 " + value[0] + "%");
+        label.setTextSize(16);
+        label.setPadding(24, 12, 24, 4);
+        box.addView(label);
+
+        // 屏幕示意图（用 FrameLayout 模拟：外框 + 内部卡片块）
+        FrameLayout stage = new FrameLayout(this);
+        stage.setBackgroundColor(0xFFE8E8EE);
+        LinearLayout.LayoutParams slp =
+                new LinearLayout.LayoutParams(stageW, stageH);
+        slp.setMargins(0, (int) (8 * d), 0, (int) (8 * d));
+        box.addView(stage, slp);
+
+        // 卡片块（按弹窗比例画的示意方块）
+        final View chip = new View(this);
+        int chipH = Math.max((int) (30 * d), (int) (stageH * 0.28f));
+        FrameLayout.LayoutParams clp = new FrameLayout.LayoutParams(
+                (int) (stageW * 0.86f), chipH);
+        clp.gravity = android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL;
+        GradientDrawable cg = new GradientDrawable();
+        cg.setShape(GradientDrawable.RECTANGLE);
+        cg.setCornerRadius(8 * d);
+        cg.setColor(0xFFFF9800);
+        chip.setBackground(cg);
+        stage.addView(chip, clp);
+
+        SeekBar sb = new SeekBar(this);
+        sb.setMax(100);
+        sb.setProgress(value[0]);
+        sb.setPadding(16, 8, 16, 8);
+        box.addView(sb);
+
+        Runnable[] apply = new Runnable[1];
+        apply[0] = () -> {
+            label.setText("距顶部 " + value[0] + "%");
+            int pad = (int) (6 * d);
+            int usable = stageH - chipH - pad * 2;
+            if (usable < 0) usable = 0;
+            clp.topMargin = pad + Math.round(usable * value[0] / 100f);
+            chip.setLayoutParams(clp);
+        };
+        apply[0].run();
+
+        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            public void onProgressChanged(SeekBar s, int p, boolean b) {
+                value[0] = p;
+                prefs.setVerticalPos(p);   // 实时写入
+                apply[0].run();
+                syncValueLabels();
+            }
+
+            public void onStartTrackingTouch(SeekBar s) {
+            }
+
+            public void onStopTrackingTouch(SeekBar s) {
+            }
+        });
+
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle("弹窗垂直位置")
+                .setView(box)
+                .setNegativeButton("取消", (dlg, w) -> {
+                    prefs.setVerticalPos(original);
+                    syncValueLabels();
+                })
+                .setPositiveButton("确定", (dlg, w) -> {
+                    prefs.setVerticalPos(value[0]);
+                    syncValueLabels();
+                })
+                .show();
+    }
 
     private void showSlider(String title, String unit, int min, int max, int current,
                             java.util.function.Consumer<Integer> onPick) {
