@@ -42,12 +42,13 @@
                 android:layout_height="match_parent"
                 android:visibility="gone" />
 
-            <!-- 细光泽描边 -->
+            <!-- 流光扫过（播放完会自动隐藏，不残留） -->
             <View
-                android:id="@+id/gifStroke"
-                android:layout_width="match_parent"
+                android:id="@+id/shimmer"
+                android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:background="@drawable/bg_glass_stroke" />
+                android:layout_gravity="center_vertical"
+                android:visibility="gone" />
         </FrameLayout>
 
         <!-- ② 设备信息窄条：占卡片 16% -->
