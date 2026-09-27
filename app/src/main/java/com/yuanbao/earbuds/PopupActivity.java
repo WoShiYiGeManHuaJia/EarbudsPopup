@@ -119,7 +119,8 @@ public class PopupActivity extends AppCompatActivity {
     private int marginForPos(int pos) {
         float d = getResources().getDisplayMetrics().density;
         if (pos == 0) return (int) (72 * d);
-        if (pos == 2) return (int) (120 * d);
+        // 沉底：与悬浮窗引擎保持一致
+        if (pos == 2) return (int) (PopupService.BOTTOM_MARGIN_DP * d);
         return 0;
     }
 
