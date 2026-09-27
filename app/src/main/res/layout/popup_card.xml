@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  弹窗卡片：单张液态玻璃卡片，三区纵向划分
-    ① GIF 主视觉区  76%
-    ② 设备信息窄条  16%
-    ③ 操作提示区    8%
+  弹窗卡片：单张液态玻璃卡片。
+    ① GIF 主视觉区 —— 占满除文字外的全部空间（weight=1）
+    ② 设备信息窄条 —— 固定紧凑高度，小字
+    ③ 操作提示区   —— 固定紧凑高度，更小的字
+  文字区不再按百分比撑开，避免出现大片空白；
+  卡片总高由「图片占弹窗高度」换算，该值越大卡片越高、GIF 区越大。
   无关闭按钮、无标题栏，点击卡片任意位置关闭。
 -->
-<!-- 根容器必须 match_parent：卡片的 gravity（上/中/下）是相对它算的，
-     一旦缩成 wrap_content 会被父 FrameLayout 贴到左上角，定位全部失效 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
@@ -18,13 +18,13 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- ① GIF 主视觉区：占卡片 76% -->
+        <!-- ① GIF 主视觉区：吃掉所有剩余空间 -->
         <FrameLayout
             android:id="@+id/gifWrap"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="76"
-            android:padding="8dp">
+            android:layout_weight="1"
+            android:padding="6dp">
 
             <ImageView
                 android:id="@+id/popupImage"
@@ -35,14 +35,7 @@
                 android:contentDescription="弹窗动画"
                 android:scaleType="fitCenter" />
 
-            <!-- 液态玻璃流光：斜向高光扫过 -->
-            <View
-                android:id="@+id/shimmer"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:visibility="gone" />
-
-            <!-- 流光扫过（播放完会自动隐藏，不残留） -->
+            <!-- 流光扫过（播完自动隐藏） -->
             <View
                 android:id="@+id/shimmer"
                 android:layout_width="0dp"
@@ -51,35 +44,37 @@
                 android:visibility="gone" />
         </FrameLayout>
 
-        <!-- ② 设备信息窄条：占卡片 16% -->
+        <!-- ② 设备信息窄条：固定紧凑高度 -->
         <TextView
             android:id="@+id/infoBar"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="16"
+            android:layout_height="wrap_content"
             android:gravity="center"
             android:includeFontPadding="false"
             android:lines="1"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp"
+            android:paddingStart="12dp"
+            android:paddingTop="2dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="3dp"
             android:singleLine="true"
             android:text="已连接"
             android:textColor="#D1FFFFFF"
-            android:textSize="13sp" />
+            android:textSize="11sp" />
 
-        <!-- ③ 操作提示区：占卡片 8% -->
+        <!-- ③ 操作提示区：固定更紧凑高度 -->
         <TextView
             android:id="@+id/tipText"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="8"
+            android:layout_height="wrap_content"
             android:gravity="center"
             android:includeFontPadding="false"
             android:lines="1"
+            android:paddingTop="0dp"
+            android:paddingBottom="7dp"
             android:singleLine="true"
             android:text="轻触关闭弹窗"
             android:textColor="#8CFFFFFF"
-            android:textSize="11sp" />
+            android:textSize="9sp" />
 
     </LinearLayout>
 </FrameLayout>
