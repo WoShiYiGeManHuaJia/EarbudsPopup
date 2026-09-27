@@ -152,6 +152,53 @@ public class Prefs {
         sp.edit().putInt("duration", v).apply();
     }
 
+
+    // ---------- 系统级弹窗引擎 ----------
+    /** 0=系统级Activity 1=悬浮窗 2=智能降级 */
+    public int engine() {
+        return sp.getInt("engine", 2);
+    }
+
+    public void setEngine(int v) {
+        sp.edit().putInt("engine", v).apply();
+    }
+
+    /** 背景压暗程度 0~1 */
+    public float dimAmount() {
+        return sp.getFloat("dim", 0.30f);
+    }
+
+    public void setDimAmount(float v) {
+        sp.edit().putFloat("dim", v).apply();
+    }
+
+    /** 窗口背景模糊半径 dp，0=关闭 */
+    public int blurRadius() {
+        return sp.getInt("blur", 24);
+    }
+
+    public void setBlurRadius(int v) {
+        sp.edit().putInt("blur", v).apply();
+    }
+
+    /** 锁屏之上也弹（需系统「锁屏显示」权限） */
+    public boolean showOnLock() {
+        return sp.getBoolean("lock", true);
+    }
+
+    public void setShowOnLock(boolean v) {
+        sp.edit().putBoolean("lock", v).apply();
+    }
+
+    /** 不夺取焦点：打游戏/输入时弹窗不打断 */
+    public boolean notFocusable() {
+        return sp.getBoolean("no_focus", false);
+    }
+
+    public void setNotFocusable(boolean v) {
+        sp.edit().putBoolean("no_focus", v).apply();
+    }
+
     // ---------- 设备白名单 ----------
     /** 返回 null 或空集表示“所有设备都弹” */
     public Set<String> allowedDevices() {
