@@ -86,10 +86,15 @@ public class PopupActivity extends AppCompatActivity {
 
         View card = findViewById(R.id.card);
         if (card != null) {
-            int w = (int) (prefs.widthDp() * getResources().getDisplayMetrics().density);
+            float dens = getResources().getDisplayMetrics().density;
+            int w = (int) (prefs.widthDp() * dens);
+            // 必须用固定高度：媒体区子 View 是 match_parent，
+            // 若这里给 WRAP_CONTENT，卡片高度会失控（表现为比例奇怪）。
+            // 高度算法与 PopupRenderer 保持一致。
+            float r = Math.max(0.40f, Math.min(0.94f, prefs.imageRatio()));
+            int h = (int) (w * (0.45f + r * 0.33f));
             android.widget.FrameLayout.LayoutParams lp =
-                    new android.widget.FrameLayout.LayoutParams(
-                            w, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT);
+                    new android.widget.FrameLayout.LayoutParams(w, h);
             lp.gravity = gravityByPos(prefs.position());
             int m = marginForPos(prefs.position());
             lp.topMargin = (prefs.position() == 0) ? m : 0;
