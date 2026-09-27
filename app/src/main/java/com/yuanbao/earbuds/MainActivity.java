@@ -57,12 +57,10 @@ public class MainActivity extends AppCompatActivity {
 
     // 首页
     private TextView permStatus, tvDevice;
-    private View pvCard, pvFade;
+    private View pvCard;
     private FrameLayout pvImageArea;
     private ImageView pvImage;
-    private TextView pvTitle, pvSub;
-    private BatteryRingView pvRingEarbud, pvRingBox;
-    private LinearLayout pvBoxGroup;
+    private TextView pvInfo, pvTip;
 
     // 外观
     private ImageView imgPreview;
@@ -158,12 +156,8 @@ public class MainActivity extends AppCompatActivity {
         pvCard = findViewById(R.id.pvCard);
         pvImageArea = findViewById(R.id.pvImageArea);
         pvImage = findViewById(R.id.pvImage);
-        pvFade = findViewById(R.id.pvFade);
-        pvTitle = findViewById(R.id.pvTitle);
-        pvSub = findViewById(R.id.pvSub);
-        pvRingEarbud = findViewById(R.id.pvRingEarbud);
-        pvRingBox = findViewById(R.id.pvRingBox);
-        pvBoxGroup = findViewById(R.id.pvBoxGroup);
+        pvInfo = findViewById(R.id.pvInfo);
+        pvTip = findViewById(R.id.pvTip);
 
         imgPreview = findViewById(R.id.imgPreview);
         etTitle = findViewById(R.id.etTitle);
@@ -454,77 +448,54 @@ public class MainActivity extends AppCompatActivity {
         if (pvCard == null) return;
 
         int cardColor = parseColor(
-                prefs.autoColor() ? prefs.autoBgColor() : prefs.bgColor(), 0xF2141620);
-        int accent = parseColor(
-                prefs.autoColor() ? prefs.autoAccentColor() : prefs.accentColor(), 0xFF00E5A0);
+                prefs.autoColor() ? prefs.autoBgColor() : prefs.bgColor(), 0x1FFFFFFF);
         int textColor = parseColor(prefs.textColor(), Color.WHITE);
 
-        int w = (int) dp(prefs.widthDp());
+        float d = getResources().getDisplayMetrics().density;
+        // 预览按屏幕比例缩小，比例与真实弹窗一致
+        int w = (int) (prefs.widthDp() * d * 0.78f);
+        int h = (int) (w * 1.15f);
         ViewGroup.LayoutParams lp = pvCard.getLayoutParams();
-        lp.width = (int) (w * 0.81f);  // 预览按屏幕比例缩小展示
+        lp.width = w;
+        lp.height = h;
         pvCard.setLayoutParams(lp);
 
         GradientDrawable gd = new GradientDrawable();
         gd.setShape(GradientDrawable.RECTANGLE);
-        gd.setCornerRadius(dp(prefs.radiusDp()) * 0.81f);
+        gd.setCornerRadius(24 * d * 0.78f);
         gd.setColor(cardColor);
+        gd.setStroke(Math.max(1, (int) d), 0x33FFFFFF);
         pvCard.setBackground(gd);
-        pvCard.setElevation(dp(10));
+        pvCard.setElevation(12 * d);
         pvCard.setClipToOutline(true);
 
-        if (pvImageArea != null) {
-            ViewGroup.LayoutParams ilp = pvImageArea.getLayoutParams();
-            ilp.height = (int) (lp.width * prefs.imageRatio());
-            pvImageArea.setLayoutParams(ilp);
+        // 信息窄条：与真实弹窗同一套拼接逻辑
+        int bat = swBattery.isChecked() ? 78 : -1;
+        int cas = (swBattery.isChecked() && swCase.isChecked()) ? 65 : -1;
+        StringBuilder sb = new StringBuilder("Buds 5 Pro 电竞版");
+        String sub = etSub.getText().toString().trim();
+        if (!sub.isEmpty()) sb.append(" · ").append(sub.contains("%s")
+                ? String.format(sub, "Buds 5 Pro 电竞版") : sub);
+        if (bat >= 0 || cas >= 0) {
+            sb.append("  |  L:").append(bat >= 0 ? bat + "%" : "--%")
+              .append("  R:").append(bat >= 0 ? bat + "%" : "--%")
+              .append("  Case:").append(cas >= 0 ? cas + "%" : "--%");
         }
-
-        if (pvFade != null) {
-            GradientDrawable fade = new GradientDrawable(
-                    GradientDrawable.Orientation.BOTTOM_TOP,
-                    new int[]{cardColor, Color.TRANSPARENT});
-            pvFade.setBackground(fade);
-        }
-
-        pvTitle.setTextColor(textColor);
-        pvSub.setTextColor(textColor);
-        String t = etTitle.getText().toString().trim();
-        pvTitle.setText(t.isEmpty() ? "耳机已连接" : t);
-        String subRaw = etSub.getText().toString();
-        if (subRaw.trim().isEmpty()) {
-            pvSub.setVisibility(View.GONE);
-        } else {
-            pvSub.setVisibility(View.VISIBLE);
-            pvSub.setText(subRaw.contains("%s")
-                    ? String.format(subRaw, "Buds 5 Pro 电竞版") : subRaw);
-        }
-
-        boolean showBat = swBattery.isChecked();
-        pvRingEarbud.setVisibility(showBat ? View.VISIBLE : View.GONE);
-        pvRingEarbud.setProgress(78);
-        pvRingEarbud.setRingColor(accent);
-        pvRingEarbud.setTrackColor(adjustAlpha(textColor, 0.22f));
-        pvRingEarbud.setTextColor(textColor);
-
-        boolean showBox = showBat && swCase.isChecked();
-        pvBoxGroup.setVisibility(showBox ? View.VISIBLE : View.GONE);
-        if (showBox) {
-            pvRingBox.setProgress(65);
-            pvRingBox.setRingColor(accent);
-            pvRingBox.setTrackColor(adjustAlpha(textColor, 0.22f));
-            pvRingBox.setTextColor(textColor);
-        }
+        pvInfo.setText(sb.toString());
+        pvInfo.setTextColor(adjustAlpha(textColor, 0.82f));
+        pvTip.setTextColor(adjustAlpha(textColor, 0.55f));
 
         String uri = prefs.imageUri();
         if (!uri.isEmpty()) {
-            pvImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            pvImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
             try {
-                Glide.with(this).load(Uri.parse(uri)).centerCrop().into(pvImage);
+                Glide.with(this).load(Uri.parse(uri)).fitCenter().into(pvImage);
             } catch (Exception e) {
                 pvImage.setImageResource(R.drawable.ic_headphone);
             }
         } else {
             pvImage.setImageResource(R.drawable.ic_headphone);
-            pvImage.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+            pvImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
         }
     }
 
