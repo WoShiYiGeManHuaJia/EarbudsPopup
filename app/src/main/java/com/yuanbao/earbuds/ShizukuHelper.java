@@ -191,16 +191,42 @@ public final class ShizukuHelper {
      * 自动探测 MIUI 扩展 AppOps：逐个尝试 set allow，
      * 不报错的即为有效编号，会被记录下来供后续硬编码。
      */
+    /**
+     * 探测 MIUI 扩展权限编号，并在设置后回读真实值确认是否真的生效。
+     * 小米会在系统重启、安全扫描或权限重置时把这些值改回 ignore，
+     * 所以不能只看 set 是否报错，必须 get 回来验证。
+     */
     public static List<String[]> probeOps() {
         List<String[]> res = new ArrayList<>();
         for (int op : CANDIDATE_OPS) {
             String set = exec("appops set " + PKG + " " + op + " allow");
             String get = exec("appops get " + PKG + " " + op);
-            boolean ok = !set.contains("Unknown") && !set.contains("unknown")
+            boolean cmdOk = !set.contains("Unknown") && !set.contains("unknown")
                     && !set.toLowerCase().contains("error");
-            res.add(new String[]{String.valueOf(op), ok ? "OK" : "FAIL", set, get});
+            // 回读：只有真的出现 allow 才算成功
+            boolean effective = get != null && get.toLowerCase().contains("allow");
+            res.add(new String[]{String.valueOf(op),
+                    cmdOk ? (effective ? "OK" : "命令通过但未生效") : "FAIL",
+                    set, get});
         }
         return res;
+    }
+
+    /** 回读关键权限的真实状态，用于设置后验证 */
+    public static String[] verifyKeyPerms() {
+        return new String[]{
+                "悬浮窗 SYSTEM_ALERT_WINDOW: "
+                        + trim(exec("appops get " + PKG + " SYSTEM_ALERT_WINDOW")),
+                "后台弹出界面 10021: " + trim(exec("appops get " + PKG + " 10021")),
+                "锁屏显示 10023: " + trim(exec("appops get " + PKG + " 10023")),
+                "锁屏显示 10024: " + trim(exec("appops get " + PKG + " 10024")),
+        };
+    }
+
+    private static String trim(String s) {
+        if (s == null) return "(无返回)";
+        String t = s.trim().replace("\n", " ");
+        return t.isEmpty() ? "(空)" : (t.length() > 90 ? t.substring(0, 90) : t);
     }
 
     /** 采集系统信息，供定制硬编码使用 */
