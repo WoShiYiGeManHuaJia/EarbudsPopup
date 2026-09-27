@@ -213,6 +213,19 @@ public final class BatteryProbe {
 
         // C. 先读系统隐藏单值作为对照
         int sys = readSystemBattery(device);
+        // 全文搜索：按 MAC 定位命中的往往是 BLE 扫描统计，不含电量
+        try {
+            if (ShizukuHelper.hasPermission()) {
+                String g1 = BatterySysQuery.grepBattery("bluetooth_manager");
+                log("---- battery 关键字(bluetooth_manager) ----");
+                log(g1.isEmpty() ? "(无命中)" : g1);
+                String g2 = BatterySysQuery.grepBattery("bluetooth");
+                log("---- battery 关键字(bluetooth) ----");
+                log(g2.isEmpty() ? "(无命中)" : g2);
+            }
+        } catch (Throwable t) {
+            log("全文搜索失败: " + t.getMessage());
+        }
         log("系统隐藏 getBatteryLevel() = " + sys);
         final int overall = sys;
 
