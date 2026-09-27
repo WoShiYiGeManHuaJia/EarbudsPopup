@@ -89,9 +89,11 @@ public final class PopupRenderer {
         String uri = prefs.imageUri();
         if (!uri.isEmpty()) {
             try {
+                // 不要对 GIF 用任何 Transformation：Glide 的 fitCenter 会逐帧重算，
+                // 直接把帧率打下来。用 ImageView 自己的 scaleType="fitCenter" 即可。
                 Glide.with(c.getApplicationContext())
                         .load(Uri.parse(uri))
-                        .fitCenter()            // 等价 object-fit: contain，不拉伸变形
+                        .dontTransform()
                         .into(img);
             } catch (Exception e) {
                 img.setImageResource(R.drawable.ic_headphone);
@@ -146,23 +148,35 @@ public final class PopupRenderer {
                 prefs == null ? "" : prefs.subText(), levels));
     }
 
-    /** 流光：一条斜向高光带从左扫到右 */
+    /** 流光：一条窄斜向高光带扫过，播完立即隐藏，绝不残留 */
     private static void startShimmer(Context c, View shimmer, int cardWidth) {
         shimmer.setBackgroundResource(R.drawable.bg_shimmer);
-        shimmer.setVisibility(View.VISIBLE);
-        float band = cardWidth * 0.55f;
+        float band = Math.max(24f, cardWidth * 0.22f);
         ViewGroup.LayoutParams lp = shimmer.getLayoutParams();
         if (lp != null) {
             lp.width = (int) band;
             shimmer.setLayoutParams(lp);
         }
+        shimmer.setVisibility(View.VISIBLE);
         TranslateAnimation a = new TranslateAnimation(
-                Animation.RELATIVE_TO_PARENT, -0.6f,
-                Animation.RELATIVE_TO_PARENT, 1.2f,
+                Animation.RELATIVE_TO_PARENT, -0.4f,
+                Animation.RELATIVE_TO_PARENT, 1.0f,
                 Animation.RELATIVE_TO_SELF, 0f,
                 Animation.RELATIVE_TO_SELF, 0f);
-        a.setDuration(900);
-        a.setStartOffset(180);
+        a.setDuration(760);
+        a.setStartOffset(120);
+        a.setAnimationListener(new Animation.AnimationListener() {
+            public void onAnimationStart(Animation an) {
+            }
+
+            public void onAnimationEnd(Animation an) {
+                shimmer.setVisibility(View.GONE);
+                shimmer.setBackground(null);
+            }
+
+            public void onAnimationRepeat(Animation an) {
+            }
+        });
         shimmer.startAnimation(a);
     }
 
@@ -179,16 +193,16 @@ public final class PopupRenderer {
     }
 
     /** 把蓝牙广播名换成更好看的显示名 */
+    /**
+     * 显示名：以用户在系统蓝牙里改的名字为准，绝不再做关键词替换。
+     * 之前把 "buds 5 pro" 强行换成官方名，导致用户自定义的名字被覆盖。
+     * 只有名字为空或明显是裸 MAC 时才兜底。
+     */
     public static String prettyName(String raw) {
         if (raw == null) return "耳机";
         String n = raw.trim();
-        String low = n.toLowerCase();
-        if (low.contains("buds 5 pro") || low.contains("buds5pro")) {
-            return n.contains("电竞") ? "Redmi Buds 5 Pro 电竞版" : "Redmi Buds 5 Pro";
-        }
-        if (low.contains("buds 5")) return "Redmi Buds 5";
-        if (low.contains("buds 4 pro")) return "Xiaomi Buds 4 Pro";
-        if (low.contains("airpods")) return "AirPods";
+        if (n.isEmpty()) return "耳机";
+        if (n.matches("^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$")) return "耳机";
         return n;
     }
 }
