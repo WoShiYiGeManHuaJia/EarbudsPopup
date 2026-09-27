@@ -67,6 +67,11 @@ public class LiveBlurView extends View {
     /** 渐隐带高度占本 View 高度的比例 */
     private float fadeRatio = 0.45f;
 
+    /** 底部两角圆角半径（px）。模糊层贴在卡片底部，两角必须跟卡片一致 */
+    private float bottomRadiusPx = 0f;
+    private final Paint cornerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private android.graphics.Path cornerPath;
+
     /** API < 31 时的逐帧降采样模糊缓冲 */
     private Bitmap smallBuf;
     private Canvas smallCanvas;
@@ -107,6 +112,44 @@ public class LiveBlurView extends View {
     public void setDim(int argb) {
         this.dimColor = argb;
         invalidate();
+    }
+
+    /** 设置底部两角圆角半径（px），与卡片圆角保持一致 */
+    public void setBottomCornerRadius(float px) {
+        this.bottomRadiusPx = Math.max(0f, px);
+        cornerPath = null;
+        invalidate();
+    }
+
+    /** 构建底部两角外侧需要擦除的路径（方块减圆的差集） */
+    private void ensureCornerPath(int w, int h) {
+        if (bottomRadiusPx <= 0f || w <= 0 || h <= 0) {
+            cornerPath = null;
+            return;
+        }
+        if (cornerPath != null) return;
+        float r = Math.min(bottomRadiusPx, Math.min(w, h) / 2f);
+        android.graphics.Path p = new android.graphics.Path();
+
+        // 左下角：方块(0,h-r)-(r,h) 减去 以(r,h-r)为圆心半径r的圆
+        android.graphics.Path sq1 = new android.graphics.Path();
+        sq1.addRect(0f, h - r, r, h, android.graphics.Path.Direction.CW);
+        android.graphics.Path c1 = new android.graphics.Path();
+        c1.addCircle(r, h - r, r, android.graphics.Path.Direction.CW);
+        sq1.op(c1, android.graphics.Path.Op.DIFFERENCE);
+        p.addPath(sq1);
+
+        // 右下角：方块(w-r,h-r)-(w,h) 减去 以(w-r,h-r)为圆心半径r的圆
+        android.graphics.Path sq2 = new android.graphics.Path();
+        sq2.addRect(w - r, h - r, w, h, android.graphics.Path.Direction.CW);
+        android.graphics.Path c2 = new android.graphics.Path();
+        c2.addCircle(w - r, h - r, r, android.graphics.Path.Direction.CW);
+        sq2.op(c2, android.graphics.Path.Op.DIFFERENCE);
+        p.addPath(sq2);
+
+        cornerPath = p;
+        cornerPaint.setXfermode(new android.graphics.PorterDuffXfermode(
+                android.graphics.PorterDuff.Mode.DST_OUT));
     }
 
     /** 设置顶部渐隐带高度（0 = 不做渐隐，即硬边） */
@@ -284,6 +327,17 @@ public class LiveBlurView extends View {
                 // 这样顶部=清晰原图，底部=模糊层，中间渐变过渡。
                 int saved = canvas.saveLayer(0f, 0f, vw, fh, null);
                 canvas.drawRect(0f, 0f, vw, fh, fadePaint);
+                canvas.restoreToCount(saved);
+            }
+        }
+
+        // 底部两角：按卡片圆角裁掉（模糊层贴在卡片底部，两角必须跟卡片一致）。
+        // 用 DST_OUT + 抗锯齿 Path 擦除，边缘平滑无锯齿。
+        if (bottomRadiusPx > 0f) {
+            ensureCornerPath(vw, vh);
+            if (cornerPath != null) {
+                int saved = canvas.saveLayer(0f, 0f, vw, vh, null);
+                canvas.drawPath(cornerPath, cornerPaint);
                 canvas.restoreToCount(saved);
             }
         }
