@@ -38,6 +38,10 @@ public class PopupActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // 必须先初始化 PrefsHolder：
+        // 图片的缩放/偏移存在这里，若 Activity 先于 Service 启动而没初始化，
+        // 渲染时拿到 null 会回退成默认 1 倍，用户设的缩放就丢了。
+        PopupRenderer.PrefsHolder.init(this);
         prefs = new Prefs(this);
         lastShownAt = System.currentTimeMillis();
 
