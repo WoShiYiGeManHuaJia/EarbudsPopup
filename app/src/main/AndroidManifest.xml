@@ -48,6 +48,16 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".PopupActivity"
+            android:theme="@style/Theme.Popup.System"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:launchMode="singleInstance"
+            android:taskAffinity=""
+            android:exported="false" />
+
         <service
             android:name=".PopupService"
             android:enabled="true"
