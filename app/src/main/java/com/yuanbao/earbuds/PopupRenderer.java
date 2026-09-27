@@ -58,6 +58,9 @@ public final class PopupRenderer {
         // ---------- 卡片尺寸 ----------
         int widthPx = (int) (prefs.widthDp() * d);
         int heightPx = (int) (widthPx * CARD_H_RATIO);
+        // 卡片底色：自动取色优先，否则用用户手填的颜色
+        int cardBg = parseColor(
+                prefs.autoColor() ? prefs.autoBgColor() : prefs.bgColor(), 0x1FFFFFFF);
         if (card != null) {
             ViewGroup.LayoutParams lp = card.getLayoutParams();
             lp.width = widthPx;
@@ -67,13 +70,23 @@ public final class PopupRenderer {
             // ---------- 液态玻璃外观 ----------
             GradientDrawable gd = new GradientDrawable();
             gd.setShape(GradientDrawable.RECTANGLE);
-            gd.setCornerRadius(24 * d);
-            gd.setColor(0x1FFFFFFF);            // rgba(255,255,255,0.12)
+            gd.setCornerRadius(prefs.radiusDp() * d);   // 用户可调
+            gd.setColor(cardBg);
             gd.setStroke(Math.max(1, (int) d), 0x33FFFFFF);
             card.setBackground(gd);
             card.setElevation(18 * d);
             card.setClipToOutline(true);        // 让内容与玻璃边框一起被圆角裁切
         }
+
+        // ---------- 三区比例：GIF 区占比由用户调节，剩余按 2:1 分给信息条与提示 ----------
+        float ratio = Math.max(0.30f, Math.min(0.92f, prefs.imageRatio()));
+        int gifW = Math.round(ratio * 100);
+        int rest = Math.max(6, 100 - gifW);
+        int infoW = Math.round(rest * 2f / 3f);
+        int tipW = Math.max(2, rest - infoW);
+        setWeight(gifWrap, gifW);
+        setWeight(infoBar, infoW);
+        setWeight(tipText, tipW);
 
         // ---------- GIF 区：容器衬底，防浅色发白 / 深色糊成一团 ----------
         if (gifWrap != null) {
@@ -138,6 +151,16 @@ public final class PopupRenderer {
 
         // 入场动画（显式对卡片执行，不依赖系统窗口动画）
         if (card != null) applyEnter(card, prefs.animStyle());
+    }
+
+    /** 动态设置 LinearLayout 子项的 weight，让「图片占弹窗高度」真正生效 */
+    private static void setWeight(View v, int weight) {
+        if (v == null) return;
+        ViewGroup.LayoutParams lp = v.getLayoutParams();
+        if (lp instanceof LinearLayout.LayoutParams) {
+            ((LinearLayout.LayoutParams) lp).weight = weight;
+            v.setLayoutParams(lp);
+        }
     }
 
     /**
