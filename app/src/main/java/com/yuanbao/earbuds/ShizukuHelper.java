@@ -83,20 +83,32 @@ public final class ShizukuHelper {
      * Shizuku API 13 起把 newProcess 改成了 private，
      * 这里用反射调用（社区通用做法），失败时降级到其它途径。
      */
+    /**
+     * 反射调用 Shizuku.newProcess。
+     * 各版本签名不一致，这里依次尝试多种形式；
+     * 之前 catch 分支里重复了与 try 完全相同的签名，
+     * 一旦 NoSuchMethodException 必然再次抛出，等于没有回退——纯死代码。
+     */
     private static Process newProcessViaReflection(String[] argv) throws Exception {
-        try {
-            java.lang.reflect.Method m = Shizuku.class.getDeclaredMethod(
-                    "newProcess", String[].class, String[].class, String.class);
-            m.setAccessible(true);
-            return (Process) m.invoke(null, argv, null, null);
-        } catch (NoSuchMethodException e) {
-            // 某些版本签名不同，退回到 Object 变体
-            java.lang.reflect.Method m = Shizuku.class.getDeclaredMethod(
-                    "newProcess", String[].class, String[].class, String.class);
-            m.setAccessible(true);
-            Object o = m.invoke(null, (Object) argv, null, null);
-            return (Process) o;
+        Exception last = null;
+        // 依次尝试：三参 (String[], String[], String) / 单参 (String[])
+        Class<?>[][] sigs = new Class<?>[][]{
+                {String[].class, String[].class, String.class},
+                {String[].class},
+        };
+        for (Class<?>[] sig : sigs) {
+            try {
+                java.lang.reflect.Method m = Shizuku.class.getDeclaredMethod("newProcess", sig);
+                m.setAccessible(true);
+                Object[] args = new Object[sig.length];
+                args[0] = argv;
+                for (int i = 1; i < sig.length; i++) args[i] = null;
+                return (Process) m.invoke(null, args);
+            } catch (Exception e) {
+                last = e;
+            }
         }
+        throw last != null ? last : new NoSuchMethodException("newProcess");
     }
 
     /** 执行一条 shell 命令，返回合并后的 stdout+stderr */
@@ -137,7 +149,18 @@ public final class ShizukuHelper {
             });
             t1.start();
             t2.start();
-            p.waitFor();
+            // 必须带超时：某些命令（如 dumpsys）可能挂起，
+            // waitFor() 无超时会让整个单线程池永久卡死，表现为「一键设置一直转圈」
+            boolean finished = p.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);
+            if (!finished) {
+                try {
+                    p.destroyForcibly();
+                } catch (Exception ignored) {
+                }
+                t1.join(1000);
+                t2.join(1000);
+                return (res(out, err) + "\n[超时] 命令执行超过 15 秒，已强制终止").trim();
+            }
             t1.join(3000);
             t2.join(3000);
 
@@ -154,6 +177,12 @@ public final class ShizukuHelper {
                 }
             }
         }
+    }
+
+    private static String res(StringBuilder out, StringBuilder err) {
+        StringBuilder sb = new StringBuilder(out);
+        if (err.length() > 0) sb.append("[stderr] ").append(err);
+        return sb.toString();
     }
 
     /** 一次性执行多条命令，返回「命令 → 输出」的条目列表 */
