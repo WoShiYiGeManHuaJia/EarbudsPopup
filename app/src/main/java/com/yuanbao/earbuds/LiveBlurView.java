@@ -137,13 +137,16 @@ public class LiveBlurView extends View {
     }
 
     private void applyEffect() {
-        // 关键：必须【禁用】RenderEffect。
-        // RenderEffect 作用于整个 View 的渲染输出，
-        // 于是 saveLayer 里那层「清晰原图」也会被一起模糊，
-        // 导致 DST_OUT 擦除后露出的仍是模糊内容 —— 过渡完全失效。
-        // 要做出「上清晰 → 下模糊」的渐变，必须自己逐帧模糊，
-        // 这样才能在同一 Canvas 内把清晰层和模糊层混合。
         hwBlurEnabled = false;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                setRenderEffect(android.graphics.RenderEffect.createBlurEffect(
+                        blurRadiusPx, blurRadiusPx, Shader.TileMode.CLAMP));
+                hwBlurEnabled = true;
+            } catch (Throwable ignored) {
+                // 设备不支持就退回逐帧降采样
+            }
+        }
     }
 
     /** 最小重绘间隔（ms）：把模糊重算限制在 ~30fps，降低 CPU 占用 */
@@ -244,37 +247,12 @@ public class LiveBlurView extends View {
 
         // 始终自行模糊（原因见 applyEffect 注释）
 
-        // ① 整块区域先铺一层模糊（逐帧重算 → 动态）
-        //
-        // 之前只做「降采样 1/10 再放大」，那本质是把像素块拉大，
-        // 看上是马赛克而不是模糊。现在改成两步：
-        //   a) 降采样到 1/4（倍数小，保留更多结构）
-        //   b) 对小图做 StackBlur（接近高斯），得到真正柔和的模糊
-        //   c) 再放大回原尺寸（双线性插值进一步平滑）
-        // 小图只有约 1/16 的像素量，StackBlur 每帧开销很低。
-        int factor = 4;
-        int bw = Math.max(1, vw / factor);
-        int bh = Math.max(1, vh / factor);
-        if (smallBuf == null || smallBuf.getWidth() != bw
-                || smallBuf.getHeight() != bh) {
-            smallBuf = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
-            smallCanvas = new Canvas(smallBuf);
+        if (hwBlurEnabled) {
+            // API 31+：直接画源内容，RenderEffect 在合成阶段逐帧做 GPU 模糊
+            drawSource(canvas, dr, sw, sh, vh);
+        } else {
+            drawManualBlur(canvas, dr, sw, sh, vw, vh);
         }
-        smallBuf.eraseColor(Color.TRANSPARENT);
-        smallCanvas.save();
-        smallCanvas.scale(1f / factor, 1f / factor);
-        drawSource(smallCanvas, dr, sw, sh, vh);
-        smallCanvas.restore();
-
-        // 小图上做真模糊。半径换算：原图半径 / 降采样倍数，再限幅。
-        int radius = Math.max(4, Math.min(16, Math.round(blurRadiusPx / 5f)));
-        stackBlur(smallBuf, radius);
-
-        canvas.save();
-        canvas.scale(factor, factor);
-        canvas.drawBitmap(smallBuf, 0, 0, upscalePaint);
-        canvas.restore();
-
         // 叠一层半透明色，保证文字可读
         canvas.drawColor(dimColor);
 
@@ -292,10 +270,16 @@ public class LiveBlurView extends View {
             float fh = vh * fadeRatio;
             ensureGradient(vw, vh);
             if (fadeGradient != null && fh > 0f) {
+                // 只做擦除，不画内容。
+                //
+                // 关键修正：之前在图层里又画了一遍「清晰原图」，
+                // 但 RenderEffect 会模糊整个 View 的渲染输出，
+                // 那层原图同样被糊掉 —— 于是顶部并不清晰，过渡失效。
+                //
+                // 正确做法：本 View 只负责提供「模糊层」，
+                // 顶部用 DST_OUT 擦成透明，直接露出【下面那张清晰的 ImageView】。
+                // 这样顶部=清晰原图，底部=模糊层，中间渐变过渡。
                 int saved = canvas.saveLayer(0f, 0f, vw, fh, null);
-                // 图层内：画清晰源内容（不加模糊）
-                drawSource(canvas, dr, sw, sh, vh);
-                // 顶部不擦(清晰) → 底部全擦(露出模糊)
                 canvas.drawRect(0f, 0f, vw, fh, fadePaint);
                 canvas.restoreToCount(saved);
             }
@@ -529,6 +513,39 @@ public class LiveBlurView extends View {
             }
         }
         bmp.setPixels(pix, 0, w, 0, 0, w, h);
+    }
+
+    /**
+     * 手动模糊（RenderEffect 不可用时的兜底）：
+     * 降采样 → StackBlur → 放大。小图像素少，逐帧开销可控。
+     */
+    private void drawManualBlur(Canvas canvas, Drawable dr, int sw, int sh,
+                                int vw, int vh) {
+        int factor = 4;
+        int bw = Math.max(1, vw / factor);
+        int bh = Math.max(1, vh / factor);
+        if (smallBuf == null || smallBuf.getWidth() != bw
+                || smallBuf.getHeight() != bh) {
+            smallBuf = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
+            smallCanvas = new Canvas(smallBuf);
+        }
+        smallBuf.eraseColor(Color.TRANSPARENT);
+        smallCanvas.save();
+        smallCanvas.scale(1f / factor, 1f / factor);
+        drawSource(smallCanvas, dr, sw, sh, vh);
+        smallCanvas.restore();
+
+        int radius = Math.max(4, Math.min(16, Math.round(blurRadiusPx / 5f)));
+        try {
+            stackBlur(smallBuf, radius);
+        } catch (Throwable t) {
+            // StackBlur 出错也不能让弹窗崩，退化成纯降采样
+        }
+
+        canvas.save();
+        canvas.scale(factor, factor);
+        canvas.drawBitmap(smallBuf, 0, 0, upscalePaint);
+        canvas.restore();
     }
 
     /**
