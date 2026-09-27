@@ -118,6 +118,46 @@
                 app:iconGravity="textStart" />
         </LinearLayout>
 
+        <!-- ===== 电量探测 ===== -->
+        <TextView
+            style="@style/TextSectionTitle"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="24dp"
+            android:text="电量探测" />
+
+        <LinearLayout
+            style="@style/AppGroup"
+            android:layout_marginTop="10dp"
+            android:elevation="1dp">
+
+            <LinearLayout
+                android:id="@+id/rowProbe"
+                style="@style/AppRow">
+
+                <ImageView
+                    style="@style/AppRowIcon"
+                    android:contentDescription="探测"
+                    android:src="@drawable/ic_battery" />
+
+                <LinearLayout style="@style/AppRowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="探测三方电量（左/右/充电盒）" />
+                    <TextView
+                        style="@style/TextRowSub"
+                        android:id="@+id/tvProbeHint"
+                        android:text="会扫描 BLE 广播并读取 GATT 电量服务" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/AppRowIcon"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription="前往"
+                    android:src="@drawable/ic_chevron" />
+            </LinearLayout>
+        </LinearLayout>
+
         <!-- ===== 系统级效果 ===== -->
         <TextView
             style="@style/TextSectionTitle"
