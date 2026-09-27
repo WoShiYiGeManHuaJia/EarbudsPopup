@@ -45,6 +45,33 @@ public class PopupService extends Service {
     /** 沉底模式距屏幕底部的边距（dp） */
     public static final int BOTTOM_MARGIN_DP = 28;
 
+    /**
+     * 按连续垂直位置算出距屏幕顶部的偏移。
+     * 上下各留安全边距（顶部避挖孔、底部避手势条），中间线性分布。
+     */
+    public static int topOffsetForVPos(int vpos, int cardHeightPx, int screenHeightPx) {
+        return topOffsetForVPos(vpos, cardHeightPx, screenHeightPx, 0f);
+    }
+
+    /**
+     * 按连续垂直位置算出距屏幕顶部的偏移（px）。
+     *
+     * 0   → 贴顶（仅留顶部安全边距）
+     * 100 → 贴底（仅留底部安全边距）
+     * 中间 → 在可用空间内线性分布
+     *
+     * @param density 用于把 dp 安全边距换算成 px
+     */
+    public static int topOffsetForVPos(int vpos, int cardHeightPx,
+                                       int screenHeightPx, float density) {
+        int topPad = (int) (24 * density);
+        int botPad = (int) (24 * density);
+        int usable = screenHeightPx - cardHeightPx - topPad - botPad;
+        if (usable <= 0) return topPad;
+        int v = Math.max(0, Math.min(100, vpos));
+        return topPad + Math.round(usable * v / 100f);
+    }
+
     public static final String ACTION_SHOW = "com.yuanbao.earbuds.ACTION_SHOW";
     public static final String ACTION_RESTART = "com.yuanbao.earbuds.ACTION_RESTART";
     public static final String EXTRA_NAME = "name";
@@ -548,27 +575,29 @@ public class PopupService extends Service {
                 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                 : WindowManager.LayoutParams.TYPE_PHONE;
 
+        // 高度必须写死：媒体区子 View 是 match_parent，
+        // 用 WRAP_CONTENT 会让卡片高度失控（表现为比例奇怪）。
+        // 算法与 PopupRenderer / PopupActivity 保持一致。
+        float r = Math.max(0.40f, Math.min(0.94f, prefs.imageRatio()));
+        int widthPx = (int) dp(prefs.widthDp());
+        int heightPx = (int) (widthPx * (0.45f + r * 0.33f));
+
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(
-                (int) dp(prefs.widthDp()),
-                WindowManager.LayoutParams.WRAP_CONTENT,
+                widthPx,
+                heightPx,
                 type,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                         | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT);
 
-        int pos = prefs.position();
-        if (pos == 0) {
-            p.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-            p.y = (int) dp(72);
-        } else if (pos == 2) {
-            // 沉底：真正的靠底，只留一点安全边距（类小米官方弹窗）
-            p.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-            p.y = (int) dp(BOTTOM_MARGIN_DP);
-        } else {
-            p.gravity = Gravity.CENTER;
-            p.y = 0;
-        }
+        // 连续垂直位置：0=贴顶 100=贴底。
+        // 用 TOP gravity + 计算出的 y 偏移，比三档重力更精细可调。
+        int vpos = prefs.verticalPos();
+        p.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        int screenH = getResources().getDisplayMetrics().heightPixels;
+        float dens = getResources().getDisplayMetrics().density;
+        p.y = topOffsetForVPos(vpos, heightPx, screenH, dens);
 
         try {
             wm.addView(v, p);
