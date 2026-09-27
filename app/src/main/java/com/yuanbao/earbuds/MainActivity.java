@@ -50,7 +50,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView permStatus;
     private LinearLayout deviceList;
     private ImageView imgPreview;
-    private EditText etTitle, etSub, etBg, etTextColor;
+    private EditText etTitle, etSub, etBg, etTextColor, etAccent;
     private SeekBar sbWidth, sbRadius, sbImgH, sbDuration;
     private TextView tvWidth, tvRadius, tvImgH, tvDuration;
     private Spinner spPos, spAnim;
@@ -92,6 +92,7 @@ public class MainActivity extends AppCompatActivity {
         etSub = findViewById(R.id.etSub);
         etBg = findViewById(R.id.etBg);
         etTextColor = findViewById(R.id.etTextColor);
+        etAccent = findViewById(R.id.etAccent);
         sbWidth = findViewById(R.id.sbWidth);
         sbRadius = findViewById(R.id.sbRadius);
         sbImgH = findViewById(R.id.sbImgH);
@@ -114,6 +115,7 @@ public class MainActivity extends AppCompatActivity {
         etSub.setText(prefs.subText());
         etBg.setText(prefs.bgColor());
         etTextColor.setText(prefs.textColor());
+        etAccent.setText(prefs.accentColor());
         sbWidth.setProgress(prefs.widthDp() - 180);
         sbRadius.setProgress(prefs.radiusDp());
         sbImgH.setProgress(prefs.imageHeightDp() - 60);
@@ -155,6 +157,7 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "已保存", Toast.LENGTH_SHORT).show();
         });
         findViewById(R.id.btnRefresh).setOnClickListener(v -> refreshDevices());
+        findViewById(R.id.btnBlockMi).setOnClickListener(v -> showMiPopupGuide());
 
         SeekBar.OnSeekBarChangeListener sl = new SeekBar.OnSeekBarChangeListener() {
             public void onProgressChanged(SeekBar sb, int p, boolean b) {
@@ -234,6 +237,8 @@ public class MainActivity extends AppCompatActivity {
         prefs.setBgColor(bg.isEmpty() ? "#E6222426" : bg);
         String tc = etTextColor.getText().toString().trim();
         prefs.setTextColor(tc.isEmpty() ? "#FFFFFFFF" : tc);
+        String ac = etAccent.getText().toString().trim();
+        prefs.setAccentColor(ac.isEmpty() ? "#FF00E5A0" : ac);
         prefs.setWidthDp(sbWidth.getProgress() + 180);
         prefs.setRadiusDp(sbRadius.getProgress());
         prefs.setImageHeightDp(sbImgH.getProgress() + 60);
@@ -381,6 +386,46 @@ public class MainActivity extends AppCompatActivity {
                 Toast.LENGTH_LONG).show();
     }
 
+    private void showMiPopupGuide() {
+        String msg =
+                "Redmi K70 Pro（HyperOS 2）上关掉小米原生快连弹窗，三种方式任选一种：\n\n"
+                + "【方式一｜最干净，纯系统设置】\n"
+                + "设置 → 蓝牙 → 右上角/底部「高级设置」→ 关闭「小米快连」。\n"
+                + "关掉后系统原生弹窗不再出现，蓝牙连接、低延迟模式都不受影响，耳机电量仍可在通知栏和蓝牙页面查看。\n\n"
+                + "【方式二｜只关这一副耳机】\n"
+                + "设置 → 蓝牙 → 点 Redmi Buds 5 Pro 电竞版 右边的「>」→ 关闭「连接弹窗 / 弹窗动画」。\n\n"
+                + "【方式三｜ADB，温和屏蔽】\n"
+                + "adb shell appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW ignore\n"
+                + "（只禁它的悬浮窗，不动蓝牙连接。想恢复把 ignore 换成 allow）\n\n"
+                + "如果三种都不生效：设置 → 蓝牙 → 高级设置 → 把「小米快连」关掉再打开一次，"
+                + "或进 设置 → 应用设置 → 应用管理 → 搜索「MIUI蓝牙」→ 清除数据，然后重连耳机。";
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("屏蔽小米原生弹窗")
+                .setMessage(msg)
+                .setPositiveButton("复制ADB命令", (d, w) -> copyMiBlockCommands())
+                .setNegativeButton("知道了", null)
+                .show();
+    }
+
+    private void copyMiBlockCommands() {
+        String cmds =
+                "# 屏蔽小米快连弹窗（不影响蓝牙连接）\n"
+                + "adb shell appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW ignore\n\n"
+                + "# 恢复命令（需要时用）\n"
+                + "# adb shell appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW allow\n\n"
+                + "# 本 App 自身权限\n"
+                + "adb shell appops set com.yuanbao.earbuds SYSTEM_ALERT_WINDOW allow\n"
+                + "adb shell pm grant com.yuanbao.earbuds android.permission.BLUETOOTH_CONNECT\n"
+                + "adb shell pm grant com.yuanbao.earbuds android.permission.BLUETOOTH_SCAN\n"
+                + "adb shell pm grant com.yuanbao.earbuds android.permission.POST_NOTIFICATIONS\n"
+                + "adb shell dumpsys deviceidle whitelist +com.yuanbao.earbuds";
+        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (cm != null) {
+            cm.setPrimaryClip(ClipData.newPlainText("adb", cmds));
+            Toast.makeText(this, "已复制屏蔽命令", Toast.LENGTH_SHORT).show();
+        }
+    }
+
     private void copyAdbCommands() {
         String cmds =
                 "# 1) 悬浮窗权限（小米上最省事的一步）\n"
@@ -393,9 +438,10 @@ public class MainActivity extends AppCompatActivity {
                         + "adb shell pm grant com.yuanbao.earbuds android.permission.READ_EXTERNAL_STORAGE\n\n"
                         + "# 3) 加入省电白名单，防止服务被杀\n"
                         + "adb shell dumpsys deviceidle whitelist +com.yuanbao.earbuds\n\n"
-                        + "# 4) 可选：屏蔽小米原生快连弹窗（只禁悬浮窗，不影响蓝牙连接）\n"
-                        + "adb shell appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW ignore\n"
-                        + "adb shell appops set com.android.bluetooth SYSTEM_ALERT_WINDOW ignore\n";
+                        + "# 4) 屏蔽小米原生快连弹窗（只禁悬浮窗，不影响蓝牙连接）\n"
+                        + "adb shell appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW ignore\n\n"
+                        + "# 5) K70 Pro 后台保活\n"
+                        + "adb shell dumpsys deviceidle whitelist +com.yuanbao.earbuds\n";
         ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         if (cm != null) {
             cm.setPrimaryClip(ClipData.newPlainText("adb", cmds));
