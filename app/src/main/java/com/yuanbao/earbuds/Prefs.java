@@ -84,6 +84,66 @@ public class Prefs {
         sp.edit().putString("image_uri", s == null ? "" : s).apply();
     }
 
+    // ---------- 文字颜色（标题 / 电量 / 状态 三档分开） ----------
+    // 之前只有一个统一文字色，无法像参考图那样给不同行配不同颜色。
+    public String titleColor() {
+        return sp.getString("color_title", "");
+    }
+
+    public void setTitleColor(String s) {
+        sp.edit().putString("color_title", s == null ? "" : s).apply();
+    }
+
+    public String batteryColor() {
+        return sp.getString("color_battery", "");
+    }
+
+    public void setBatteryColor(String s) {
+        sp.edit().putString("color_battery", s == null ? "" : s).apply();
+    }
+
+    public String statusColor() {
+        return sp.getString("color_status", "");
+    }
+
+    public void setStatusColor(String s) {
+        sp.edit().putString("color_status", s == null ? "" : s).apply();
+    }
+
+    // ---------- 图片 / GIF 历史 ----------
+    // 存最近用过的 12 个 URI，方便快速切回以前上传过的图。
+    private static final String KEY_IMG_HISTORY = "img_history";
+    private static final int HISTORY_MAX = 12;
+
+    public java.util.List<String> imageHistory() {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        String raw = sp.getString(KEY_IMG_HISTORY, "");
+        if (raw.isEmpty()) return out;
+        String[] parts = raw.split("\n");
+        for (String u : parts) {
+            if (u != null && !u.trim().isEmpty()) out.add(u.trim());
+        }
+        return out;
+    }
+
+    /** 记录一次使用；已存在则提到最前面，超出上限丢弃最旧的 */
+    public void addImageHistory(String uri) {
+        if (uri == null || uri.trim().isEmpty()) return;
+        java.util.List<String> list = imageHistory();
+        list.remove(uri);
+        list.add(0, uri);
+        while (list.size() > HISTORY_MAX) {
+            list.remove(list.size() - 1);
+        }
+        sp.edit().putString(KEY_IMG_HISTORY, android.text.TextUtils.join("\n", list)).apply();
+    }
+
+    public void removeImageHistory(String uri) {
+        java.util.List<String> list = imageHistory();
+        list.remove(uri);
+        sp.edit().putString(KEY_IMG_HISTORY, android.text.TextUtils.join("\n", list)).apply();
+    }
+
     public String titleText() {
         return sp.getString("title", "Buds 5 Pro 电竞版");
     }
