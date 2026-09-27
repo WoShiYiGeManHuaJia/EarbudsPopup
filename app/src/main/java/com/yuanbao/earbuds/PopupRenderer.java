@@ -61,7 +61,7 @@ public final class PopupRenderer {
         View shimmer = root.findViewById(R.id.shimmer);
         View gradientFade = root.findViewById(R.id.gradientFade);
         final View detailArea = root.findViewById(R.id.detailArea);
-        final ImageView detailBlurBg = root.findViewById(R.id.detailBlurBg);
+        final LiveBlurView detailBlurBg = root.findViewById(R.id.detailBlurBg);
         TextView tvDeviceName = root.findViewById(R.id.tvDeviceName);
         TextView tvBattery = root.findViewById(R.id.tvBattery);
         TextView tvCase = root.findViewById(R.id.tvCase);
@@ -200,7 +200,7 @@ public final class PopupRenderer {
             detailArea.setTranslationY(18 * d);
             final RoundedCardLayout fCard = card;
             main.postDelayed(() -> {
-                applyBlurBackdrop(fCard, detailArea, detailBlurBg, cardBg);
+                setupLiveBlur(detailBlurBg, img, cardBg);
                 detailArea.animate()
                         .alpha(1f)
                         .translationY(0f)
@@ -212,57 +212,22 @@ public final class PopupRenderer {
     }
 
     /**
-     * 把详情区所在的那一块画面捕获下来做模糊，作为详情区的背景。
+     * 让详情区背景变成【实时动态模糊】。
      *
-     * 为什么要「动态模糊」而不是直接铺个半透明黑条：
-     *   用户明确要求「这部分变得模糊起来，再显示文字」。
-     *   这里在详情区即将出现前才捕获，捕获的是当前这一帧的真实内容，
-     *   所以模糊的是动画当时的画面。
+     * 之前是 card.draw() 截一帧再降采样 —— 那是静态截图，
+     * GIF 在动而背景不动，所以看起来很假。
      *
-     * 模糊实现：降采样 1/10 再放大回来（双线性插值），
-     *   无需 RenderScript / RenderEffect，全版本可用且非常快。
+     * 现在把模糊层直接绑到源 ImageView 的同一个 Drawable 上：
+     *   源每前进一帧 → 回调转发 → 模糊层 invalidate → 重新绘制并模糊。
+     * 背景与动画始终同步，是真正的动态模糊。
      */
-    private static void applyBlurBackdrop(View card, View detailArea,
-                                          ImageView detailBlurBg, int cardBg) {
-        if (card == null || detailArea == null || detailBlurBg == null) return;
-        int cw = card.getWidth();
-        int ch = card.getHeight();
-        int dh = detailArea.getHeight();
-        if (cw <= 0 || ch <= 0 || dh <= 0) return;
-
-        try {
-            // 捕获前先隐藏详情区，避免把自己也画进去
-            int oldVis = detailArea.getVisibility();
-            detailArea.setVisibility(View.INVISIBLE);
-
-            Bitmap src = Bitmap.createBitmap(cw, dh, Bitmap.Config.ARGB_8888);
-            Canvas cv = new Canvas(src);
-            // 只画卡片底部那一段
-            cv.translate(0, -(ch - dh));
-            card.draw(cv);
-
-            detailArea.setVisibility(oldVis);
-
-            // 降采样再放大 = 快速模糊
-            int sw = Math.max(1, cw / 10);
-            int sh = Math.max(1, dh / 10);
-            Bitmap small = Bitmap.createScaledBitmap(src, sw, sh, true);
-            Bitmap blurred = Bitmap.createScaledBitmap(small, cw, dh, true);
-
-            // 叠一层半透明卡片色，保证文字可读
-            Canvas oc = new Canvas(blurred);
-            oc.drawColor(applyAlpha(cardBg, 0.55f));
-
-            detailBlurBg.setVisibility(View.VISIBLE);
-            detailBlurBg.setImageDrawable(new BitmapDrawable(
-                    detailBlurBg.getResources(), blurred));
-
-            if (small != src && !small.isRecycled()) small.recycle();
-            if (!src.isRecycled() && src != blurred) src.recycle();
-        } catch (Throwable ignored) {
-            // 捕获失败就退回纯色背景，不影响弹窗显示
-            detailBlurBg.setVisibility(View.GONE);
-        }
+    private static void setupLiveBlur(LiveBlurView blur, ImageView img, int cardBg) {
+        if (blur == null || img == null) return;
+        float d = blur.getResources().getDisplayMetrics().density;
+        blur.setBlurRadius(22f * d);
+        // 叠一层半透明卡片色，保证文字可读
+        blur.setDim(applyAlpha(cardBg, 0.45f));
+        blur.setSource(img);
     }
 
     /** 左/右耳电量文本 */
