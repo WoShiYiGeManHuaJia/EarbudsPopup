@@ -290,6 +290,48 @@ public class LiveBlurView extends View {
         // 自己再做 DST_OUT / outline 反而会与父裁剪冲突，且都被 RenderEffect 破坏。
     }
 
+    /** 最小重绘间隔（ms）：把模糊重算限制在 ~30fps，降低 CPU 占用 */
+    private static final long MIN_REDRAW_MS = 33L;
+    private long lastDrawAt = 0L;
+
+    private void attachCallback(Drawable dr) {
+        attached = dr;
+        originalCallback = dr.getCallback();
+        final ImageView source = src;
+        final Handler h = new Handler(Looper.getMainLooper());
+
+        dr.setCallback(new Drawable.Callback() {
+            @Override
+            public void invalidateDrawable(Drawable who) {
+                // 关键：先让源继续刷新（否则 GIF 会停），再刷新自己
+                if (originalCallback != null) originalCallback.invalidateDrawable(who);
+                long now = android.os.SystemClock.uptimeMillis();
+                if (now - lastDrawAt >= MIN_REDRAW_MS) {
+                    lastDrawAt = now;
+                    invalidate();
+                }
+            }
+
+            @Override
+            public void scheduleDrawable(Drawable who, Runnable what, long when) {
+                if (originalCallback != null) {
+                    originalCallback.scheduleDrawable(who, what, when);
+                } else if (source != null) {
+                    h.postDelayed(what, when - android.os.SystemClock.uptimeMillis());
+                }
+            }
+
+            @Override
+            public void unscheduleDrawable(Drawable who, Runnable what) {
+                if (originalCallback != null) {
+                    originalCallback.unscheduleDrawable(who, what);
+                } else if (source != null) {
+                    source.removeCallbacks(what);
+                }
+            }
+        });
+    }
+
     /** 按需分配（并复用）stackBlur 所需的缓冲区 */
     private void ensureBlurBuffers(int w, int h) {
         if (bufW == w && bufH == h && bufPix != null) return;
