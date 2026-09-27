@@ -1,0 +1,370 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipToPadding="false"
+    android:overScrollMode="never"
+    android:paddingStart="16dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="24dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- ===== 触发方式 ===== -->
+        <TextView
+            style="@style/TextSectionTitle"
+            android:layout_marginStart="4dp"
+            android:text="触发方式" />
+
+        <LinearLayout
+            style="@style/Widget.App.Group"
+            android:layout_marginTop="10dp"
+            android:elevation="1dp">
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/swMaster"
+                style="@style/Widget.App.Item"
+                android:drawableStart="@drawable/ic_bolt"
+                android:text="总开关"
+                android:textSize="15.5sp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="?attr/colorSurfaceVariant" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/swWired"
+                style="@style/Widget.App.Item"
+                android:drawableStart="@drawable/ic_bluetooth"
+                android:text="有线耳机插入也弹窗"
+                android:textSize="15.5sp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="?attr/colorSurfaceVariant" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/swAutoStart"
+                style="@style/Widget.App.Item"
+                android:drawableStart="@drawable/ic_power"
+                android:text="开机自启"
+                android:textSize="15.5sp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="?attr/colorSurfaceVariant" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/swBattery"
+                style="@style/Widget.App.Item"
+                android:drawableStart="@drawable/ic_battery"
+                android:text="显示耳机电量"
+                android:textSize="15.5sp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="?attr/colorSurfaceVariant" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/swCase"
+                style="@style/Widget.App.Item"
+                android:drawableStart="@drawable/ic_battery"
+                android:text="显示充电盒电量"
+                android:textSize="15.5sp" />
+        </LinearLayout>
+
+        <!-- ===== 触发设备 ===== -->
+        <TextView
+            style="@style/TextSectionTitle"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="24dp"
+            android:text="触发设备" />
+
+        <LinearLayout
+            style="@style/Widget.App.Group"
+            android:layout_marginTop="10dp"
+            android:elevation="1dp"
+            android:padding="16dp">
+
+            <LinearLayout
+                android:id="@+id/deviceList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnRefresh"
+                style="@style/Widget.App.Button.Tonal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:minHeight="44dp"
+                android:text="刷新设备列表"
+                android:textSize="13sp"
+                app:icon="@drawable/ic_devices"
+                app:iconGravity="textStart" />
+        </LinearLayout>
+
+        <!-- ===== 系统级效果 ===== -->
+        <TextView
+            style="@style/TextSectionTitle"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="24dp"
+            android:text="系统级效果" />
+
+        <LinearLayout
+            style="@style/Widget.App.Group"
+            android:layout_marginTop="10dp"
+            android:elevation="1dp">
+
+            <LinearLayout
+                android:id="@+id/rowEngine"
+                style="@style/Widget.App.Row">
+
+                <ImageView
+                    style="@style/Widget.App.RowIcon"
+                    android:contentDescription="引擎"
+                    android:src="@drawable/ic_layers" />
+
+                <LinearLayout style="@style/Widget.App.RowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="弹出引擎" />
+                    <TextView
+                        style="@style/TextRowSub"
+                        android:text="智能模式失败会自动降级" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvEngine"
+                    style="@style/TextRowValue"
+                    android:text="智能" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="?attr/colorSurfaceVariant" />
+
+            <LinearLayout
+                android:id="@+id/rowDim"
+                style="@style/Widget.App.Row">
+
+                <ImageView
+                    style="@style/Widget.App.RowIcon"
+                    android:contentDescription="压暗"
+                    android:src="@drawable/ic_preview" />
+
+                <LinearLayout style="@style/Widget.App.RowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="背景压暗" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvDim"
+                    style="@style/TextRowValue"
+                    android:text="30%" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="?attr/colorSurfaceVariant" />
+
+            <LinearLayout
+                android:id="@+id/rowBlur"
+                style="@style/Widget.App.Row">
+
+                <ImageView
+                    style="@style/Widget.App.RowIcon"
+                    android:contentDescription="模糊"
+                    android:src="@drawable/ic_preview" />
+
+                <LinearLayout style="@style/Widget.App.RowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="背景模糊半径" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvBlur"
+                    style="@style/TextRowValue"
+                    android:text="24 dp" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="?attr/colorSurfaceVariant" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/swLock"
+                style="@style/Widget.App.Item"
+                android:drawableStart="@drawable/ic_lock"
+                android:text="锁屏 / 熄屏时也弹"
+                android:textSize="15.5sp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="?attr/colorSurfaceVariant" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/swNoFocus"
+                style="@style/Widget.App.Item"
+                android:drawableStart="@drawable/ic_bolt"
+                android:text="不夺取焦点（游戏时不打断）"
+                android:textSize="15.5sp" />
+        </LinearLayout>
+
+        <!-- ===== 后台与省电 ===== -->
+        <TextView
+            style="@style/TextSectionTitle"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="24dp"
+            android:text="后台与省电" />
+
+        <LinearLayout
+            style="@style/Widget.App.Group"
+            android:layout_marginTop="10dp"
+            android:elevation="1dp">
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/swPowerSave"
+                style="@style/Widget.App.Item"
+                android:drawableStart="@drawable/ic_power"
+                android:text="省电模式"
+                android:textSize="15.5sp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="?attr/colorSurfaceVariant" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/swHideNoti"
+                style="@style/Widget.App.Item"
+                android:drawableStart="@drawable/ic_notification"
+                android:text="隐藏后台通知"
+                android:textSize="15.5sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            style="@style/Widget.App.Group"
+            android:layout_marginTop="8dp"
+            android:elevation="1dp"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:lineSpacingExtra="3dp"
+                android:text="Android 8 起系统强制前台服务显示通知。打开「隐藏后台通知」后本 App 会把通知降到最低级别，再点下面的按钮去系统设置关掉它，通知栏就彻底干净了，服务照常运行。"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="11.5sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnNotiSettings"
+                style="@style/Widget.App.Button.Tonal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:minHeight="44dp"
+                android:text="去系统设置关闭通知"
+                android:textSize="13sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnBattery"
+                style="@style/Widget.App.Button.Tonal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:minHeight="44dp"
+                android:text="加入电池优化白名单"
+                android:textSize="13sp"
+                app:icon="@drawable/ic_shield"
+                app:iconGravity="textStart" />
+        </LinearLayout>
+
+        <!-- ===== 关于 ===== -->
+        <TextView
+            style="@style/TextSectionTitle"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="24dp"
+            android:text="关于" />
+
+        <LinearLayout
+            style="@style/Widget.App.Group"
+            android:layout_marginTop="10dp"
+            android:elevation="1dp">
+
+            <LinearLayout
+                android:id="@+id/rowMiPerm"
+                style="@style/Widget.App.Row">
+
+                <ImageView
+                    style="@style/Widget.App.RowIcon"
+                    android:contentDescription="授权"
+                    android:src="@drawable/ic_shield" />
+
+                <LinearLayout style="@style/Widget.App.RowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="复制 MIUI 授权命令" />
+                    <TextView
+                        style="@style/TextRowSub"
+                        android:text="后台弹出界面权限" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.RowIcon"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription="前往"
+                    android:src="@drawable/ic_chevron" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="?attr/colorSurfaceVariant" />
+
+            <LinearLayout
+                android:id="@+id/rowInfo"
+                style="@style/Widget.App.Row">
+
+                <ImageView
+                    style="@style/Widget.App.RowIcon"
+                    android:contentDescription="信息"
+                    android:src="@drawable/ic_info" />
+
+                <LinearLayout style="@style/Widget.App.RowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="不联网 · 不上传 · 配置仅存本地" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>
