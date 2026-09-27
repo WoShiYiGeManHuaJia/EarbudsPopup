@@ -102,7 +102,9 @@ public class MainActivity extends AppCompatActivity {
                 } catch (Exception ignored) {
                 }
                 prefs.setImageUri(uri.toString());
+                prefs.addImageHistory(uri.toString());
                 loadThumb();
+                renderImageHistory();
                 updatePreview();
                 extractTheme(uri);
             });
@@ -268,6 +270,7 @@ public class MainActivity extends AppCompatActivity {
 
         syncValueLabels();
         loadThumb();
+        renderImageHistory();
         updatePreview();
         showDeviceInfo();
         bindingUi = false;
@@ -660,6 +663,188 @@ public class MainActivity extends AppCompatActivity {
         bindColorRow(R.id.rowBg, swatchBg, prefs::bgColor, prefs::setBgColor);
         bindColorRow(R.id.rowTextColor, swatchText, prefs::textColor, prefs::setTextColor);
         bindColorRow(R.id.rowAccent, swatchAccent, prefs::accentColor, prefs::setAccentColor);
+        setupTextColorTabs();
+    }
+
+    // ---------- 文字颜色分档（标题 / 电量 / 状态） ----------
+    // 当前正在编辑哪一档：0=标题 1=电量 2=状态
+    private int textColorTarget = 0;
+
+    /** 预设色点：照参考图给一排常用色，点击即换 */
+    private static final int[] TEXT_PRESETS = {
+            0xFFFFFFFF, 0xFF000000, 0xFF4ADE80, 0xFF60A5FA,
+            0xFFF472B6, 0xFFFACC15, 0xFFA78BFA, 0xFFFB923C,
+            0xFF94A3B8, 0xFF22D3EE,
+    };
+
+    private void setupTextColorTabs() {
+        com.google.android.material.button.MaterialButton b0 = findViewById(R.id.tabColorTitle);
+        com.google.android.material.button.MaterialButton b1 = findViewById(R.id.tabColorBattery);
+        com.google.android.material.button.MaterialButton b2 = findViewById(R.id.tabColorStatus);
+        if (b0 == null || b1 == null || b2 == null) return;
+
+        b0.setOnClickListener(v -> selectTextColorTarget(0));
+        b1.setOnClickListener(v -> selectTextColorTarget(1));
+        b2.setOnClickListener(v -> selectTextColorTarget(2));
+
+        buildColorDots();
+        selectTextColorTarget(0);
+    }
+
+    private void selectTextColorTarget(int which) {
+        textColorTarget = which;
+        com.google.android.material.button.MaterialButton[] bs = {
+                findViewById(R.id.tabColorTitle),
+                findViewById(R.id.tabColorBattery),
+                findViewById(R.id.tabColorStatus),
+        };
+        for (int i = 0; i < bs.length; i++) {
+            if (bs[i] == null) continue;
+            // 选中的那档用实心按钮，其余弱化
+            bs[i].setAlpha(i == which ? 1f : 0.5f);
+        }
+        refreshColorDots();
+    }
+
+    private void buildColorDots() {
+        LinearLayout box = findViewById(R.id.colorDots);
+        if (box == null) return;
+        box.removeAllViews();
+        float d = getResources().getDisplayMetrics().density;
+        int size = (int) (32 * d);
+        int gap = (int) (10 * d);
+
+        for (int c : TEXT_PRESETS) {
+            View dot = new View(this);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
+            lp.setMargins(0, 0, gap, 0);
+            dot.setLayoutParams(lp);
+            android.graphics.drawable.GradientDrawable gd =
+                    new android.graphics.drawable.GradientDrawable();
+            gd.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            gd.setColor(c);
+            gd.setStroke((int) (1.5 * d), 0x33000000);
+            dot.setBackground(gd);
+            dot.setTag(c);
+            dot.setOnClickListener(v -> applyTextColor((Integer) v.getTag()));
+            // 长按打开完整色彩盘
+            dot.setOnLongClickListener(v -> {
+                applyTextColor((Integer) v.getTag());
+                showColorPicker(currentTextColor(), this::applyTextColor);
+                return true;
+            });
+            box.addView(dot);
+        }
+    }
+
+    private void refreshColorDots() {
+        LinearLayout box = findViewById(R.id.colorDots);
+        if (box == null) return;
+        int cur = currentTextColorInt();
+        float d = getResources().getDisplayMetrics().density;
+        for (int i = 0; i < box.getChildCount(); i++) {
+            View dot = box.getChildAt(i);
+            Object tag = dot.getTag();
+            if (!(tag instanceof Integer)) continue;
+            boolean on = ((Integer) tag) == cur;
+            android.graphics.drawable.GradientDrawable gd =
+                    new android.graphics.drawable.GradientDrawable();
+            gd.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            gd.setColor((Integer) tag);
+            gd.setStroke((int) (on ? 3 * d : 1.5 * d), on ? 0xFFFFFFFF : 0x33000000);
+            dot.setBackground(gd);
+        }
+    }
+
+    /** 当前这一档存的 hex（空串表示跟随通用文字色） */
+    private String currentTextColor() {
+        switch (textColorTarget) {
+            case 1: return prefs.batteryColor();
+            case 2: return prefs.statusColor();
+            default: return prefs.titleColor();
+        }
+    }
+
+    private int currentTextColorInt() {
+        String hex = currentTextColor();
+        if (hex == null || hex.isEmpty()) {
+            return parseColor(prefs.textColor(), Color.WHITE);
+        }
+        try {
+            return Color.parseColor(hex);
+        } catch (Exception e) {
+            return Color.WHITE;
+        }
+    }
+
+    private void applyTextColor(int c) {
+        String hex = String.format("#%08X", c);
+        switch (textColorTarget) {
+            case 1: prefs.setBatteryColor(hex); break;
+            case 2: prefs.setStatusColor(hex); break;
+            default: prefs.setTitleColor(hex); break;
+        }
+        refreshColorDots();
+        updatePreview();
+    }
+
+    // ---------- 图片 / GIF 历史 ----------
+    private void renderImageHistory() {
+        LinearLayout box = findViewById(R.id.historyList);
+        View scroll = findViewById(R.id.historyScroll);
+        TextView title = findViewById(R.id.tvHistoryTitle);
+        if (box == null) return;
+
+        java.util.List<String> list = prefs.imageHistory();
+        if (list.isEmpty()) {
+            if (scroll != null) scroll.setVisibility(View.GONE);
+            if (title != null) title.setVisibility(View.GONE);
+            return;
+        }
+        if (scroll != null) scroll.setVisibility(View.VISIBLE);
+        if (title != null) title.setVisibility(View.VISIBLE);
+
+        box.removeAllViews();
+        float d = getResources().getDisplayMetrics().density;
+        int size = (int) (58 * d);
+        int gap = (int) (8 * d);
+
+        for (String u : list) {
+            android.widget.ImageView iv = new android.widget.ImageView(this);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
+            lp.setMargins(0, 0, gap, 0);
+            iv.setLayoutParams(lp);
+            iv.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+            android.graphics.drawable.GradientDrawable bg =
+                    new android.graphics.drawable.GradientDrawable();
+            bg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+            bg.setCornerRadius(10 * d);
+            bg.setColor(0x22FFFFFF);
+            iv.setBackground(bg);
+            iv.setClipToOutline(true);
+            try {
+                Glide.with(this).load(android.net.Uri.parse(u)).into(iv);
+            } catch (Exception ignored) {
+            }
+            // 点击：切换
+            iv.setOnClickListener(v -> {
+                prefs.setImageUri(u);
+                prefs.addImageHistory(u);
+                prefs.resetImageTransform();
+                loadThumb();
+                renderImageHistory();
+                updatePreview();
+                Toast.makeText(this, "已切换", Toast.LENGTH_SHORT).show();
+            });
+            // 长按：从历史里删掉
+            iv.setOnLongClickListener(v -> {
+                prefs.removeImageHistory(u);
+                renderImageHistory();
+                Toast.makeText(this, "已从历史移除", Toast.LENGTH_SHORT).show();
+                return true;
+            });
+            box.addView(iv);
+        }
     }
 
     private void bindColorRow(int rowId, View swatch,
@@ -870,16 +1055,27 @@ public class MainActivity extends AppCompatActivity {
                 && swCase.isChecked()) ? cached.caseBox : -1;
         String devName = etTitle.getText().toString().trim();
         if (devName.isEmpty()) devName = "我的耳机";
-        if (pvBattery != null) pvBattery.setText(bat >= 0 ? bat + "%" : "--%");
+        if (pvBattery != null) {
+            pvBattery.setText(bat >= 0 ? bat + "%" : "--%");
+            pvBattery.setTextColor(pvBattC);
+        }
         if (pvCase != null) {
             pvCase.setText(cas >= 0 ? cas + "%" : "--%");
             pvCase.setVisibility(cas >= 0 ? View.VISIBLE : View.GONE);
         }
         if (pvInfo != null) pvInfo.setText(devName);
-        pvTip.setTextColor(adjustAlpha(textColor, 0.55f));
+        // 与真实弹窗一致：三档分别取色，没设过退回通用色
+        int pvTitleC = textColor, pvStatC = textColor, pvBattC = textColor;
+        try {
+            if (!prefs.titleColor().isEmpty()) pvTitleC = Color.parseColor(prefs.titleColor());
+            if (!prefs.statusColor().isEmpty()) pvStatC = Color.parseColor(prefs.statusColor());
+            if (!prefs.batteryColor().isEmpty()) pvBattC = Color.parseColor(prefs.batteryColor());
+        } catch (Exception ignored) {
+        }
+        pvTip.setTextColor(adjustAlpha(pvStatC, 0.55f));
         if (pvDeviceName != null) {
             pvDeviceName.setText(devName);
-            pvDeviceName.setTextColor(textColor);
+            pvDeviceName.setTextColor(pvTitleC);
         }
         // 渐变层：透明 → 卡片底色，与真实弹窗一致
         if (pvGradient != null) {
