@@ -45,8 +45,12 @@ public class PopupActivity extends AppCompatActivity {
         setContentView(R.layout.activity_popup);
 
         String name = getIntent().getStringExtra(PopupService.EXTRA_NAME);
-        int battery = getIntent().getIntExtra(PopupService.EXTRA_BATTERY, -1);
-        int caseBattery = getIntent().getIntExtra(PopupService.EXTRA_CASE, -1);
+        BatteryLevels levels = new BatteryLevels();
+        levels.left = getIntent().getIntExtra(PopupService.EXTRA_LEFT, -1);
+        levels.right = getIntent().getIntExtra(PopupService.EXTRA_BATTERY, -1);
+        levels.caseBox = getIntent().getIntExtra(PopupService.EXTRA_CASE, -1);
+        levels.overall = getIntent().getIntExtra(PopupService.EXTRA_BATTERY, -1);
+        levels.timestamp = System.currentTimeMillis();
 
         View card = findViewById(R.id.card);
         if (card != null) {
@@ -61,7 +65,7 @@ public class PopupActivity extends AppCompatActivity {
             card.setLayoutParams(lp);
         }
 
-        PopupRenderer.bind(this, findViewById(R.id.popupRoot), name, battery, caseBattery,
+        PopupRenderer.bind(this, findViewById(R.id.popupRoot), name, levels,
                 prefs, this::close);
 
         main.postDelayed(this::close, prefs.durationMs());
@@ -134,15 +138,18 @@ public class PopupActivity extends AppCompatActivity {
     }
 
     /** 供服务调用：构造启动 Intent */
-    static Intent makeIntent(Context c, String name, int battery, int caseBattery) {
+    static Intent makeIntent(Context c, String name, BatteryLevels levels) {
         Intent i = new Intent(c, PopupActivity.class);
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                 | Intent.FLAG_ACTIVITY_SINGLE_TOP
                 | Intent.FLAG_ACTIVITY_CLEAR_TOP
                 | Intent.FLAG_ACTIVITY_NO_USER_ACTION);
         i.putExtra(PopupService.EXTRA_NAME, name);
-        i.putExtra(PopupService.EXTRA_BATTERY, battery);
-        i.putExtra(PopupService.EXTRA_CASE, caseBattery);
+        if (levels != null) {
+            i.putExtra(PopupService.EXTRA_LEFT, levels.left);
+            i.putExtra(PopupService.EXTRA_BATTERY, levels.right);
+            i.putExtra(PopupService.EXTRA_CASE, levels.caseBox);
+        }
         return i;
     }
 }
