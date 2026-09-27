@@ -1,0 +1,361 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipToPadding="false"
+    android:overScrollMode="never"
+    android:paddingStart="16dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="24dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- ===== 弹窗图片 ===== -->
+        <TextView
+            style="@style/TextSectionTitle"
+            android:layout_marginStart="4dp"
+            android:text="弹窗图片" />
+
+        <LinearLayout
+            style="@style/Widget.App.Group"
+            android:layout_marginTop="10dp"
+            android:elevation="1dp"
+            android:padding="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:id="@+id/imgPreview"
+                    android:layout_width="88dp"
+                    android:layout_height="88dp"
+                    android:background="@drawable/bg_thumb"
+                    android:contentDescription="所选图片"
+                    android:scaleType="centerCrop" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="14dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnPickImage"
+                        style="@style/Widget.App.Button"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="48dp"
+                        android:text="选择图片 / GIF"
+                        android:textSize="14sp"
+                        app:icon="@drawable/ic_image"
+                        app:iconGravity="textStart" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnClearImage"
+                        style="@style/Widget.App.Button.Tonal"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:minHeight="44dp"
+                        android:text="清除图片"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ===== 文案 ===== -->
+        <TextView
+            style="@style/TextSectionTitle"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="24dp"
+            android:text="文案" />
+
+        <LinearLayout
+            style="@style/Widget.App.Group"
+            android:layout_marginTop="10dp"
+            android:elevation="1dp"
+            android:padding="16dp">
+
+            <TextView
+                style="@style/TextLabel"
+                android:text="主标题" />
+
+            <EditText
+                android:id="@+id/etTitle"
+                style="@style/Widget.App.EditText"
+                android:hint="Buds 5 Pro 电竞版"
+                android:inputType="text"
+                android:singleLine="true" />
+
+            <TextView
+                style="@style/TextLabel"
+                android:layout_marginTop="14dp"
+                android:text="副标题（%s 会替换成设备名，留空则不显示）" />
+
+            <EditText
+                android:id="@+id/etSub"
+                style="@style/Widget.App.EditText"
+                android:hint="%s 已连接"
+                android:inputType="text"
+                android:singleLine="true" />
+        </LinearLayout>
+
+        <!-- ===== 尺寸 ===== -->
+        <TextView
+            style="@style/TextSectionTitle"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="24dp"
+            android:text="尺寸与动画" />
+
+        <LinearLayout
+            style="@style/Widget.App.Group"
+            android:layout_marginTop="10dp"
+            android:elevation="1dp">
+
+            <LinearLayout
+                android:id="@+id/rowWidth"
+                style="@style/Widget.App.Row">
+
+                <ImageView
+                    style="@style/Widget.App.RowIcon"
+                    android:contentDescription="宽度"
+                    android:src="@drawable/ic_size" />
+
+                <LinearLayout style="@style/Widget.App.RowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="弹窗宽度" />
+                    <TextView
+                        style="@style/TextRowSub"
+                        android:text="建议占屏幕宽度的 70%" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvWidth"
+                    style="@style/TextRowValue"
+                    android:text="296 dp" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="?attr/colorSurfaceVariant" />
+
+            <LinearLayout
+                android:id="@+id/rowRadius"
+                style="@style/Widget.App.Row">
+
+                <ImageView
+                    style="@style/Widget.App.RowIcon"
+                    android:contentDescription="圆角"
+                    android:src="@drawable/ic_layers" />
+
+                <LinearLayout style="@style/Widget.App.RowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="卡片圆角" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvRadius"
+                    style="@style/TextRowValue"
+                    android:text="26 dp" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="?attr/colorSurfaceVariant" />
+
+            <LinearLayout
+                android:id="@+id/rowImgH"
+                style="@style/Widget.App.Row">
+
+                <ImageView
+                    style="@style/Widget.App.RowIcon"
+                    android:contentDescription="图片占比"
+                    android:src="@drawable/ic_image" />
+
+                <LinearLayout style="@style/Widget.App.RowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="图片占弹窗高度" />
+                    <TextView
+                        style="@style/TextRowSub"
+                        android:text="官方规范约为 70%" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvImgH"
+                    style="@style/TextRowValue"
+                    android:text="70%" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="?attr/colorSurfaceVariant" />
+
+            <LinearLayout
+                android:id="@+id/rowDuration"
+                style="@style/Widget.App.Row">
+
+                <ImageView
+                    style="@style/Widget.App.RowIcon"
+                    android:contentDescription="时长"
+                    android:src="@drawable/ic_animation" />
+
+                <LinearLayout style="@style/Widget.App.RowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="显示时长" />
+                    <TextView
+                        style="@style/TextRowSub"
+                        android:text="要 ≥ GIF 单轮时长" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvDuration"
+                    style="@style/TextRowValue"
+                    android:text="4500 ms" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="?attr/colorSurfaceVariant" />
+
+            <LinearLayout
+                android:id="@+id/rowPos"
+                style="@style/Widget.App.Row">
+
+                <ImageView
+                    style="@style/Widget.App.RowIcon"
+                    android:contentDescription="位置"
+                    android:src="@drawable/ic_preview" />
+
+                <LinearLayout style="@style/Widget.App.RowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="弹出位置" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvPos"
+                    style="@style/TextRowValue"
+                    android:text="居中" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="?attr/colorSurfaceVariant" />
+
+            <LinearLayout
+                android:id="@+id/rowAnim"
+                style="@style/Widget.App.Row">
+
+                <ImageView
+                    style="@style/Widget.App.RowIcon"
+                    android:contentDescription="动画"
+                    android:src="@drawable/ic_animation" />
+
+                <LinearLayout style="@style/Widget.App.RowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="入场动画" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvAnim"
+                    style="@style/TextRowValue"
+                    android:text="缩放淡入" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ===== 配色 ===== -->
+        <TextView
+            style="@style/TextSectionTitle"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="24dp"
+            android:text="配色" />
+
+        <LinearLayout
+            style="@style/Widget.App.Group"
+            android:layout_marginTop="10dp"
+            android:elevation="1dp">
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/swAutoColor"
+                style="@style/Widget.App.Item"
+                android:drawableStart="@drawable/ic_color"
+                android:text="根据图片自动配色"
+                android:textSize="15.5sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            style="@style/Widget.App.Group"
+            android:layout_marginTop="8dp"
+            android:elevation="1dp"
+            android:padding="16dp">
+
+            <TextView
+                style="@style/TextLabel"
+                android:text="卡片背景色（自动配色开启时无效）" />
+
+            <EditText
+                android:id="@+id/etBg"
+                style="@style/Widget.App.EditText"
+                android:hint="#F2141620"
+                android:inputType="text"
+                android:singleLine="true" />
+
+            <TextView
+                style="@style/TextLabel"
+                android:layout_marginTop="14dp"
+                android:text="文字颜色" />
+
+            <EditText
+                android:id="@+id/etTextColor"
+                style="@style/Widget.App.EditText"
+                android:hint="#FFFFFFFF"
+                android:inputType="text"
+                android:singleLine="true" />
+
+            <TextView
+                style="@style/TextLabel"
+                android:layout_marginTop="14dp"
+                android:text="强调色（电量圆环）" />
+
+            <EditText
+                android:id="@+id/etAccent"
+                style="@style/Widget.App.EditText"
+                android:hint="#FF00E5A0"
+                android:inputType="text"
+                android:singleLine="true" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:lineSpacingExtra="3dp"
+            android:text="改完记得点首页的「立即测试弹窗」看实际效果。"
+            android:textSize="11.5sp"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>
