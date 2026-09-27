@@ -173,8 +173,8 @@ public class LiveBlurView extends View {
         p.close();
 
         cornerPath = p;
-        cornerPaint.setXfermode(new android.graphics.PorterDuffXfermode(
-                android.graphics.PorterDuff.Mode.DST_IN));
+        // 不再给 cornerPaint 设 Xfermode：
+        // 圆角改由 shaderPaint 填充这个形状实现，cornerPaint 已不参与绘制。
     }
 
     /** 设置顶部渐隐带高度（0 = 不做渐隐，即硬边） */
