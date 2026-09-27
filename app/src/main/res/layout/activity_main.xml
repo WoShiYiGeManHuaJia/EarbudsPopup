@@ -205,93 +205,89 @@
                 android:background="@drawable/bg_preview_stage"
                 android:padding="14dp">
 
-                <!-- 预览卡片：模拟真实弹窗 -->
+                <!-- 预览卡片：与真实弹窗同一套结构 -->
                 <LinearLayout
                     android:id="@+id/pvCard"
-                    android:layout_width="288dp"
+                    android:layout_width="252dp"
                     android:layout_height="wrap_content"
                     android:layout_gravity="center_horizontal"
-                    android:elevation="6dp"
+                    android:elevation="10dp"
                     android:orientation="vertical">
 
-                    <View
-                        android:id="@+id/pvAccent"
+                    <FrameLayout
+                        android:id="@+id/pvImageArea"
                         android:layout_width="match_parent"
-                        android:layout_height="3dp"
-                        android:background="#FF00E5A0" />
+                        android:layout_height="176dp">
+
+                        <ImageView
+                            android:id="@+id/pvImage"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:contentDescription="弹窗图片"
+                            android:scaleType="centerCrop" />
+
+                        <View
+                            android:id="@+id/pvFade"
+                            android:layout_width="match_parent"
+                            android:layout_height="72dp"
+                            android:layout_gravity="bottom" />
+                    </FrameLayout>
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:padding="14dp">
-
-                        <ImageView
-                            android:id="@+id/pvImage"
-                            android:layout_width="match_parent"
-                            android:layout_height="150dp"
-                            android:contentDescription="弹窗图片"
-                            android:scaleType="centerCrop" />
+                        android:paddingStart="16dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="16dp"
+                        android:paddingBottom="14dp">
 
                         <TextView
                             android:id="@+id/pvTitle"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="12dp"
                             android:gravity="center"
                             android:text="Buds 5 Pro 电竞版"
                             android:textColor="#FFFFFFFF"
-                            android:textSize="17sp"
+                            android:textSize="14sp"
                             android:textStyle="bold" />
 
                         <TextView
                             android:id="@+id/pvSub"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:alpha="0.8"
+                            android:layout_marginTop="2dp"
+                            android:alpha="0.75"
                             android:gravity="center"
                             android:text="已连接"
                             android:textColor="#FFFFFFFF"
-                            android:textSize="12.5sp" />
+                            android:textSize="10.5sp" />
 
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="10dp"
-                            android:gravity="center_vertical"
+                            android:layout_marginTop="12dp"
+                            android:gravity="center"
                             android:orientation="horizontal">
 
-                            <ProgressBar
-                                android:id="@+id/pvBar"
-                                style="?android:attr/progressBarStyleHorizontal"
-                                android:layout_width="0dp"
-                                android:layout_height="6dp"
-                                android:layout_weight="1"
-                                android:max="100"
-                                android:progress="78"
-                                android:progressDrawable="@drawable/bg_battery_bar" />
+                            <com.yuanbao.earbuds.BatteryRingView
+                                android:id="@+id/pvRingEarbud"
+                                android:layout_width="46dp"
+                                android:layout_height="46dp" />
 
-                            <TextView
-                                android:id="@+id/pvBattery"
+                            <LinearLayout
+                                android:id="@+id/pvBoxGroup"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginStart="10dp"
-                                android:text="78%"
-                                android:textColor="#FFFFFFFF"
-                                android:textSize="12sp"
-                                android:textStyle="bold" />
-                        </LinearLayout>
+                                android:layout_marginStart="26dp"
+                                android:orientation="vertical">
 
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:alpha="0.45"
-                            android:gravity="center"
-                            android:text="轻触关闭"
-                            android:textColor="#FFFFFFFF"
-                            android:textSize="10.5sp" />
+                                <com.yuanbao.earbuds.BatteryRingView
+                                    android:id="@+id/pvRingBox"
+                                    android:layout_width="46dp"
+                                    android:layout_height="46dp" />
+                            </LinearLayout>
+                        </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
             </FrameLayout>
@@ -393,6 +389,30 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="尝试显示电量" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="0.5dp"
+                android:background="#14000000" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/swCase"
+                style="@style/Widget.App.Switch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="显示充电盒电量" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="0.5dp"
+                android:background="#14000000" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/swAutoColor"
+                style="@style/Widget.App.Switch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="根据图片自动配色" />
         </LinearLayout>
 
         <!-- ===================== 触发设备 ===================== -->
@@ -649,7 +669,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="图片高度"
+                android:text="图片占比"
                 android:textColor="#FF20232A"
                 android:textStyle="bold" />
 
