@@ -33,6 +33,8 @@ public final class PopupRenderer {
 
     /** 卡片总高 = 宽度 × 该比例；三区再按 76 / 16 / 8 分配 */
     private static final float CARD_H_RATIO = 1.15f;
+    /** 图片区圆角：卡片圆角 24dp 减去 8dp 内边距 */
+    private static final float GIF_CORNER = 16f;
 
     public interface OnClose {
         void close();
@@ -77,9 +79,21 @@ public final class PopupRenderer {
         if (gifWrap != null) {
             GradientDrawable wrapBg = new GradientDrawable();
             wrapBg.setShape(GradientDrawable.RECTANGLE);
-            wrapBg.setCornerRadius(18 * d);
+            wrapBg.setCornerRadius(GIF_CORNER * d);
             wrapBg.setColor(0x0FFFFFFF);        // rgba(255,255,255,0.06)
             gifWrap.setBackground(wrapBg);
+
+            // 圆角裁切：让图片/GIF 跟着容器一起变圆角，而不是直角硬边。
+            // 用 ViewOutlineProvider 交给 GPU 合成时裁切，不会像 Transformation 那样逐帧重算，
+            // 所以 GIF 帧率不受影响。
+            final float r = GIF_CORNER * d;
+            gifWrap.setOutlineProvider(new android.view.ViewOutlineProvider() {
+                @Override
+                public void getOutline(android.view.View view, android.graphics.Outline outline) {
+                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), r);
+                }
+            });
+            gifWrap.setClipToOutline(true);
         }
 
         // ---------- 文字色 ----------
