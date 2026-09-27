@@ -513,8 +513,8 @@ public class MainActivity extends AppCompatActivity {
         float d = getResources().getDisplayMetrics().density;
         // 预览按屏幕比例缩小，比例与真实弹窗一致
         int w = (int) (prefs.widthDp() * d * 0.78f);
-        float ratio = Math.max(0.40f, Math.min(0.92f, prefs.imageRatio()));
-        float cardRatio = 0.55f + ratio * 0.80f;
+        float ratio = Math.max(0.40f, Math.min(0.94f, prefs.imageRatio()));
+        float cardRatio = 0.42f + ratio * 1.05f;
         int h = (int) (w * cardRatio);
         ViewGroup.LayoutParams lp = pvCard.getLayoutParams();
         lp.width = w;
@@ -532,16 +532,16 @@ public class MainActivity extends AppCompatActivity {
 
         // GIF 区吃掉全部剩余空间，文字区保持紧凑（与真实弹窗一致）
 
-        // 预览里的图片区也做圆角裁切，跟真实弹窗保持一致
-        if (pvImageArea != null) {
+        // 预览里的图片本身也要圆角（裁 ImageView，不是容器，否则圆角碰不到图片四角）
+        if (pvImage != null) {
             final float pr = 16 * d * 0.78f;
-            pvImageArea.setOutlineProvider(new android.view.ViewOutlineProvider() {
+            pvImage.setOutlineProvider(new android.view.ViewOutlineProvider() {
                 @Override
                 public void getOutline(android.view.View v, android.graphics.Outline o) {
                     o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), pr);
                 }
             });
-            pvImageArea.setClipToOutline(true);
+            pvImage.setClipToOutline(true);
         }
 
         // 信息窄条：与真实弹窗同一套拼接逻辑
