@@ -126,16 +126,13 @@ public class LiveBlurView extends View {
     }
 
     private void applyEffect() {
+        // 关键：必须【禁用】RenderEffect。
+        // RenderEffect 作用于整个 View 的渲染输出，
+        // 于是 saveLayer 里那层「清晰原图」也会被一起模糊，
+        // 导致 DST_OUT 擦除后露出的仍是模糊内容 —— 过渡完全失效。
+        // 要做出「上清晰 → 下模糊」的渐变，必须自己逐帧模糊，
+        // 这样才能在同一 Canvas 内把清晰层和模糊层混合。
         hwBlurEnabled = false;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            try {
-                setRenderEffect(android.graphics.RenderEffect.createBlurEffect(
-                        blurRadiusPx, blurRadiusPx, Shader.TileMode.CLAMP));
-                hwBlurEnabled = true;
-            } catch (Throwable ignored) {
-                // 设备不支持就退回逐帧降采样
-            }
-        }
     }
 
     private void attachCallback(Drawable dr) {
@@ -212,34 +209,27 @@ public class LiveBlurView extends View {
             attachCallback(dr);
         }
 
-        // 用标记判断，不直接调 getRenderEffect()（那是 API 31 方法，
-        // 在 minSdk 26 的工程里直接引用会导致编译期找不到符号）
-        boolean hwBlur = hwBlurEnabled;
+        // 始终自行模糊（原因见 applyEffect 注释）
 
-        if (hwBlur) {
-            // API 31+：直接画，RenderEffect 会在合成时逐帧模糊
-            drawSource(canvas, dr, sw, sh, vh);
-        } else {
-            // 旧版本：画进小 Bitmap 再放大回来，逐帧执行 → 同样动态
-            int factor = 8;
-            int bw = Math.max(1, vw / factor);
-            int bh = Math.max(1, vh / factor);
-            if (smallBuf == null || smallBuf.getWidth() != bw
-                    || smallBuf.getHeight() != bh) {
-                smallBuf = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
-                smallCanvas = new Canvas(smallBuf);
-            }
-            smallBuf.eraseColor(Color.TRANSPARENT);
-            smallCanvas.save();
-            smallCanvas.scale(1f / factor, 1f / factor);
-            drawSource(smallCanvas, dr, sw, sh, vh);
-            smallCanvas.restore();
-
-            canvas.save();
-            canvas.scale(factor, factor);
-            canvas.drawBitmap(smallBuf, 0, 0, upscalePaint);
-            canvas.restore();
+        // ① 整块区域先铺一层模糊（降采样再放大，逐帧重算 → 动态）
+        int factor = 10;
+        int bw = Math.max(1, vw / factor);
+        int bh = Math.max(1, vh / factor);
+        if (smallBuf == null || smallBuf.getWidth() != bw
+                || smallBuf.getHeight() != bh) {
+            smallBuf = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888);
+            smallCanvas = new Canvas(smallBuf);
         }
+        smallBuf.eraseColor(Color.TRANSPARENT);
+        smallCanvas.save();
+        smallCanvas.scale(1f / factor, 1f / factor);
+        drawSource(smallCanvas, dr, sw, sh, vh);
+        smallCanvas.restore();
+
+        canvas.save();
+        canvas.scale(factor, factor);
+        canvas.drawBitmap(smallBuf, 0, 0, upscalePaint);
+        canvas.restore();
 
         // 叠一层半透明色，保证文字可读
         canvas.drawColor(dimColor);
