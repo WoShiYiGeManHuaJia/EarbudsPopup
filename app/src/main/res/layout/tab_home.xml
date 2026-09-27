@@ -92,13 +92,15 @@
                 android:background="@drawable/bg_stage"
                 android:padding="16dp">
 
-                <LinearLayout
+                <!-- 预览卡片：必须用 RoundedCardLayout。
+                     之前是 LinearLayout，而 LinearLayout 不裁剪子 View，
+                     铺满的图片把圆角盖成直角 —— 这就是「预览没圆角」的原因。 -->
+                <com.yuanbao.earbuds.RoundedCardLayout
                     android:id="@+id/pvCard"
                     android:layout_width="232dp"
                     android:layout_height="267dp"
                     android:layout_gravity="center_horizontal"
-                    android:elevation="8dp"
-                    android:orientation="vertical">
+                    android:elevation="8dp">
 
                     <FrameLayout
                         android:id="@+id/pvImageArea"
@@ -207,7 +209,7 @@
                                 android:visibility="gone" />
                         </LinearLayout>
                     </FrameLayout>
-                </LinearLayout>
+                </com.yuanbao.earbuds.RoundedCardLayout>
             </FrameLayout>
 
             <com.google.android.material.button.MaterialButton
