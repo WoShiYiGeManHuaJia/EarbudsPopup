@@ -51,6 +51,9 @@ public class PopupService extends Service {
     public static final String EXTRA_OVERALL = "overall_battery";
     public static final String EXTRA_ADDRESS = "address";
     public static final String EXTRA_WIRED = "wired";
+    /** 系统隐藏广播：耳机电量变化 */
+    public static final String ACTION_BATTERY_CHANGED =
+            "android.bluetooth.device.action.BATTERY_LEVEL_CHANGED";
 
     private static final String CHANNEL_ID = "popup_service";
     private static final String CHANNEL_SILENT = "popup_service_silent";
@@ -63,6 +66,7 @@ public class PopupService extends Service {
     private volatile boolean screenOn = true;
     private View currentRoot;
     private String currentName;
+    private volatile String currentAddress;
 
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override
@@ -102,6 +106,10 @@ public class PopupService extends Service {
         // 统一由 WiredReceiver 收到后发 ACTION_SHOW，走 onStartCommand 单路径弹窗。
         f.addAction(ACTION_SHOW);
         f.addAction(ACTION_RESTART);
+        // 系统蓝牙栈在耳机电量变化时发出的广播（隐藏广播，但动态注册可收到）。
+        // 这是最实时的电量来源：耳机一上报新电量，我们立刻更新缓存。
+        // 之前完全没监听它，所以电量只能靠手动探测——这就是「录死」的根因。
+        f.addAction(ACTION_BATTERY_CHANGED);
         if (prefs.powerSave()) {
             f.addAction(Intent.ACTION_SCREEN_ON);
             f.addAction(Intent.ACTION_SCREEN_OFF);
@@ -231,6 +239,27 @@ public class PopupService extends Service {
             return;
         }
 
+        // 电量变化广播：立刻写入缓存，下次弹窗就是最新值
+        if (ACTION_BATTERY_CHANGED.equals(action)) {
+            BluetoothDevice bd = i.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+            int lvl = i.getIntExtra(BluetoothDevice.EXTRA_BATTERY_LEVEL, -1);
+            if (bd != null && BatteryLevels.valid(lvl)) {
+                String a2 = bd.getAddress();
+                BatteryLevels bl = new BatteryStore(this).load(a2);
+                bl.overall = lvl;
+                bl.fillFromOverall();
+                bl.sanitize();
+                bl.timestamp = System.currentTimeMillis();
+                bl.source = "sys-broadcast";
+                new BatteryStore(this).save(a2, bl);
+                // 若当前弹窗正是这台设备，原地刷新
+                if (currentRoot != null && a2.equals(currentAddress)) {
+                    PopupRenderer.updateInfo(currentRoot, currentName, bl, prefs);
+                }
+            }
+            return;
+        }
+
         BluetoothDevice dev = i.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
         if (dev == null) return;
 
@@ -259,6 +288,18 @@ public class PopupService extends Service {
             cached.fillFromOverall();
         }
         cached.sanitize();
+        // 关键：缓存必须「够新鲜」才敢显示。
+        // 之前直接拿几小时前的旧值当实时电量，用户充完电还看到 30%。
+        // 超过 STALE_MS 就作废，先显示 --%，由 autoRefreshBattery 实测后刷新。
+        if (cached.timestamp > 0L
+                && System.currentTimeMillis() - cached.timestamp > BatteryStore.STALE_MS) {
+            cached.left = -1;
+            cached.right = -1;
+            cached.caseBox = -1;
+            cached.overall = -1;
+            cached.source = "stale";
+        }
+        currentAddress = addr;
         show(name, addr, cached, dev);
     }
 
@@ -404,25 +445,67 @@ public class PopupService extends Service {
      * 连接时自动刷新电量：先做一次轻量 GATT 读取（快），
      * 拿到值就写缓存并原地刷新弹窗信息条；下次连接立刻就能显示。
      */
+    /**
+     * 弹窗后异步取真实电量并原地刷新。
+     *
+     * 优先级：系统蓝牙栈（dumpsys，经 Shizuku）> BLE GATT。
+     * 不沿用陈旧缓存：拿不到真值就在信息条上留 --%，
+     * 绝不再把几小时前的旧数字当实时电量显示。
+     */
     private void autoRefreshBattery(String address, BluetoothDevice dev) {
         if (!prefs.showBattery() || address == null) return;
-        new BatteryProbe(this).quickRead(address, dev, value -> {
-            BatteryLevels b = new BatteryStore(this).load(address);
-            int v = BatteryLevels.norm(value);
+        final String addr = address;
+        final Handler h = main;
+
+        // 后台线程：先试系统栈（dumpsys 较慢，不能占主线程）
+        new Thread(() -> {
+            int sysLvl = -1;
+            if (ShizukuHelper.hasPermission()) {
+                sysLvl = BatterySysQuery.query(addr);
+            }
+            final int v = sysLvl;
+
             if (BatteryLevels.valid(v)) {
-                b.overall = v;
-                b.fillFromOverall();
-                b.timestamp = System.currentTimeMillis();
-                b.source = "gatt-auto";
-                new BatteryStore(this).save(address, b);
-            } else {
-                b.sanitize();
+                // 拿到权威值：写缓存 + 刷新弹窗
+                h.post(() -> applyMeasured(addr, v, "sys-dumpsys"));
+                return;
             }
-            // 原地刷新弹窗上的电量（不重建弹窗，GIF 不会重新播）
-            if (currentRoot != null) {
-                PopupRenderer.updateInfo(currentRoot, currentName, b, prefs);
-            }
-        });
+            // 系统栈没拿到，退回 BLE GATT
+            h.post(() -> new BatteryProbe(PopupService.this)
+                    .quickRead(addr, dev, gattVal -> {
+                        if (BatteryLevels.valid(gattVal)) {
+                            applyMeasured(addr, gattVal, "gatt-auto");
+                        } else {
+                            // 两条路都没取到真值：把陈旧缓存作废，显示 --%
+                            BatteryStore st = new BatteryStore(PopupService.this);
+                            BatteryLevels b = st.load(addr);
+                            b.left = -1;
+                            b.right = -1;
+                            b.caseBox = -1;
+                            b.overall = -1;
+                            b.source = "unavailable";
+                            if (currentRoot != null && addr.equals(currentAddress)) {
+                                PopupRenderer.updateInfo(currentRoot, currentName, b, prefs);
+                            }
+                        }
+                    }));
+        }).start();
+    }
+
+    /** 写入实测值并刷新当前弹窗 */
+    private void applyMeasured(String addr, int value, String source) {
+        if (!BatteryLevels.valid(value)) return;
+        BatteryStore st = new BatteryStore(this);
+        BatteryLevels b = st.load(addr);
+        b.overall = value;
+        b.fillFromOverall();
+        b.sanitize();
+        b.timestamp = System.currentTimeMillis();
+        b.source = source;
+        st.save(addr, b);
+        if (currentRoot != null && addr.equals(currentAddress)) {
+            PopupRenderer.updateInfo(currentRoot, currentName, b, prefs);
+        }
     }
 
     private void showOverlay(String name, String address, BatteryLevels levels) {
