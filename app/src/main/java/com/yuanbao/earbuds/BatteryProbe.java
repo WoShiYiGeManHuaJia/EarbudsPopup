@@ -555,13 +555,13 @@ public final class BatteryProbe {
             return;
         }
 
-        // 总超时 15 秒
+        // 总超时 28 秒（订阅 + 写命令试探 + 等待推送）
         main.postDelayed(() -> {
             if (!done.get()) {
-                log("探测总超时(15s)，结束");
+                log("探测总超时(28s)，结束");
                 closeAndFinish(gatt, overall, cb);
             }
-        }, 15000);
+        }, 28000);
     }
 
     /**
@@ -630,7 +630,62 @@ public final class BatteryProbe {
             }
         }
         // 给耳机 6 秒时间推送数据
-        main.postDelayed(then, notifiable.isEmpty() ? 0 : 6000);
+        main.postDelayed(() -> {
+            writeQueries(g, overall, levels, cb);
+            main.postDelayed(then, 8000);
+        }, notifiable.isEmpty() ? 0 : 6000);
+    }
+
+    /**
+     * 往可写特征发送候选查询命令，试图让耳机回复含电量的状态包。
+     * 协议未公开，所以这里用一组常见的 opcode 逐个试探，
+     * 每条命令后的 NOTIFY 回应都会被 onCharacteristicChanged 记录。
+     */
+    @SuppressLint("MissingPermission")
+    private void writeQueries(BluetoothGatt g, int overall,
+                              List<BluetoothGattCharacteristic> levels, Callback cb) {
+        List<BluetoothGattCharacteristic> writable = new ArrayList<>();
+        for (BluetoothGattService svc : g.getServices()) {
+            String u = svc.getUuid().toString().toLowerCase(Locale.ROOT);
+            boolean isSig = u.startsWith("0000") && u.endsWith("-0000-1000-8000-00805f9b34fb");
+            if (isSig) continue;
+            for (BluetoothGattCharacteristic ch : svc.getCharacteristics()) {
+                int pr = ch.getProperties();
+                if ((pr & BluetoothGattCharacteristic.PROPERTY_WRITE) != 0
+                        || (pr & BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0) {
+                    writable.add(ch);
+                }
+            }
+        }
+        log("私有可写特征数 = " + writable.size());
+        if (writable.isEmpty()) return;
+
+        // 常见查询 opcode（协议未公开，逐个试探）
+        byte[][] cmds = {
+                {0x00}, {0x03}, {0x04}, {0x05}, {0x06},
+                {0x0A}, {(byte) 0xAA}, {(byte) 0xAB},
+                {0x05, 0x5A, 0x00, 0x00, 0x00},
+                {(byte) 0xAA, 0x00, 0x01, 0x01},
+        };
+        int delay = 0;
+        for (byte[] cmd : cmds) {
+            final byte[] c = cmd;
+            main.postDelayed(() -> {
+                for (BluetoothGattCharacteristic ch : writable) {
+                    try {
+                        ch.setValue(c);
+                        ch.setWriteType(
+                                BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
+                        g.writeCharacteristic(ch);
+                        log("写入查询 " + toHex(c) + " -> "
+                                + ch.getUuid().toString().substring(0, 8));
+                    } catch (Exception e) {
+                        log("写入失败: " + e.getMessage());
+                    }
+                }
+            }, delay);
+            delay += 600;
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -790,6 +845,30 @@ public final class BatteryProbe {
 
         b.timestamp = System.currentTimeMillis();
         lastResult = b;
+        // ===== 充电盒电量推断 =====
+        // 依据本次日志：标准 0x2A19 只有 1 个实例 = 整机 100；
+        // 私有服务 CHAR-0A 读到 32（0x20）。
+        // 私有特征里出现一个 1..100 且【不等于整机值】的数，
+        // 它几乎不可能是耳机（耳机就是整机 100），最合理的解释就是充电盒。
+        if (!BatteryLevels.valid(b.caseBox)) {
+            for (java.util.Map.Entry<BluetoothGattCharacteristic, Integer> e
+                    : readValues.entrySet()) {
+                BluetoothGattCharacteristic ch = e.getKey();
+                Integer v = e.getValue();
+                if (v == null) continue;
+                // 跳过标准电量特征（那是整机值）
+                if (ch.getUuid().toString().toLowerCase(Locale.ROOT)
+                        .startsWith("00002a19")) continue;
+                if (BatteryLevels.valid(v) && v != b.overall) {
+                    b.caseBox = v;
+                    b.source = "private-char";
+                    log("充电盒推断：私有特征 " + ch.getUuid().toString().substring(0, 8)
+                            + " = " + v + "%（整机 " + b.overall + "%）");
+                    break;
+                }
+            }
+        }
+
         // 标准/私有读取都没拿到完整三值时，再从 NOTIFY 推送包里试一次
         if (!BatteryLevels.valid(b.caseBox) || !BatteryLevels.valid(b.left)
                 || !BatteryLevels.valid(b.right)) {
