@@ -323,7 +323,7 @@ public class LiveBlurView extends View {
      * StackBlur（Mario Klingemann 算法）：接近高斯模糊，速度远快于逐像素卷积。
      * 在小图上执行，开销很低，适合逐帧调用。
      */
-    private static void stackBlur(Bitmap bmp, int radius) {
+    private void stackBlur(Bitmap bmp, int radius) {
         int w = bmp.getWidth();
         int h = bmp.getHeight();
         if (w <= 0 || h <= 0 || radius <= 0) return;
