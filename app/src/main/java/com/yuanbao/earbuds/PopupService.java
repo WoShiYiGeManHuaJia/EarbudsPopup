@@ -27,6 +27,8 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -164,6 +166,20 @@ public class PopupService extends Service {
         }
     }
 
+    /** 把蓝牙广播名换成更好看的显示名 */
+    private String prettyName(String raw) {
+        if (raw == null) return "耳机";
+        String n = raw.trim();
+        String low = n.toLowerCase();
+        if (low.contains("buds 5 pro") || low.contains("buds5pro")) {
+            return n.contains("电竞") ? "Redmi Buds 5 Pro 电竞版" : "Redmi Buds 5 Pro";
+        }
+        if (low.contains("buds 5")) return "Redmi Buds 5";
+        if (low.contains("buds 4 pro")) return "Xiaomi Buds 4 Pro";
+        if (low.contains("airpods")) return "AirPods";
+        return n;
+    }
+
     /** 安卓没有公开的耳机电量 API，用反射读隐藏方法；失败返回 -1（不显示电量） */
     private int readBattery(BluetoothDevice dev) {
         try {
@@ -192,6 +208,18 @@ public class PopupService extends Service {
         TextView title = v.findViewById(R.id.popupTitle);
         TextView sub = v.findViewById(R.id.popupSub);
         TextView bat = v.findViewById(R.id.popupBattery);
+        TextView hint = v.findViewById(R.id.popupHint);
+        View accentBar = v.findViewById(R.id.accentBar);
+        LinearLayout batteryRow = v.findViewById(R.id.batteryRow);
+        ProgressBar batteryBar = v.findViewById(R.id.batteryBar);
+
+        int accent;
+        try {
+            accent = Color.parseColor(prefs.accentColor());
+        } catch (IllegalArgumentException e) {
+            accent = 0xFF00E5A0;
+        }
+        accentBar.setBackgroundColor(accent);
 
         // 背景：圆角 + 颜色
         GradientDrawable gd = new GradientDrawable();
@@ -214,17 +242,20 @@ public class PopupService extends Service {
         title.setTextColor(textColor);
         sub.setTextColor(textColor);
         bat.setTextColor(textColor);
+        hint.setTextColor(textColor);
 
         title.setText(prefs.titleText());
         String subRaw = prefs.subText();
-        sub.setText(subRaw.contains("%s") ? String.format(subRaw, name) : subRaw);
+        String pretty = prettyName(name);
+        sub.setText(subRaw.contains("%s") ? String.format(subRaw, pretty) : subRaw);
         sub.setVisibility(subRaw.isEmpty() ? View.GONE : View.VISIBLE);
 
         if (battery >= 0 && battery <= 100) {
-            bat.setText("电量 " + battery + "%");
-            bat.setVisibility(View.VISIBLE);
+            bat.setText(battery + "%");
+            batteryBar.setProgress(battery);
+            batteryRow.setVisibility(View.VISIBLE);
         } else {
-            bat.setVisibility(View.GONE);
+            batteryRow.setVisibility(View.GONE);
         }
 
         // 自定义图片 / GIF
