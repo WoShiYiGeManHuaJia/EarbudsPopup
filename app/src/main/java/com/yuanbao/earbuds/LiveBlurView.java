@@ -124,6 +124,27 @@ public class LiveBlurView extends View {
         invalidate();
     }
 
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        // 关键：setBottomCornerRadius 在布局前被调用，那时 getWidth()==0，
+        // outline 是空的 —— 裁剪形同虚设，这就是圆角一直不生效的原因。
+        // 尺寸确定后必须重算 outline。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
+                && bottomRadiusPx > 0f) {
+            invalidateOutline();
+        }
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        super.onLayout(changed, l, t, r, b);
+        if (changed && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
+                && bottomRadiusPx > 0f) {
+            invalidateOutline();
+        }
+    }
+
     /** 构建底部两角外侧需要擦除的路径（方块减圆的差集） */
     private void ensureCornerPath(int w, int h) {
         if (bottomRadiusPx <= 0f || w <= 0 || h <= 0) {
