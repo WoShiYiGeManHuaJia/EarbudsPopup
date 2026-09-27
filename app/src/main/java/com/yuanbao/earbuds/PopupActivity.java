@@ -43,13 +43,41 @@ public class PopupActivity extends AppCompatActivity {
 
         setupWindow();
         setContentView(R.layout.activity_popup);
+        applyIntent(getIntent());
+    }
 
-        String name = getIntent().getStringExtra(PopupService.EXTRA_NAME);
+    /**
+     * Activity 复用时必须走这里。
+     * manifest 里 launchMode="singleInstance"，且启动 Intent 带了
+     * SINGLE_TOP / CLEAR_TOP：当上一个弹窗还没消失就来新弹窗时，
+     * 系统不会重新 onCreate，而是回调 onNewIntent。
+     * 之前没重写 onNewIntent，结果第二次弹窗什么都不做——
+     * 内容不更新、计时不重置、GIF 从上次的进度继续播（就是用户说的「续播」）。
+     */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        lastShownAt = System.currentTimeMillis();
+        // 先取消上一次的自动关闭计时，再重新走一遍绑定
+        main.removeCallbacksAndMessages(null);
+        applyIntent(intent);
+    }
+
+    private void applyIntent(Intent it) {
+        if (it == null) return;
+        String name = it.getStringExtra(PopupService.EXTRA_NAME);
         BatteryLevels levels = new BatteryLevels();
-        levels.left = getIntent().getIntExtra(PopupService.EXTRA_LEFT, -1);
-        levels.right = getIntent().getIntExtra(PopupService.EXTRA_BATTERY, -1);
-        levels.caseBox = getIntent().getIntExtra(PopupService.EXTRA_CASE, -1);
-        levels.overall = getIntent().getIntExtra(PopupService.EXTRA_BATTERY, -1);
+        levels.left = it.getIntExtra(PopupService.EXTRA_LEFT, -1);
+        levels.right = it.getIntExtra(PopupService.EXTRA_BATTERY, -1);
+        levels.caseBox = it.getIntExtra(PopupService.EXTRA_CASE, -1);
+        // 整机值要单独取，之前把 EXTRA_BATTERY（其实是右耳）当成 overall 了
+        levels.overall = it.getIntExtra(PopupService.EXTRA_OVERALL, -1);
+        if (!BatteryLevels.valid(levels.overall)) {
+            levels.overall = levels.right;
+        }
+        levels.sanitize();
+        levels.fillFromOverall();
         levels.timestamp = System.currentTimeMillis();
 
         View card = findViewById(R.id.card);
@@ -63,6 +91,13 @@ public class PopupActivity extends AppCompatActivity {
             lp.topMargin = (prefs.position() == 0) ? m : 0;
             lp.bottomMargin = (prefs.position() == 2) ? m : 0;
             card.setLayoutParams(lp);
+            // 复用时残留的位移/透明度/缩放要清掉，否则第二次弹窗位置会飘
+            card.setTranslationX(0);
+            card.setTranslationY(0);
+            card.setScaleX(1f);
+            card.setScaleY(1f);
+            card.setAlpha(1f);
+            card.animate().cancel();
         }
 
         PopupRenderer.bind(this, findViewById(R.id.popupRoot), name, levels,
