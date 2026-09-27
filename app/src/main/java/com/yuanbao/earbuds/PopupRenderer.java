@@ -2,12 +2,15 @@ package com.yuanbao.earbuds;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.Matrix;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.animation.Animation;
-import android.view.animation.TranslateAnimation;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -18,21 +21,31 @@ import com.bumptech.glide.Glide;
 /**
  * 弹窗渲染：悬浮窗引擎与系统级 Activity 引擎共用。
  *
- * 卡片为单张液态玻璃，纵向三区：
- *   ① GIF 主视觉区  76%   —— fitCenter 自适应任意比例，不拉伸
- *   ② 设备信息窄条  16%   —— 名称 · 状态 | L:R:Case 电量
- *   ③ 操作提示区    8%    —— 轻触关闭弹窗
- * 无关闭按钮、无标题栏，点击卡片任意位置关闭。
+ * 排版（类 realme）：
+ *   ① 媒体区（图片 / GIF）占据主要空间，默认填满不留白
+ *   ② 底部渐变，让媒体与详情自然过渡
+ *   ③ 详情区：设备名 + 电量 + 提示
+ *
+ * 动画节奏（分两阶段，互不打断）：
+ *   第 1 段：整个卡片从下往上入场（340ms）
+ *   第 2 段：0.8 秒后，详情区缓慢升起（420ms）
+ *   —— 详情区是「始终占位 + 平移淡入」，不触发重新测量，
+ *      所以 GIF 全程连续播放，既不中断也不重置。
+ *
+ * 圆角：媒体区由 RoundedImageView 用离屏 DST_IN 合成，边缘抗锯齿无锯齿。
  */
 public final class PopupRenderer {
 
     /** 动画样式索引，与 Prefs.animStyle() 一致 */
-    public static final int ANIM_SCALE = 0;   // 缩放淡入
-    public static final int ANIM_BOTTOM = 1;  // 底部上滑
-    public static final int ANIM_TOP = 2;     // 顶部下滑
+    public static final int ANIM_SCALE = 0;
+    public static final int ANIM_BOTTOM = 1;
+    public static final int ANIM_TOP = 2;
 
-    /** 卡片总高 = 宽度 × 该比例；三区再按 76 / 16 / 8 分配 */
-    private static final float CARD_H_RATIO = 1.15f;
+    /** 详情区延迟升起的时间 */
+    private static final long DETAIL_DELAY_MS = 800L;
+    private static final long DETAIL_RISE_MS = 420L;
+
+    private static final Handler main = new Handler(Looper.getMainLooper());
 
     public interface OnClose {
         void close();
@@ -44,10 +57,13 @@ public final class PopupRenderer {
     public static void bind(Context c, View root, String rawName,
                             BatteryLevels levels,
                             Prefs prefs, OnClose onClose) {
-        View card = root.findViewById(R.id.card);
-        FrameLayout gifWrap = root.findViewById(R.id.gifWrap);
-        RoundedImageView img = root.findViewById(R.id.popupImage);
+        final View card = root.findViewById(R.id.card);
+        final FrameLayout gifWrap = root.findViewById(R.id.gifWrap);
+        final RoundedImageView img = root.findViewById(R.id.popupImage);
         View shimmer = root.findViewById(R.id.shimmer);
+        View gradientFade = root.findViewById(R.id.gradientFade);
+        final View detailArea = root.findViewById(R.id.detailArea);
+        TextView tvDeviceName = root.findViewById(R.id.tvDeviceName);
         TextView infoBar = root.findViewById(R.id.infoBar);
         TextView tipText = root.findViewById(R.id.tipText);
 
@@ -55,99 +71,104 @@ public final class PopupRenderer {
 
         // ---------- 卡片尺寸 ----------
         int widthPx = (int) (prefs.widthDp() * d);
-        // 卡片总高由「图片占弹窗高度」换算：值越大卡片越高，
-        // 而文字区是固定紧凑高度，所以多出来的高度全部归 GIF 区
         float ratio = Math.max(0.40f, Math.min(0.94f, prefs.imageRatio()));
-        float cardRatio = 0.42f + ratio * 1.05f;   // 0.82 -> 1.28
+        float cardRatio = 0.42f + ratio * 1.05f;
         int heightPx = (int) (widthPx * cardRatio);
-        // 卡片底色：自动取色优先，否则用用户手填的颜色
+
         int cardBg = parseColor(
                 prefs.autoColor() ? prefs.autoBgColor() : prefs.bgColor(), 0x1FFFFFFF);
+
         if (card != null) {
             ViewGroup.LayoutParams lp = card.getLayoutParams();
             lp.width = widthPx;
-            lp.height = heightPx;   // 固定高度，三区 weight 才能生效
+            lp.height = heightPx;
             card.setLayoutParams(lp);
 
-            // ---------- 液态玻璃外观 ----------
             GradientDrawable gd = new GradientDrawable();
             gd.setShape(GradientDrawable.RECTANGLE);
-            gd.setCornerRadius(prefs.radiusDp() * d);   // 用户可调
+            gd.setCornerRadius(prefs.radiusDp() * d);
             gd.setColor(cardBg);
             gd.setStroke(Math.max(1, (int) d), 0x33FFFFFF);
             card.setBackground(gd);
             card.setElevation(18 * d);
-            // 不再 setClipToOutline(true)：
-            // 系统圆角裁剪是几何裁剪，边缘不做抗锯齿，四个角会有锯齿。
-            // 卡片背景本身就是圆角 GradientDrawable（Canvas 绘制，带抗锯齿），
-            // 已经足够；图片的圆角交给 RoundedImageView 用离屏合成处理。
         }
 
-        // ---------- 三区：GIF 区吃掉全部剩余空间，文字区保持紧凑 ----------
-        // 布局里 gifWrap 已是 weight=1，infoBar/tipText 是 wrap_content，
-        // 这里只在旧布局残留 weight 时兜底校正一次
-        forceWeight(gifWrap, 1f);
-
-        // GIF 区不再铺任何半透明衬底：之前那层 6% 白会让 GIF 显得发灰、不清晰。
-        // 圆角由 ImageView 自己裁切，容器保持完全透明。
-        if (gifWrap != null) {
-            gifWrap.setBackground(null);
+        // ---------- ② 底部渐变：透明 → 卡片底色 ----------
+        if (gradientFade != null) {
+            GradientDrawable fade = new GradientDrawable(
+                    GradientDrawable.Orientation.BOTTOM_TOP,
+                    new int[]{cardBg, Color.TRANSPARENT});
+            gradientFade.setBackground(fade);
         }
 
-        // 图片圆角：交给 RoundedImageView 做离屏 DST_IN 合成，边缘抗锯齿。
-        // 半径取「卡片圆角 - 容器内边距」，让图片圆角与卡片圆角自然贴合。
+        // ---------- ① 媒体区圆角（抗锯齿） ----------
         if (img != null) {
             img.setRadius(Math.max(0f, prefs.radiusDp() - 2) * d);
         }
 
         // ---------- 文字色 ----------
         int textColor = parseColor(prefs.textColor(), Color.WHITE);
-        infoBar.setTextColor(applyAlpha(textColor, 0.82f));
-        tipText.setTextColor(applyAlpha(textColor, 0.55f));
+        int subColor = applyAlpha(textColor, 0.85f);
+        int tipColor = applyAlpha(textColor, 0.55f);
 
-        // ---------- ② 信息窄条：名称 · 状态 | L / R / Case ----------
-        infoBar.setText(buildInfo(prettyName(rawName), prefs, levels));
-
-        // ---------- ① GIF / 图片 ----------
-        // 每次弹窗都让 GIF 从第一帧开始播：Glide 会缓存已解码的 GifDrawable，
-        // 第二次直接复用同一个实例，动画状态停在上次的位置，看起来就是「续播」。
-        // 这里加载完成后显式重启动画，保证每次都是从第 0 帧开始。
-        String uri = prefs.imageUri();
-        if (!uri.isEmpty()) {
-            try {
-                Glide.with(c.getApplicationContext())
-                        .load(Uri.parse(uri))
-                        .dontTransform()
-                        .into(new com.bumptech.glide.request.target.CustomViewTarget<ImageView,
-                                android.graphics.drawable.Drawable>(img) {
-                            @Override
-                            public void onResourceReady(
-                                    android.graphics.drawable.Drawable resource,
-                                    com.bumptech.glide.request.transition.Transition<? super
-                                            android.graphics.drawable.Drawable> transition) {
-                                img.setImageDrawable(resource);
-                                restartGif(resource);
-                            }
-
-                            @Override
-                            public void onLoadFailed(
-                                    android.graphics.drawable.Drawable errorDrawable) {
-                                img.setImageResource(R.drawable.ic_headphone);
-                            }
-
-                            @Override
-                            protected void onResourceCleared(
-                                    android.graphics.drawable.Drawable placeholder) {
-                            }
-                        });
-            } catch (Exception e) {
-                img.setImageResource(R.drawable.ic_headphone);
-            }
-        } else {
-            img.setImageResource(R.drawable.ic_headphone);
+        String deviceName = prettyName(rawName);
+        String head = fill(prefs.titleText(), deviceName);
+        if (tvDeviceName != null) {
+            tvDeviceName.setText(head.isEmpty() ? deviceName : head);
+            tvDeviceName.setTextColor(textColor);
+        }
+        if (infoBar != null) {
+            infoBar.setText(buildDetail(prefs, deviceName, levels));
+            infoBar.setTextColor(subColor);
+        }
+        if (tipText != null) {
+            tipText.setTextColor(tipColor);
         }
 
-        // ---------- 流光扫过 ----------
+        // ---------- ① 图片 / GIF ----------
+        if (gifWrap != null) gifWrap.setBackground(null);
+        String uri = prefs.imageUri();
+        if (img != null) {
+            img.setScaleType(ImageView.ScaleType.MATRIX);
+            if (!uri.isEmpty()) {
+                try {
+                    Glide.with(c.getApplicationContext())
+                            .load(Uri.parse(uri))
+                            .dontTransform()
+                            .into(new com.bumptech.glide.request.target.CustomViewTarget<ImageView,
+                                    Drawable>(img) {
+                                @Override
+                                public void onResourceReady(
+                                        Drawable resource,
+                                        com.bumptech.glide.request.transition.Transition<? super
+                                                Drawable> transition) {
+                                    img.setImageDrawable(resource);
+                                    applyImageMatrix(img);
+                                    // 每次弹窗都从第 0 帧开始
+                                    restartGif(resource);
+                                }
+
+                                @Override
+                                public void onLoadFailed(Drawable errorDrawable) {
+                                    img.setImageResource(R.drawable.ic_headphone);
+                                    applyImageMatrix(img);
+                                }
+
+                                @Override
+                                protected void onResourceCleared(Drawable placeholder) {
+                                }
+                            });
+                } catch (Exception e) {
+                    img.setImageResource(R.drawable.ic_headphone);
+                    applyImageMatrix(img);
+                }
+            } else {
+                img.setImageResource(R.drawable.ic_headphone);
+                applyImageMatrix(img);
+            }
+        }
+
+        // ---------- 流光 ----------
         if (shimmer != null && card != null) {
             startShimmer(c, shimmer, card.getWidth() > 0 ? card.getWidth() : widthPx);
         }
@@ -162,16 +183,92 @@ public final class PopupRenderer {
             if (onClose != null) onClose.close();
         });
 
-        // 入场动画（显式对卡片执行，不依赖系统窗口动画）
+        // ---------- 音效 ----------
+        SoundPlayer.play(c, prefs);
+
+        // ---------- 入场：整个卡片从下往上 ----------
         if (card != null) applyEnter(card, prefs.animStyle());
+
+        // ---------- 第 2 段：0.8 秒后详情区缓慢升起 ----------
+        if (detailArea != null) {
+            detailArea.animate().cancel();
+            detailArea.setAlpha(0f);
+            detailArea.setTranslationY(24 * d);
+            detailArea.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setStartDelay(DETAIL_DELAY_MS)
+                    .setDuration(DETAIL_RISE_MS)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        }
     }
 
     /**
-     * 让 GIF 从第 0 帧重新开始播放。
-     * Glide 缓存的 GifDrawable 会被复用，第二次弹窗时动画状态停在上次结束处，
-     * 表现为「续播」。这里先 stop() 再 startFromFirstFrame()，强制回到开头。
+     * 应用图片变换矩阵：基础填满（centerCrop） + 用户双指缩放/拖动/旋转。
+     * 用 MATRIX 而非 FIT_CENTER：FIT_CENTER 会留白，且无法叠加用户手势。
      */
-    private static void restartGif(android.graphics.drawable.Drawable d) {
+    public static void applyImageMatrix(ImageView img) {
+        if (img == null) return;
+        Drawable dr = img.getDrawable();
+        int vw = img.getWidth();
+        int vh = img.getHeight();
+        if (dr == null || vw <= 0 || vh <= 0) {
+            // 尺寸还没测出来，下一帧再试
+            img.post(() -> applyImageMatrix(img));
+            return;
+        }
+        int dw = dr.getIntrinsicWidth();
+        int dh = dr.getIntrinsicHeight();
+        if (dw <= 0 || dh <= 0) dw = dh = 1;
+
+        Prefs prefs = PrefsHolder.get();
+        float userScale = prefs == null ? 1f : prefs.imageScale();
+        float dx = prefs == null ? 0f : prefs.imageOffsetX();
+        float dy = prefs == null ? 0f : prefs.imageOffsetY();
+        float rot = prefs == null ? 0f : prefs.imageRotation();
+        float density = img.getResources().getDisplayMetrics().density;
+
+        Matrix m = new Matrix();
+
+        // 基础：centerCrop（等比放大到铺满，不留白）
+        float scale = Math.max((float) vw / dw, (float) vh / dh);
+        // 叠加用户缩放
+        scale *= userScale;
+
+        m.postScale(scale, scale);
+
+        // 用户旋转（绕图片中心）
+        float px = dw / 2f, py = dh / 2f;
+        if (rot != 0f) m.postRotate(rot, px, py);
+
+        // 居中
+        float tx = (vw - dw * scale) / 2f;
+        float ty = (vh - dh * scale) / 2f;
+
+        // 叠加用户拖动（dp → px）
+        tx += dx * density;
+        ty += dy * density;
+
+        m.postTranslate(tx, ty);
+        img.setImageMatrix(m);
+    }
+
+    /** Prefs 的轻量全局持有，避免在静态渲染方法里反复 new */
+    public static final class PrefsHolder {
+        private static volatile Prefs instance;
+
+        public static void init(Context c) {
+            if (instance == null) instance = new Prefs(c.getApplicationContext());
+        }
+
+        public static Prefs get() {
+            return instance;
+        }
+    }
+
+    /** 让 GIF 从第 0 帧重新开始（Glide 会复用缓存实例，否则会续播） */
+    private static void restartGif(Drawable d) {
         if (d instanceof com.bumptech.glide.load.resource.gif.GifDrawable) {
             com.bumptech.glide.load.resource.gif.GifDrawable gif =
                     (com.bumptech.glide.load.resource.gif.GifDrawable) d;
@@ -182,83 +279,46 @@ public final class PopupRenderer {
             } catch (Exception ignored) {
             }
         } else if (d instanceof android.graphics.drawable.Animatable) {
-            android.graphics.drawable.Animatable a = (android.graphics.drawable.Animatable) d;
             try {
-                a.stop();
-                a.start();
+                ((android.graphics.drawable.Animatable) d).stop();
+                ((android.graphics.drawable.Animatable) d).start();
             } catch (Exception ignored) {
             }
         }
     }
 
-    /** 把子项 height 设为 0dp 并指定 weight，让它吃掉剩余空间 */
-    private static void forceWeight(View v, float weight) {
-        if (v == null) return;
-        ViewGroup.LayoutParams lp = v.getLayoutParams();
-        if (lp instanceof LinearLayout.LayoutParams) {
-            LinearLayout.LayoutParams llp = (LinearLayout.LayoutParams) lp;
-            llp.height = 0;
-            llp.weight = weight;
-            v.setLayoutParams(llp);
-        }
-    }
-
     /**
-     * 入场动画：按用户选择的样式执行。
-     * 之前三种样式被写死成同一种（从上方滑入），且系统级引擎依赖 windowAnimationStyle，
-     * 从后台启动时系统经常直接跳过窗口动画，所以表现为「直接变出来」。
-     * 现在改为对卡片 View 显式执行，两个引擎表现一致。
+     * 入场动画：默认从下往上。
+     * 用户明确要求「弹窗从下往上升起」，所以三种样式统一为底部上滑的变体，
+     * 保证任何设置下都是自下而上出现。
      */
     public static void applyEnter(View card, int style) {
         if (card == null) return;
         float d = card.getResources().getDisplayMetrics().density;
         card.animate().cancel();
 
-        switch (style) {
-            case ANIM_BOTTOM:   // 底部上滑
-                card.setTranslationY(120 * d);
-                card.setScaleX(1f);
-                card.setScaleY(1f);
-                card.setAlpha(0.2f);
-                card.animate()
-                        .translationY(0)
-                        .alpha(1f)
-                        .setDuration(340)
-                        .setInterpolator(new android.view.animation.DecelerateInterpolator())
-                        .start();
-                break;
-
-            case ANIM_TOP:      // 顶部下滑
-                card.setTranslationY(-120 * d);
-                card.setScaleX(1f);
-                card.setScaleY(1f);
-                card.setAlpha(0.2f);
-                card.animate()
-                        .translationY(0)
-                        .alpha(1f)
-                        .setDuration(340)
-                        .setInterpolator(new android.view.animation.DecelerateInterpolator())
-                        .start();
-                break;
-
-            default:            // 缩放淡入
-                card.setTranslationY(-50 * d);
-                card.setScaleX(0.93f);
-                card.setScaleY(0.93f);
-                card.setAlpha(0.3f);
-                card.animate()
-                        .translationY(0)
-                        .scaleX(1f)
-                        .scaleY(1f)
-                        .alpha(1f)
-                        .setDuration(340)
-                        .setInterpolator(new android.view.animation.DecelerateInterpolator())
-                        .start();
-                break;
+        // 统一：从下往上 + 淡入
+        card.setTranslationY(140 * d);
+        card.setTranslationX(0);
+        card.setAlpha(0.15f);
+        if (style == ANIM_SCALE) {
+            card.setScaleX(0.94f);
+            card.setScaleY(0.94f);
+            card.animate().translationY(0).scaleX(1f).scaleY(1f).alpha(1f)
+                    .setDuration(340)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        } else {
+            card.setScaleX(1f);
+            card.setScaleY(1f);
+            card.animate().translationY(0).alpha(1f)
+                    .setDuration(340)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
         }
     }
 
-    /** 退场动画：反向收回 */
+    /** 退场：向下收回 */
     public static void applyExit(View card, int style, Runnable after) {
         if (card == null) {
             if (after != null) after.run();
@@ -266,64 +326,41 @@ public final class PopupRenderer {
         }
         float d = card.getResources().getDisplayMetrics().density;
         card.animate().cancel();
-
         android.view.ViewPropertyAnimator a = card.animate()
                 .setDuration(260)
                 .setInterpolator(new android.view.animation.AccelerateInterpolator())
-                .alpha(0f);
-
-        if (style == ANIM_BOTTOM) {
-            a.translationY(120 * d);
-        } else {
-            a.translationY(-50 * d).scaleX(0.93f).scaleY(0.93f);
-        }
+                .alpha(0f)
+                .translationY(80 * d);
+        if (style == ANIM_SCALE) a.scaleX(0.94f).scaleY(0.94f);
         if (after != null) a.withEndAction(after);
         a.start();
     }
 
-    /**
-     * 组装信息窄条。
-     *
-     * 修掉两个问题：
-     *  1. 之前主标题写死用设备名，用户在「外观 → 主标题」填的内容根本没被使用；
-     *  2. 副标题默认 "%s 已连接"，%s 又被替换成设备名，
-     *     结果显示成 "Redmi Buds 5 Pro · Redmi Buds 5 Pro 已连接"，设备名重复两遍。
-     *
-     * 现在的规则：
-     *  - 主标题取 prefs.titleText()，支持 %s（替换成设备名）；为空则退回设备名
-     *  - 副标题同理；若副标题去掉 %s 后与主标题相同，则不再重复拼接
-     */
-    private static String buildInfo(String deviceName, Prefs prefs, BatteryLevels b) {
-        String dev = deviceName == null ? "" : deviceName.trim();
-        if (dev.isEmpty()) dev = "耳机";
+    /** 只刷新电量等信息条，不重建弹窗、不打断 GIF */
+    public static void updateInfo(View root, String rawName, BatteryLevels levels, Prefs prefs) {
+        if (root == null || levels == null || prefs == null) return;
+        TextView infoBar = root.findViewById(R.id.infoBar);
+        if (infoBar == null) return;
+        levels.sanitize();
+        infoBar.setText(buildDetail(prefs, prettyName(rawName), levels));
+    }
 
-        String title = "";
-        String sub = "";
-        if (prefs != null) {
-            title = fill(prefs.titleText(), dev);
-            sub = fill(prefs.subText(), dev);
-        }
-        // 主标题为空就用设备名
-        String head = title.isEmpty() ? dev : title;
-
-        StringBuilder sb = new StringBuilder(head);
-        // 副标题非空、且与主标题不同才拼，避免重复
-        if (!sub.isEmpty() && !sub.equals(head)) {
-            sb.append(" · ").append(sub);
-        }
-
-        if (b == null) return sb.toString();
-        // 只有存在有效电量（1~100）时才显示这一段；全未知就整段省略
-        if (b.anyKnown()) {
-            sb.append("  |  ");
-            sb.append("L:").append(BatteryLevels.fmt(b.left));
-            sb.append("  R:").append(BatteryLevels.fmt(b.right));
-            sb.append("  Case:").append(BatteryLevels.fmt(b.caseBox));
+    /** 详情区第二行：副标题 · 电量 */
+    private static String buildDetail(Prefs prefs, String deviceName, BatteryLevels b) {
+        StringBuilder sb = new StringBuilder();
+        String sub = fill(prefs.subText(), deviceName);
+        if (!sub.isEmpty()) sb.append(sub);
+        if (b != null && b.anyKnown()) {
+            if (sb.length() > 0) sb.append("  ·  ");
+            sb.append("L:").append(BatteryLevels.fmt(b.left))
+                    .append("  R:").append(BatteryLevels.fmt(b.right));
+            if (BatteryLevels.valid(b.caseBox)) {
+                sb.append("  Case:").append(BatteryLevels.fmt(b.caseBox));
+            }
         }
         return sb.toString();
     }
 
-    /** 把模板里的 %s 替换成设备名 */
     private static String fill(String tpl, String dev) {
         if (tpl == null) return "";
         String v = tpl.trim();
@@ -331,18 +368,6 @@ public final class PopupRenderer {
         return v.contains("%s") ? v.replace("%s", dev) : v;
     }
 
-    /**
-     * 只刷新信息窄条，用于电量探测异步返回后原地更新弹窗，
-     * 避免重建整个弹窗导致 GIF 重新播放。
-     */
-    public static void updateInfo(View root, String rawName, BatteryLevels levels, Prefs prefs) {
-        if (root == null || levels == null) return;
-        TextView infoBar = root.findViewById(R.id.infoBar);
-        if (infoBar == null) return;
-        infoBar.setText(buildInfo(prettyName(rawName), prefs, levels));
-    }
-
-    /** 流光：一条窄斜向高光带扫过，播完立即隐藏，绝不残留 */
     private static void startShimmer(Context c, View shimmer, int cardWidth) {
         shimmer.setBackgroundResource(R.drawable.bg_shimmer);
         float band = Math.max(24f, cardWidth * 0.22f);
@@ -352,30 +377,35 @@ public final class PopupRenderer {
             shimmer.setLayoutParams(lp);
         }
         shimmer.setVisibility(View.VISIBLE);
-        TranslateAnimation a = new TranslateAnimation(
-                Animation.RELATIVE_TO_PARENT, -0.4f,
-                Animation.RELATIVE_TO_PARENT, 1.0f,
-                Animation.RELATIVE_TO_SELF, 0f,
-                Animation.RELATIVE_TO_SELF, 0f);
+        android.view.animation.TranslateAnimation a =
+                new android.view.animation.TranslateAnimation(
+                        android.view.animation.Animation.RELATIVE_TO_PARENT, -0.4f,
+                        android.view.animation.Animation.RELATIVE_TO_PARENT, 1.0f,
+                        android.view.animation.Animation.RELATIVE_TO_SELF, 0f,
+                        android.view.animation.Animation.RELATIVE_TO_SELF, 0f);
         a.setDuration(760);
         a.setStartOffset(120);
-        a.setAnimationListener(new Animation.AnimationListener() {
-            public void onAnimationStart(Animation an) {
+        a.setAnimationListener(new android.view.animation.Animation.AnimationListener() {
+            public void onAnimationStart(android.view.animation.Animation an) {
             }
 
-            public void onAnimationEnd(Animation an) {
+            public void onAnimationEnd(android.view.animation.Animation an) {
                 shimmer.setVisibility(View.GONE);
                 shimmer.setBackground(null);
             }
 
-            public void onAnimationRepeat(Animation an) {
+            public void onAnimationRepeat(android.view.animation.Animation an) {
             }
         });
         shimmer.startAnimation(a);
     }
 
-    private static int applyAlpha(int color, float alpha) {
-        return (Math.round(255 * alpha) << 24) | (color & 0x00FFFFFF);
+    public static String prettyName(String raw) {
+        if (raw == null) return "耳机";
+        String n = raw.trim();
+        if (n.isEmpty()) return "耳机";
+        if (n.matches("^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$")) return "耳机";
+        return n;
     }
 
     private static int parseColor(String v, int fallback) {
@@ -386,17 +416,8 @@ public final class PopupRenderer {
         }
     }
 
-    /** 把蓝牙广播名换成更好看的显示名 */
-    /**
-     * 显示名：以用户在系统蓝牙里改的名字为准，绝不再做关键词替换。
-     * 之前把 "buds 5 pro" 强行换成官方名，导致用户自定义的名字被覆盖。
-     * 只有名字为空或明显是裸 MAC 时才兜底。
-     */
-    public static String prettyName(String raw) {
-        if (raw == null) return "耳机";
-        String n = raw.trim();
-        if (n.isEmpty()) return "耳机";
-        if (n.matches("^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$")) return "耳机";
-        return n;
+    private static int applyAlpha(int color, float alpha) {
+        int a = Math.round(255 * alpha);
+        return (a << 24) | (color & 0x00FFFFFF);
     }
 }
