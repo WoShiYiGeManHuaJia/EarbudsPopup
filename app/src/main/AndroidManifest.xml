@@ -54,11 +54,13 @@
 
         <activity
             android:name=".SetupActivity"
+            android:excludeFromRecents="true"
             android:exported="false"
             android:label="一键设置" />
 
         <activity
             android:name=".MainActivity"
+            android:excludeFromRecents="true"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
