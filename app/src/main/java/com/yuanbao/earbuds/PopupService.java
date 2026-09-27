@@ -319,7 +319,7 @@ public class PopupService extends Service {
         }
         main.postDelayed(() -> {
             if (PopupActivity.lastShownAt <= 0L && canOverlay) {
-                showOverlay(name, address, battery);
+                showOverlay(name, address, battery, caseBattery);
             }
         }, 800);
     }
