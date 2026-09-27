@@ -268,7 +268,7 @@ public final class PopupRenderer {
         // 让模糊本身成为主体。
         blur.setDim(applyAlpha(cardBg, 0.20f));
         // 顶部 55% 高度做渐隐，与上方清晰画面平滑过渡（不再一刀切）
-        blur.setFadeRatio(0.62f);
+        blur.setFadeRatio(0.50f);
         // 底部两角跟随卡片圆角
         blur.setBottomCornerRadius(radiusDp * d);
         blur.setSource(img);
