@@ -41,6 +41,21 @@ public final class BatterySysQuery {
      * 查询指定设备的电量。
      * @return 1~100 表示有效电量；-1 表示没解析出来
      */
+    /**
+     * 全文搜索模式：不依赖 MAC 定位，直接在整个 dumpsys 输出里
+     * 找所有含 battery 的行。
+     *
+     * 为什么需要：MAC 定位命中的往往是 BLE 扫描统计（"Scan time in ms"、
+     * "results (N) CB Regular Scan"），那只是"扫过这个地址"的记录，
+     * 根本不含电量。所以按 MAC 附近搜索永远拿不到值。
+     */
+    public static String grepBattery(String service) {
+        String out = ShizukuHelper.exec(
+                "dumpsys " + service + " | grep -i -B2 -A2 battery");
+        if (out == null || out.isEmpty()) return "";
+        return out.length() > 3000 ? out.substring(0, 3000) : out;
+    }
+
     public static int query(String mac) {
         if (mac == null || mac.isEmpty()) return -1;
         String out = ShizukuHelper.exec("dumpsys bluetooth_manager");
