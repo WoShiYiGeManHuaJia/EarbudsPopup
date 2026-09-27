@@ -22,13 +22,13 @@
             android:text="触发方式" />
 
         <LinearLayout
-            style="@style/Widget.App.Group"
+            style="@style/AppGroup"
             android:layout_marginTop="10dp"
             android:elevation="1dp">
 
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/swMaster"
-                style="@style/Widget.App.Item"
+                style="@style/AppItem"
                 android:drawableStart="@drawable/ic_bolt"
                 android:text="总开关"
                 android:textSize="15.5sp" />
@@ -41,7 +41,7 @@
 
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/swWired"
-                style="@style/Widget.App.Item"
+                style="@style/AppItem"
                 android:drawableStart="@drawable/ic_bluetooth"
                 android:text="有线耳机插入也弹窗"
                 android:textSize="15.5sp" />
@@ -54,7 +54,7 @@
 
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/swAutoStart"
-                style="@style/Widget.App.Item"
+                style="@style/AppItem"
                 android:drawableStart="@drawable/ic_power"
                 android:text="开机自启"
                 android:textSize="15.5sp" />
@@ -67,7 +67,7 @@
 
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/swBattery"
-                style="@style/Widget.App.Item"
+                style="@style/AppItem"
                 android:drawableStart="@drawable/ic_battery"
                 android:text="显示耳机电量"
                 android:textSize="15.5sp" />
@@ -80,7 +80,7 @@
 
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/swCase"
-                style="@style/Widget.App.Item"
+                style="@style/AppItem"
                 android:drawableStart="@drawable/ic_battery"
                 android:text="显示充电盒电量"
                 android:textSize="15.5sp" />
@@ -94,7 +94,7 @@
             android:text="触发设备" />
 
         <LinearLayout
-            style="@style/Widget.App.Group"
+            style="@style/AppGroup"
             android:layout_marginTop="10dp"
             android:elevation="1dp"
             android:padding="16dp">
@@ -107,7 +107,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnRefresh"
-                style="@style/Widget.App.Button.Tonal"
+                style="@style/AppButtonTonal"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
@@ -126,20 +126,20 @@
             android:text="系统级效果" />
 
         <LinearLayout
-            style="@style/Widget.App.Group"
+            style="@style/AppGroup"
             android:layout_marginTop="10dp"
             android:elevation="1dp">
 
             <LinearLayout
                 android:id="@+id/rowEngine"
-                style="@style/Widget.App.Row">
+                style="@style/AppRow">
 
                 <ImageView
-                    style="@style/Widget.App.RowIcon"
+                    style="@style/AppRowIcon"
                     android:contentDescription="引擎"
                     android:src="@drawable/ic_layers" />
 
-                <LinearLayout style="@style/Widget.App.RowText">
+                <LinearLayout style="@style/AppRowText">
                     <TextView
                         style="@style/TextRowTitle"
                         android:text="弹出引擎" />
@@ -162,14 +162,14 @@
 
             <LinearLayout
                 android:id="@+id/rowDim"
-                style="@style/Widget.App.Row">
+                style="@style/AppRow">
 
                 <ImageView
-                    style="@style/Widget.App.RowIcon"
+                    style="@style/AppRowIcon"
                     android:contentDescription="压暗"
                     android:src="@drawable/ic_preview" />
 
-                <LinearLayout style="@style/Widget.App.RowText">
+                <LinearLayout style="@style/AppRowText">
                     <TextView
                         style="@style/TextRowTitle"
                         android:text="背景压暗" />
@@ -189,14 +189,14 @@
 
             <LinearLayout
                 android:id="@+id/rowBlur"
-                style="@style/Widget.App.Row">
+                style="@style/AppRow">
 
                 <ImageView
-                    style="@style/Widget.App.RowIcon"
+                    style="@style/AppRowIcon"
                     android:contentDescription="模糊"
                     android:src="@drawable/ic_preview" />
 
-                <LinearLayout style="@style/Widget.App.RowText">
+                <LinearLayout style="@style/AppRowText">
                     <TextView
                         style="@style/TextRowTitle"
                         android:text="背景模糊半径" />
@@ -216,7 +216,7 @@
 
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/swLock"
-                style="@style/Widget.App.Item"
+                style="@style/AppItem"
                 android:drawableStart="@drawable/ic_lock"
                 android:text="锁屏 / 熄屏时也弹"
                 android:textSize="15.5sp" />
@@ -229,7 +229,7 @@
 
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/swNoFocus"
-                style="@style/Widget.App.Item"
+                style="@style/AppItem"
                 android:drawableStart="@drawable/ic_bolt"
                 android:text="不夺取焦点（游戏时不打断）"
                 android:textSize="15.5sp" />
@@ -243,13 +243,13 @@
             android:text="后台与省电" />
 
         <LinearLayout
-            style="@style/Widget.App.Group"
+            style="@style/AppGroup"
             android:layout_marginTop="10dp"
             android:elevation="1dp">
 
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/swPowerSave"
-                style="@style/Widget.App.Item"
+                style="@style/AppItem"
                 android:drawableStart="@drawable/ic_power"
                 android:text="省电模式"
                 android:textSize="15.5sp" />
@@ -262,14 +262,14 @@
 
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/swHideNoti"
-                style="@style/Widget.App.Item"
+                style="@style/AppItem"
                 android:drawableStart="@drawable/ic_notification"
                 android:text="隐藏后台通知"
                 android:textSize="15.5sp" />
         </LinearLayout>
 
         <LinearLayout
-            style="@style/Widget.App.Group"
+            style="@style/AppGroup"
             android:layout_marginTop="8dp"
             android:elevation="1dp"
             android:padding="16dp">
@@ -284,7 +284,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnNotiSettings"
-                style="@style/Widget.App.Button.Tonal"
+                style="@style/AppButtonTonal"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
@@ -294,7 +294,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnBattery"
-                style="@style/Widget.App.Button.Tonal"
+                style="@style/AppButtonTonal"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
@@ -313,20 +313,20 @@
             android:text="关于" />
 
         <LinearLayout
-            style="@style/Widget.App.Group"
+            style="@style/AppGroup"
             android:layout_marginTop="10dp"
             android:elevation="1dp">
 
             <LinearLayout
                 android:id="@+id/rowMiPerm"
-                style="@style/Widget.App.Row">
+                style="@style/AppRow">
 
                 <ImageView
-                    style="@style/Widget.App.RowIcon"
+                    style="@style/AppRowIcon"
                     android:contentDescription="授权"
                     android:src="@drawable/ic_shield" />
 
-                <LinearLayout style="@style/Widget.App.RowText">
+                <LinearLayout style="@style/AppRowText">
                     <TextView
                         style="@style/TextRowTitle"
                         android:text="复制 MIUI 授权命令" />
@@ -336,7 +336,7 @@
                 </LinearLayout>
 
                 <ImageView
-                    style="@style/Widget.App.RowIcon"
+                    style="@style/AppRowIcon"
                     android:layout_width="20dp"
                     android:layout_height="20dp"
                     android:contentDescription="前往"
@@ -351,14 +351,14 @@
 
             <LinearLayout
                 android:id="@+id/rowInfo"
-                style="@style/Widget.App.Row">
+                style="@style/AppRow">
 
                 <ImageView
-                    style="@style/Widget.App.RowIcon"
+                    style="@style/AppRowIcon"
                     android:contentDescription="信息"
                     android:src="@drawable/ic_info" />
 
-                <LinearLayout style="@style/Widget.App.RowText">
+                <LinearLayout style="@style/AppRowText">
                     <TextView
                         style="@style/TextRowTitle"
                         android:text="不联网 · 不上传 · 配置仅存本地" />
