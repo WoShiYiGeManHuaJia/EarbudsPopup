@@ -134,13 +134,10 @@ public class LiveBlurView extends View {
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        // 关键：setBottomCornerRadius 在布局前被调用，那时 getWidth()==0，
-        // outline 是空的 —— 裁剪形同虚设，这就是圆角一直不生效的原因。
-        // 尺寸确定后必须重算 outline。
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
-                && bottomRadiusPx > 0f) {
-            invalidateOutline();
-        }
+        // 尺寸变了必须丢弃旧圆角路径：
+        // ensureCornerPath 有「已存在就复用」的缓存，如果这里不清，
+        // 之后会一直用第一次（可能是错的）尺寸画圆角。
+        cornerPath = null;
     }
 
     @Override
@@ -708,20 +705,19 @@ public class LiveBlurView extends View {
      * 平移 -(sh - vh) 让源的底部对齐到本 View 的位置。
      */
     private void drawSource(Canvas canvas, Drawable dr, int sw, int sh, int vh) {
+        // 严重 bug 修复：
+        // 之前用 dr.getIntrinsicWidth/Height 设 bounds，再 concat(getImageMatrix())。
+        // 但 centerCrop 模式下 ImageView 的 getImageMatrix() 是【单位阵】，
+        // 真正的缩放裁切发生在 ImageView.draw() 内部 ——
+        // 于是这里画的是「原图原始尺寸」，与屏幕上实际显示的区域完全不符，
+        // 底部那一带取到的往往是图外空白，表现就是「模糊几乎变透明」。
+        //
+        // 正确做法：直接让 ImageView 自己画。
+        // src.draw(canvas) 会完整走它的 scaleType、自定义矩阵和圆角，
+        // 画出来的就是屏幕上真正看到的内容。
         canvas.save();
         canvas.translate(0, -(sh - vh));
-        try {
-            canvas.concat(src.getImageMatrix());
-        } catch (Exception ignored) {
-        }
-        int iw = dr.getIntrinsicWidth();
-        int ih = dr.getIntrinsicHeight();
-        if (iw <= 0 || ih <= 0) {
-            iw = sw;
-            ih = sh;
-        }
-        dr.setBounds(0, 0, iw, ih);
-        dr.draw(canvas);
+        src.draw(canvas);
         canvas.restore();
     }
 }
