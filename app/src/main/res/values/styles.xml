@@ -23,16 +23,13 @@
     </style>
 
     <!-- ===== 顶部应用栏 ===== -->
-    <style name="Widget.App.Toolbar" parent="Widget.Material3.Toolbar">
+    <style name="AppToolbar" parent="Widget.Material3.Toolbar">
         <item name="titleCentered">false</item>
         <item name="android:elevation">0dp</item>
     </style>
 
-    <!-- 隐式父级：Android 的 style 点号继承要求父样式必须存在 -->
-    <style name="Widget.App" />
-
     <!-- ===== 分组容器：M3 的 grouped list，圆角 16dp（large） ===== -->
-    <style name="Widget.App.Group">
+    <style name="AppGroup">
         <item name="android:background">@drawable/bg_group</item>
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
@@ -50,7 +47,7 @@
     </style>
 
     <!-- ===== 列表项：leading icon + 标题 + 副标题 ===== -->
-    <style name="Widget.App.Item" parent="Widget.Material3.CompoundButton.Switch">
+    <style name="AppItem" parent="Widget.Material3.CompoundButton.Switch">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:minHeight">64dp</item>
@@ -64,7 +61,7 @@
     </style>
 
     <!-- ===== 纯展示/点击型列表项 ===== -->
-    <style name="Widget.App.Row">
+    <style name="AppRow">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:minHeight">60dp</item>
@@ -75,14 +72,14 @@
         <item name="android:background">?attr/selectableItemBackground</item>
     </style>
 
-    <style name="Widget.App.RowIcon">
+    <style name="AppRowIcon">
         <item name="android:layout_width">24dp</item>
         <item name="android:layout_height">24dp</item>
         <item name="android:layout_gravity">center_vertical</item>
         <item name="android:tint">?attr/colorOnSurfaceVariant</item>
     </style>
 
-    <style name="Widget.App.RowText">
+    <style name="AppRowText">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_weight">1</item>
@@ -117,7 +114,7 @@
     </style>
 
     <!-- ===== 按钮 ===== -->
-    <style name="Widget.App.Button" parent="Widget.Material3.Button">
+    <style name="AppButton" parent="Widget.Material3.Button">
         <item name="android:layout_width">match_parent</item>
         <item name="android:insetTop">0dp</item>
         <item name="android:insetBottom">0dp</item>
@@ -128,7 +125,7 @@
         <item name="android:textStyle">bold</item>
     </style>
 
-    <style name="Widget.App.Button.Tonal" parent="Widget.Material3.Button.OutlinedButton">
+    <style name="AppButtonTonal" parent="Widget.Material3.Button.OutlinedButton">
         <item name="android:layout_width">match_parent</item>
         <item name="android:insetTop">0dp</item>
         <item name="android:insetBottom">0dp</item>
@@ -137,7 +134,7 @@
     </style>
 
     <!-- ===== 输入框 ===== -->
-    <style name="Widget.App.EditText" parent="Widget.AppCompat.EditText">
+    <style name="AppEditText" parent="Widget.AppCompat.EditText">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:textSize">14sp</item>
