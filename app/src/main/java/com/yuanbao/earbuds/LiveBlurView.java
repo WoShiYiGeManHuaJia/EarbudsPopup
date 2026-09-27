@@ -211,8 +211,15 @@ public class LiveBlurView extends View {
 
         // 始终自行模糊（原因见 applyEffect 注释）
 
-        // ① 整块区域先铺一层模糊（降采样再放大，逐帧重算 → 动态）
-        int factor = 10;
+        // ① 整块区域先铺一层模糊（逐帧重算 → 动态）
+        //
+        // 之前只做「降采样 1/10 再放大」，那本质是把像素块拉大，
+        // 看上是马赛克而不是模糊。现在改成两步：
+        //   a) 降采样到 1/4（倍数小，保留更多结构）
+        //   b) 对小图做 StackBlur（接近高斯），得到真正柔和的模糊
+        //   c) 再放大回原尺寸（双线性插值进一步平滑）
+        // 小图只有约 1/16 的像素量，StackBlur 每帧开销很低。
+        int factor = 4;
         int bw = Math.max(1, vw / factor);
         int bh = Math.max(1, vh / factor);
         if (smallBuf == null || smallBuf.getWidth() != bw
@@ -225,6 +232,13 @@ public class LiveBlurView extends View {
         smallCanvas.scale(1f / factor, 1f / factor);
         drawSource(smallCanvas, dr, sw, sh, vh);
         smallCanvas.restore();
+
+        // 小图上做真模糊。
+        // 半径要限定上限：小图高度只有约 100px，半径过大（比如 19）
+        // 会把整块糊成一片纯色，反而看不出是模糊。
+        // 经验值：小图半径 6~12 最自然，再靠放大时的双线性插值补足柔化。
+        int radius = Math.max(2, Math.min(12, Math.round(blurRadiusPx / 8f)));
+        stackBlur(smallBuf, radius);
 
         canvas.save();
         canvas.scale(factor, factor);
@@ -256,6 +270,215 @@ public class LiveBlurView extends View {
                 canvas.restoreToCount(saved);
             }
         }
+    }
+
+    /**
+     * StackBlur（Mario Klingemann 算法）：接近高斯模糊，速度远快于逐像素卷积。
+     * 在小图上执行，开销很低，适合逐帧调用。
+     */
+    private static void stackBlur(Bitmap bmp, int radius) {
+        int w = bmp.getWidth();
+        int h = bmp.getHeight();
+        if (w <= 0 || h <= 0 || radius <= 0) return;
+
+        int[] pix = new int[w * h];
+        bmp.getPixels(pix, 0, w, 0, 0, w, h);
+
+        int wm = w - 1;
+        int hm = h - 1;
+        int wh = w * h;
+        int div = radius + radius + 1;
+
+        int[] r = new int[wh];
+        int[] g = new int[wh];
+        int[] b = new int[wh];
+        int[] a = new int[wh];
+        int rsum, gsum, bsum, asum, x, y, i, p, yp, yi, yw;
+
+        int[] vmin = new int[Math.max(w, h)];
+        int divsum = (div + 1) >> 1;
+        divsum *= divsum;
+        int[] dv = new int[256 * divsum];
+        for (i = 0; i < 256 * divsum; i++) dv[i] = (i / divsum);
+
+        yw = yi = 0;
+
+        int[][] stack = new int[div][4];
+        int stackpointer;
+        int stackstart;
+        int[] sir;
+        int rbs;
+        int r1 = radius + 1;
+        int routsum, goutsum, boutsum, aoutsum;
+        int rinsum, ginsum, binsum, ainsum;
+
+        for (y = 0; y < h; y++) {
+            rinsum = ginsum = binsum = ainsum = 0;
+            routsum = goutsum = boutsum = aoutsum = 0;
+            rsum = gsum = bsum = asum = 0;
+            for (i = -radius; i <= radius; i++) {
+                p = pix[yi + Math.min(wm, Math.max(i, 0))];
+                sir = stack[i + radius];
+                sir[0] = (p & 0xff0000) >> 16;
+                sir[1] = (p & 0x00ff00) >> 8;
+                sir[2] = (p & 0x0000ff);
+                sir[3] = (p & 0xff000000) >>> 24;
+                rbs = r1 - Math.abs(i);
+                rsum += sir[0] * rbs;
+                gsum += sir[1] * rbs;
+                bsum += sir[2] * rbs;
+                asum += sir[3] * rbs;
+                if (i > 0) {
+                    rinsum += sir[0];
+                    ginsum += sir[1];
+                    binsum += sir[2];
+                    ainsum += sir[3];
+                } else {
+                    routsum += sir[0];
+                    goutsum += sir[1];
+                    boutsum += sir[2];
+                    aoutsum += sir[3];
+                }
+            }
+            stackpointer = radius;
+            for (x = 0; x < w; x++) {
+                r[yi] = dv[rsum];
+                g[yi] = dv[gsum];
+                b[yi] = dv[bsum];
+                a[yi] = dv[asum];
+
+                rsum -= routsum;
+                gsum -= goutsum;
+                bsum -= boutsum;
+                asum -= aoutsum;
+
+                stackstart = stackpointer - radius + div;
+                sir = stack[stackstart % div];
+
+                routsum -= sir[0];
+                goutsum -= sir[1];
+                boutsum -= sir[2];
+                aoutsum -= sir[3];
+
+                if (x == 0) vmin[y] = Math.min(y + r1, hm) * w;
+                p = pix[yw + vmin[y]];
+
+                sir[0] = (p & 0xff0000) >> 16;
+                sir[1] = (p & 0x00ff00) >> 8;
+                sir[2] = (p & 0x0000ff);
+                sir[3] = (p & 0xff000000) >>> 24;
+
+                rinsum += sir[0];
+                ginsum += sir[1];
+                binsum += sir[2];
+                ainsum += sir[3];
+
+                rsum += rinsum;
+                gsum += ginsum;
+                bsum += binsum;
+                asum += ainsum;
+
+                stackpointer = (stackpointer + 1) % div;
+                sir = stack[(stackpointer) % div];
+
+                routsum += sir[0];
+                goutsum += sir[1];
+                boutsum += sir[2];
+                aoutsum += sir[3];
+
+                rinsum -= sir[0];
+                ginsum -= sir[1];
+                binsum -= sir[2];
+                ainsum -= sir[3];
+
+                yi++;
+            }
+            yw += w;
+        }
+
+        for (x = 0; x < w; x++) {
+            rinsum = ginsum = binsum = ainsum = 0;
+            routsum = goutsum = boutsum = aoutsum = 0;
+            rsum = gsum = bsum = asum = 0;
+            yp = -radius * w;
+            for (i = -radius; i <= radius; i++) {
+                yi = Math.max(0, yp) + x;
+                sir = stack[i + radius];
+                sir[0] = r[yi];
+                sir[1] = g[yi];
+                sir[2] = b[yi];
+                sir[3] = a[yi];
+                rbs = r1 - Math.abs(i);
+                rsum += r[yi] * rbs;
+                gsum += g[yi] * rbs;
+                bsum += b[yi] * rbs;
+                asum += a[yi] * rbs;
+                if (i > 0) {
+                    rinsum += sir[0];
+                    ginsum += sir[1];
+                    binsum += sir[2];
+                    ainsum += sir[3];
+                } else {
+                    routsum += sir[0];
+                    goutsum += sir[1];
+                    boutsum += sir[2];
+                    aoutsum += sir[3];
+                }
+                if (i < hm) yp += w;
+            }
+            yi = x;
+            stackpointer = radius;
+            for (y = 0; y < h; y++) {
+                pix[yi] = (dv[asum] << 24) | (dv[rsum] << 16) | (dv[gsum] << 8) | dv[bsum];
+
+                rsum -= routsum;
+                gsum -= goutsum;
+                bsum -= boutsum;
+                asum -= aoutsum;
+
+                stackstart = stackpointer - radius + div;
+                sir = stack[stackstart % div];
+
+                routsum -= sir[0];
+                goutsum -= sir[1];
+                boutsum -= sir[2];
+                aoutsum -= sir[3];
+
+                if (x == 0) vmin[y] = Math.min(y + r1, hm) * w;
+
+                p = x + vmin[y];
+                sir[0] = r[p];
+                sir[1] = g[p];
+                sir[2] = b[p];
+                sir[3] = a[p];
+
+                rinsum += sir[0];
+                ginsum += sir[1];
+                binsum += sir[2];
+                ainsum += sir[3];
+
+                rsum += rinsum;
+                gsum += ginsum;
+                bsum += binsum;
+                asum += ainsum;
+
+                stackpointer = (stackpointer + 1) % div;
+                sir = stack[stackpointer % div];
+
+                routsum += sir[0];
+                goutsum += sir[1];
+                boutsum += sir[2];
+                aoutsum += sir[3];
+
+                rinsum -= sir[0];
+                ginsum -= sir[1];
+                binsum -= sir[2];
+                ainsum -= sir[3];
+
+                yi += w;
+            }
+        }
+        bmp.setPixels(pix, 0, w, 0, 0, w, h);
     }
 
     /**
