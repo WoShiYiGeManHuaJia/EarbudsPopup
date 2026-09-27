@@ -33,8 +33,6 @@ public final class PopupRenderer {
 
     /** 卡片总高 = 宽度 × 该比例；三区再按 76 / 16 / 8 分配 */
     private static final float CARD_H_RATIO = 1.15f;
-    /** 图片区圆角：卡片圆角 24dp 减去 8dp 内边距 */
-    private static final float GIF_CORNER = 16f;
 
     public interface OnClose {
         void close();
@@ -48,7 +46,7 @@ public final class PopupRenderer {
                             Prefs prefs, OnClose onClose) {
         View card = root.findViewById(R.id.card);
         FrameLayout gifWrap = root.findViewById(R.id.gifWrap);
-        ImageView img = root.findViewById(R.id.popupImage);
+        RoundedImageView img = root.findViewById(R.id.popupImage);
         View shimmer = root.findViewById(R.id.shimmer);
         TextView infoBar = root.findViewById(R.id.infoBar);
         TextView tipText = root.findViewById(R.id.tipText);
@@ -79,7 +77,10 @@ public final class PopupRenderer {
             gd.setStroke(Math.max(1, (int) d), 0x33FFFFFF);
             card.setBackground(gd);
             card.setElevation(18 * d);
-            card.setClipToOutline(true);        // 让内容与玻璃边框一起被圆角裁切
+            // 不再 setClipToOutline(true)：
+            // 系统圆角裁剪是几何裁剪，边缘不做抗锯齿，四个角会有锯齿。
+            // 卡片背景本身就是圆角 GradientDrawable（Canvas 绘制，带抗锯齿），
+            // 已经足够；图片的圆角交给 RoundedImageView 用离屏合成处理。
         }
 
         // ---------- 三区：GIF 区吃掉全部剩余空间，文字区保持紧凑 ----------
@@ -93,20 +94,10 @@ public final class PopupRenderer {
             gifWrap.setBackground(null);
         }
 
-        // 圆角裁切必须作用在 ImageView 本身：
-        // 之前裁的是外层容器 gifWrap，而图片在容器的 padding 内部，
-        // 容器边界上的圆角根本碰不到图片的四角，所以看起来还是直角。
-        // 用 ViewOutlineProvider 由 GPU 合成时裁切，不会像 Glide Transformation
-        // 那样逐帧重算，GIF 帧率不受影响。
+        // 图片圆角：交给 RoundedImageView 做离屏 DST_IN 合成，边缘抗锯齿。
+        // 半径取「卡片圆角 - 容器内边距」，让图片圆角与卡片圆角自然贴合。
         if (img != null) {
-            final float r = GIF_CORNER * d;
-            img.setOutlineProvider(new android.view.ViewOutlineProvider() {
-                @Override
-                public void getOutline(android.view.View view, android.graphics.Outline outline) {
-                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), r);
-                }
-            });
-            img.setClipToOutline(true);
+            img.setRadius(Math.max(0f, prefs.radiusDp() - 2) * d);
         }
 
         // ---------- 文字色 ----------
