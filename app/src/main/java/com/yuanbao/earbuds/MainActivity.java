@@ -171,6 +171,8 @@ public class MainActivity extends AppCompatActivity {
             saveAll();
             Toast.makeText(this, "已保存", Toast.LENGTH_SHORT).show();
         });
+        findViewById(R.id.btnSetup).setOnClickListener(
+                v -> startActivity(new android.content.Intent(this, SetupActivity.class)));
         findViewById(R.id.btnRefresh).setOnClickListener(v -> refreshDevices());
         findViewById(R.id.btnBlockMi).setOnClickListener(v -> showMiPopupGuide());
 
