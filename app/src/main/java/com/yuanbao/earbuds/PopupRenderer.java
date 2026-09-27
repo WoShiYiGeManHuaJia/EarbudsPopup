@@ -194,23 +194,56 @@ public final class PopupRenderer {
         // ---------- 入场：从下往上 ----------
         if (card != null) applyEnter(card, prefs.animStyle());
 
-        // ---------- 第 2 段：1 秒后模糊 + 详情淡入 ----------
+        // ---------- 第 2 段：1 秒后，模糊 + 文字【一起】淡入上移 ----------
+        //
+        // 之前：模糊层在 1 秒那一刻直接 setVisibility(VISIBLE) 瞬间出现，
+        //       只有文字做淡入动画 —— 用户看到的就是「模糊一直在，文字才弹出来」。
+        // 现在：模糊层与文字用【完全相同】的 alpha + translationY 动画，
+        //       两者作为一个整体同时浮现。
         if (detailArea != null && card != null) {
             detailArea.animate().cancel();
             detailArea.setAlpha(0f);
             detailArea.setTranslationY(18 * d);
+
+            // 模糊层同样先藏起来（VISIBLE 但透明 + 下移）
+            if (detailBlurBg != null) {
+                detailBlurBg.animate().cancel();
+                detailBlurBg.setAlpha(0f);
+                detailBlurBg.setTranslationY(18 * d);
+            }
+
             main.postDelayed(() -> {
                 // 模糊失败也必须让文字出现，否则用户看到的是"没有文字"
                 try {
                     setupLiveBlur(detailBlurBg, img, cardBg, prefs.radiusDp());
                 } catch (Throwable ignored) {
                 }
+                // 绑定后重新归零：setupLiveBlur 只改内容，不改动画属性，
+                // 但保险起见再设一次，避免中途被别处改动。
+                if (detailBlurBg != null) {
+                    detailBlurBg.setAlpha(0f);
+                    detailBlurBg.setTranslationY(18 * d);
+                }
+
+                DecelerateInterpolator interpol = new DecelerateInterpolator();
+
+                // 文字
                 detailArea.animate()
                         .alpha(1f)
                         .translationY(0f)
                         .setDuration(DETAIL_RISE_MS)
-                        .setInterpolator(new DecelerateInterpolator())
+                        .setInterpolator(interpol)
                         .start();
+
+                // 模糊：同一时长、同一插值器、同一位移 → 与文字同步浮现
+                if (detailBlurBg != null) {
+                    detailBlurBg.animate()
+                            .alpha(1f)
+                            .translationY(0f)
+                            .setDuration(DETAIL_RISE_MS)
+                            .setInterpolator(interpol)
+                            .start();
+                }
             }, DETAIL_DELAY_MS);
         }
     }
