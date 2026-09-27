@@ -18,20 +18,13 @@ import android.os.PowerManager;
 import android.provider.Settings;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
-import android.widget.Button;
-import android.widget.CheckBox;
 import android.widget.EditText;
-import android.widget.ImageView;
 import android.widget.FrameLayout;
-import android.widget.ProgressBar;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
-import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -40,44 +33,50 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-
 import androidx.palette.graphics.Palette;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.transition.Transition;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.checkbox.MaterialCheckBox;
+import com.google.android.material.color.DynamicColors;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * 主界面：Material 3 三页结构（首页 / 外观 / 设置）+ 底部导航。
+ */
 public class MainActivity extends AppCompatActivity {
 
     private Prefs prefs;
 
-    private TextView permStatus;
-    private LinearLayout deviceList;
-    private ImageView imgPreview;
-    private EditText etTitle, etSub, etBg, etTextColor, etAccent;
-    private SeekBar sbWidth, sbRadius, sbImgH, sbDuration;
-    private TextView tvWidth, tvRadius, tvImgH, tvDuration;
-    private Spinner spPos, spAnim, spEngine;
-    private SeekBar sbDim, sbBlur;
-    private TextView tvDim, tvBlur;
-    private SwitchMaterial swLock, swNoFocus, swCase, swAutoColor;
-    private SwitchMaterial swPowerSave, swHideNoti;
-    private SwitchMaterial swMaster, swWired, swAutoStart, swBattery;
-
-    // 实时预览
+    // 首页
+    private TextView permStatus, tvDevice;
     private View pvCard, pvFade;
     private FrameLayout pvImageArea;
     private ImageView pvImage;
-    private TextView pvTitle, pvSub, tvDevice;
+    private TextView pvTitle, pvSub;
     private BatteryRingView pvRingEarbud, pvRingBox;
     private LinearLayout pvBoxGroup;
+
+    // 外观
+    private ImageView imgPreview;
+    private EditText etTitle, etSub, etBg, etTextColor, etAccent;
+    private TextView tvWidth, tvRadius, tvImgH, tvDuration, tvPos, tvAnim;
+    private SwitchMaterial swAutoColor;
+
+    // 设置
+    private SwitchMaterial swMaster, swWired, swAutoStart, swBattery, swCase;
+    private SwitchMaterial swLock, swNoFocus, swPowerSave, swHideNoti;
+    private TextView tvEngine, tvDim, tvBlur;
+    private LinearLayout deviceList;
+
+    private View tabHome, tabLook, tabSet;
 
     private final Set<String> allowSet = new LinkedHashSet<>();
     private boolean bindingUi = false;
@@ -91,17 +90,20 @@ public class MainActivity extends AppCompatActivity {
                 } catch (Exception ignored) {
                 }
                 prefs.setImageUri(uri.toString());
-                loadPreview();
+                loadThumb();
                 updatePreview();
                 extractTheme(uri);
             });
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Android 12+ 取壁纸色，让 App 跟系统主题融为一体
+        DynamicColors.applyToActivityIfAvailable(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         prefs = new Prefs(this);
 
+        setupToolbarAndNav();
         bindViews();
         loadPrefsToUi();
         setupListeners();
@@ -109,10 +111,50 @@ public class MainActivity extends AppCompatActivity {
         refreshDevices();
     }
 
+    // ---------------- 顶部栏与底部导航 ----------------
+
+    private void setupToolbarAndNav() {
+        com.google.android.material.appbar.MaterialToolbar tb = findViewById(R.id.toolbar);
+        if (tb != null) {
+            tb.setOnMenuItemClickListener(item -> {
+                if (item.getItemId() == R.id.action_setup) {
+                    startActivity(new Intent(this, SetupActivity.class));
+                    return true;
+                }
+                return false;
+            });
+        }
+
+        BottomNavigationView nav = findViewById(R.id.bottomNav);
+        if (nav != null) {
+            nav.setOnItemSelectedListener(item -> {
+                int id = item.getItemId();
+                showTab(id == R.id.nav_look ? 1 : id == R.id.nav_settings ? 2 : 0);
+                return true;
+            });
+        }
+    }
+
+    private void showTab(int i) {
+        tabHome.setVisibility(i == 0 ? View.VISIBLE : View.GONE);
+        tabLook.setVisibility(i == 1 ? View.VISIBLE : View.GONE);
+        tabSet.setVisibility(i == 2 ? View.VISIBLE : View.GONE);
+        com.google.android.material.appbar.MaterialToolbar tb = findViewById(R.id.toolbar);
+        if (tb != null) {
+            tb.setTitle(i == 0 ? "耳机弹窗" : i == 1 ? "外观" : "设置");
+        }
+        if (i == 0) updatePreview();
+    }
+
+    // ---------------- 绑定 ----------------
+
     private void bindViews() {
+        tabHome = findViewById(R.id.tabHome);
+        tabLook = findViewById(R.id.tabLook);
+        tabSet = findViewById(R.id.tabSet);
+
         permStatus = findViewById(R.id.permStatus);
-        deviceList = findViewById(R.id.deviceList);
-        imgPreview = findViewById(R.id.imgPreview);
+        tvDevice = findViewById(R.id.tvDevice);
         pvCard = findViewById(R.id.pvCard);
         pvImageArea = findViewById(R.id.pvImageArea);
         pvImage = findViewById(R.id.pvImage);
@@ -122,224 +164,270 @@ public class MainActivity extends AppCompatActivity {
         pvRingEarbud = findViewById(R.id.pvRingEarbud);
         pvRingBox = findViewById(R.id.pvRingBox);
         pvBoxGroup = findViewById(R.id.pvBoxGroup);
-        tvDevice = findViewById(R.id.tvDevice);
+
+        imgPreview = findViewById(R.id.imgPreview);
         etTitle = findViewById(R.id.etTitle);
         etSub = findViewById(R.id.etSub);
         etBg = findViewById(R.id.etBg);
         etTextColor = findViewById(R.id.etTextColor);
         etAccent = findViewById(R.id.etAccent);
-        sbWidth = findViewById(R.id.sbWidth);
-        sbRadius = findViewById(R.id.sbRadius);
-        sbImgH = findViewById(R.id.sbImgH);
-        sbDuration = findViewById(R.id.sbDuration);
         tvWidth = findViewById(R.id.tvWidth);
         tvRadius = findViewById(R.id.tvRadius);
         tvImgH = findViewById(R.id.tvImgH);
         tvDuration = findViewById(R.id.tvDuration);
-        spPos = findViewById(R.id.spPos);
-        spAnim = findViewById(R.id.spAnim);
-        spEngine = findViewById(R.id.spEngine);
-        sbDim = findViewById(R.id.sbDim);
-        sbBlur = findViewById(R.id.sbBlur);
-        tvDim = findViewById(R.id.tvDim);
-        tvBlur = findViewById(R.id.tvBlur);
-        swLock = findViewById(R.id.swLock);
-        swCase = findViewById(R.id.swCase);
+        tvPos = findViewById(R.id.tvPos);
+        tvAnim = findViewById(R.id.tvAnim);
         swAutoColor = findViewById(R.id.swAutoColor);
-        swPowerSave = findViewById(R.id.swPowerSave);
-        swHideNoti = findViewById(R.id.swHideNoti);
-        swNoFocus = findViewById(R.id.swNoFocus);
+
         swMaster = findViewById(R.id.swMaster);
         swWired = findViewById(R.id.swWired);
         swAutoStart = findViewById(R.id.swAutoStart);
         swBattery = findViewById(R.id.swBattery);
+        swCase = findViewById(R.id.swCase);
+        swLock = findViewById(R.id.swLock);
+        swNoFocus = findViewById(R.id.swNoFocus);
+        swPowerSave = findViewById(R.id.swPowerSave);
+        swHideNoti = findViewById(R.id.swHideNoti);
+        tvEngine = findViewById(R.id.tvEngine);
+        tvDim = findViewById(R.id.tvDim);
+        tvBlur = findViewById(R.id.tvBlur);
+        deviceList = findViewById(R.id.deviceList);
     }
+
+    // ---------------- 载入与保存 ----------------
 
     private void loadPrefsToUi() {
         bindingUi = true;
+        allowSet.clear();
+        allowSet.addAll(prefs.allowedDevices());
+
         etTitle.setText(prefs.titleText());
         etSub.setText(prefs.subText());
         etBg.setText(prefs.bgColor());
         etTextColor.setText(prefs.textColor());
         etAccent.setText(prefs.accentColor());
-        sbWidth.setProgress(prefs.widthDp() - 180);
-        sbRadius.setProgress(prefs.radiusDp());
-        sbImgH.setProgress((int) (prefs.imageRatio() * 100) - 40);
-        sbDuration.setProgress(prefs.durationMs() / 500 - 1);
-        spPos.setSelection(prefs.position());
-        spAnim.setSelection(prefs.animStyle());
-        spEngine.setSelection(prefs.engine());
-        sbDim.setProgress((int) (prefs.dimAmount() * 100));
-        sbBlur.setProgress(prefs.blurRadius());
-        swLock.setChecked(prefs.showOnLock());
-        if (swPowerSave != null) swPowerSave.setChecked(prefs.powerSave());
-        if (swHideNoti != null) swHideNoti.setChecked(prefs.hideNotification());
-        swNoFocus.setChecked(prefs.notFocusable());
+
         swMaster.setChecked(prefs.masterEnabled());
         swWired.setChecked(prefs.wiredEnabled());
         swAutoStart.setChecked(prefs.autoStart());
         swBattery.setChecked(prefs.showBattery());
-        allowSet.clear();
-        Set<String> saved = prefs.allowedDevices();
-        if (saved != null) allowSet.addAll(saved);
-        syncSeekLabels();
-        loadPreview();
+        swCase.setChecked(prefs.showCaseBattery());
+        swLock.setChecked(prefs.showOnLock());
+        swNoFocus.setChecked(prefs.notFocusable());
+        swPowerSave.setChecked(prefs.powerSave());
+        swHideNoti.setChecked(prefs.hideNotification());
+        swAutoColor.setChecked(prefs.autoColor());
+
+        syncValueLabels();
+        loadThumb();
         updatePreview();
         showDeviceInfo();
         bindingUi = false;
     }
 
+    private void saveAll() {
+        String t = etTitle.getText().toString().trim();
+        prefs.setTitleText(t.isEmpty() ? "耳机已连接" : t);
+        prefs.setSubText(etSub.getText().toString());
+        String bg = etBg.getText().toString().trim();
+        prefs.setBgColor(bg.isEmpty() ? "#F2141620" : bg);
+        String tc = etTextColor.getText().toString().trim();
+        prefs.setTextColor(tc.isEmpty() ? "#FFFFFFFF" : tc);
+        String ac = etAccent.getText().toString().trim();
+        prefs.setAccentColor(ac.isEmpty() ? "#FF00E5A0" : ac);
+        prefs.setAllowedDevices(allowSet);
+        syncValueLabels();
+    }
+
+    /** 把所有数值项的当前值刷新到行尾 */
+    private void syncValueLabels() {
+        tvWidth.setText(prefs.widthDp() + " dp");
+        tvRadius.setText(prefs.radiusDp() + " dp");
+        tvImgH.setText(Math.round(prefs.imageRatio() * 100) + "%");
+        tvDuration.setText(prefs.durationMs() + " ms");
+        tvPos.setText(new String[]{"顶部", "居中", "底部"}[prefs.position()]);
+        tvAnim.setText(new String[]{"缩放淡入", "底部上滑", "顶部下滑"}[prefs.animStyle()]);
+        tvEngine.setText(new String[]{"系统级", "悬浮窗", "智能"}[prefs.engine()]);
+        tvDim.setText(Math.round(prefs.dimAmount() * 100) + "%");
+        tvBlur.setText(prefs.blurRadius() + " dp");
+    }
+
+    // ---------------- 事件 ----------------
+
     private void setupListeners() {
-        findViewById(R.id.btnPerm).setOnClickListener(v -> openPermissionSettings());
-        findViewById(R.id.btnAdb).setOnClickListener(v -> copyAdbCommands());
-        findViewById(R.id.btnBatteryOpt).setOnClickListener(v -> requestBatteryWhitelist());
-        findViewById(R.id.btnPickImage).setOnClickListener(v -> pickImage.launch(new String[]{"image/*"}));
-        findViewById(R.id.btnClearImage).setOnClickListener(v -> {
-            prefs.setImageUri("");
-            loadPreview();
-            updatePreview();
-        });
+        findViewById(R.id.btnSetup).setOnClickListener(
+                v -> startActivity(new Intent(this, SetupActivity.class)));
+
         findViewById(R.id.btnTest).setOnClickListener(v -> {
             saveAll();
             Intent s = new Intent(this, PopupService.class);
             s.setAction(PopupService.ACTION_SHOW);
             s.putExtra(PopupService.EXTRA_NAME, "我的耳机");
             s.putExtra(PopupService.EXTRA_BATTERY, prefs.showBattery() ? 78 : -1);
-            // 演示用：真实连接时若读不到充电盒电量会自动隐藏该圆环
             s.putExtra(PopupService.EXTRA_CASE,
                     (prefs.showBattery() && prefs.showCaseBattery()) ? 65 : -1);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(s);
             else startService(s);
         });
-        findViewById(R.id.btnSave).setOnClickListener(v -> {
-            saveAll();
-            Toast.makeText(this, "已保存", Toast.LENGTH_SHORT).show();
-        });
-        findViewById(R.id.btnSetup).setOnClickListener(
-                v -> startActivity(new android.content.Intent(this, SetupActivity.class)));
-        findViewById(R.id.btnRefresh).setOnClickListener(v -> refreshDevices());
-        findViewById(R.id.btnBlockMi).setOnClickListener(v -> showMiPopupGuide());
 
-        SeekBar.OnSeekBarChangeListener sl = new SeekBar.OnSeekBarChangeListener() {
-            public void onProgressChanged(SeekBar sb, int p, boolean b) {
-                syncSeekLabels();
-            }
-
-            public void onStartTrackingTouch(SeekBar sb) {
-            }
-
-            public void onStopTrackingTouch(SeekBar sb) {
-                saveAll();
-            }
-        };
-        sbWidth.setOnSeekBarChangeListener(sl);
-        sbRadius.setOnSeekBarChangeListener(sl);
-        sbImgH.setOnSeekBarChangeListener(sl);
-        sbDuration.setOnSeekBarChangeListener(sl);
-        sbDim.setOnSeekBarChangeListener(sl);
-        sbBlur.setOnSeekBarChangeListener(sl);
-
-        spPos.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            public void onItemSelected(AdapterView<?> p, View v, int i, long id) {
-                if (!bindingUi) prefs.setPosition(i);
-            }
-
-            public void onNothingSelected(AdapterView<?> p) {
-            }
-        });
-        spAnim.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            public void onItemSelected(AdapterView<?> p, View v, int i, long id) {
-                if (!bindingUi) prefs.setAnimStyle(i);
-            }
-
-            public void onNothingSelected(AdapterView<?> p) {
-            }
-        });
-        if (swPowerSave != null) {
-            swPowerSave.setOnCheckedChangeListener((b, checked) -> {
-                if (!bindingUi) {
-                    prefs.setPowerSave(checked);
-                    restartService();
-                }
-            });
-        }
-        if (swHideNoti != null) {
-            swHideNoti.setOnCheckedChangeListener((b, checked) -> {
-                if (!bindingUi) {
-                    prefs.setHideNotification(checked);
-                    restartService();
-                }
-            });
-        }
-        findViewById(R.id.btnNotiSettings).setOnClickListener(v -> openNotificationSettings());
-        findViewById(R.id.btnBattery).setOnClickListener(v -> requestBatteryWhitelist());
-
-        watch(etTitle, etSub, etBg, etTextColor, etAccent);
-        spEngine.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            public void onItemSelected(AdapterView<?> p, View v, int i, long id) {
-                if (!bindingUi) prefs.setEngine(i);
-            }
-
-            public void onNothingSelected(AdapterView<?> p) {
-            }
-        });
-
-        swMaster.setOnCheckedChangeListener((b, checked) -> {
-            if (bindingUi) return;
-            prefs.setMasterEnabled(checked);
-            toggleService(checked);
-        });
-        swWired.setOnCheckedChangeListener((b, checked) -> {
-            if (!bindingUi) prefs.setWiredEnabled(checked);
-        });
-        swAutoStart.setOnCheckedChangeListener((b, checked) -> {
-            if (!bindingUi) prefs.setAutoStart(checked);
-        });
-        swBattery.setOnCheckedChangeListener((b, checked) -> {
-            if (!bindingUi) prefs.setShowBattery(checked);
+        findViewById(R.id.btnPickImage).setOnClickListener(
+                v -> pickImage.launch(new String[]{"image/*"}));
+        findViewById(R.id.btnClearImage).setOnClickListener(v -> {
+            prefs.setImageUri("");
+            loadThumb();
             updatePreview();
         });
-        if (swCase != null) {
-            swCase.setChecked(prefs.showCaseBattery());
-            swCase.setOnCheckedChangeListener((b, checked) -> {
-                if (!bindingUi) prefs.setShowCaseBattery(checked);
-                updatePreview();
-            });
+
+        // 数值项：点一下弹滑块
+        findViewById(R.id.rowWidth).setOnClickListener(v -> showSlider("弹窗宽度", "dp",
+                220, 400, prefs.widthDp(), val -> prefs.setWidthDp(val)));
+        findViewById(R.id.rowRadius).setOnClickListener(v -> showSlider("卡片圆角", "dp",
+                0, 40, prefs.radiusDp(), val -> prefs.setRadiusDp(val)));
+        findViewById(R.id.rowImgH).setOnClickListener(v -> showSlider("图片占弹窗高度", "%",
+                40, 90, Math.round(prefs.imageRatio() * 100),
+                val -> prefs.setImageRatio(val / 100f)));
+        findViewById(R.id.rowDuration).setOnClickListener(v -> showSlider("显示时长", "ms",
+                500, 20000, prefs.durationMs(), val -> prefs.setDurationMs(val)));
+        findViewById(R.id.rowDim).setOnClickListener(v -> showSlider("背景压暗", "%",
+                0, 70, Math.round(prefs.dimAmount() * 100),
+                val -> prefs.setDimAmount(val / 100f)));
+        findViewById(R.id.rowBlur).setOnClickListener(v -> showSlider("背景模糊半径", "dp",
+                0, 40, prefs.blurRadius(), val -> prefs.setBlurRadius(val)));
+
+        // 单选项
+        findViewById(R.id.rowPos).setOnClickListener(v -> showChoice("弹出位置",
+                new String[]{"屏幕顶部", "屏幕居中", "屏幕底部"}, prefs.position(),
+                prefs::setPosition));
+        findViewById(R.id.rowAnim).setOnClickListener(v -> showChoice("入场动画",
+                new String[]{"缩放淡入", "底部上滑", "顶部下滑"}, prefs.animStyle(),
+                prefs::setAnimStyle));
+        findViewById(R.id.rowEngine).setOnClickListener(v -> showChoice("弹出引擎",
+                new String[]{"系统级（透明 Activity，锁屏也能弹）",
+                        "悬浮窗（兼容性最好）",
+                        "智能：先系统级，失败自动降级悬浮窗"},
+                prefs.engine(), prefs::setEngine));
+
+        // 开关
+        bindSwitch(swMaster, prefs::setMasterEnabled, () -> toggleService(swMaster.isChecked()));
+        bindSwitch(swWired, prefs::setWiredEnabled, null);
+        bindSwitch(swAutoStart, prefs::setAutoStart, null);
+        bindSwitch(swBattery, prefs::setShowBattery, this::updatePreview);
+        bindSwitch(swCase, prefs::setShowCaseBattery, this::updatePreview);
+        bindSwitch(swLock, prefs::setShowOnLock, null);
+        bindSwitch(swNoFocus, prefs::setNotFocusable, null);
+        bindSwitch(swPowerSave, prefs::setPowerSave, this::restartService);
+        bindSwitch(swHideNoti, prefs::setHideNotification, this::restartService);
+        bindSwitch(swAutoColor, v -> {
+            prefs.setAutoColor(v);
+            String u = prefs.imageUri();
+            if (v && !u.isEmpty()) extractTheme(Uri.parse(u));
+        }, this::updatePreview);
+
+        // 首页快捷操作
+        findViewById(R.id.rowBlockMi).setOnClickListener(v -> showMiPopupGuide());
+        findViewById(R.id.rowAdb).setOnClickListener(v -> copyAdbCommands());
+
+        // 设置页
+        findViewById(R.id.btnRefresh).setOnClickListener(v -> refreshDevices());
+        findViewById(R.id.btnNotiSettings).setOnClickListener(v -> openNotificationSettings());
+        findViewById(R.id.btnBattery).setOnClickListener(v -> requestBatteryWhitelist());
+        findViewById(R.id.rowMiPerm).setOnClickListener(v -> copyMiuiPermCommands());
+        findViewById(R.id.rowInfo).setOnClickListener(v -> showAbout());
+
+        watch(etTitle, etSub, etBg, etTextColor, etAccent);
+    }
+
+    private void bindSwitch(SwitchMaterial sw, java.util.function.Consumer<Boolean> save,
+                            Runnable after) {
+        if (sw == null) return;
+        sw.setOnCheckedChangeListener((b, checked) -> {
+            if (bindingUi) return;
+            save.accept(checked);
+            if (after != null) after.run();
+        });
+    }
+
+    private void watch(EditText... eds) {
+        TextWatcher tw = new TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) {
+            }
+
+            public void onTextChanged(CharSequence s, int a, int b, int c) {
+                if (!bindingUi) updatePreview();
+            }
+
+            public void afterTextChanged(Editable s) {
+            }
+        };
+        for (EditText e : eds) {
+            if (e != null) e.addTextChangedListener(tw);
         }
-        if (swAutoColor != null) {
-            swAutoColor.setChecked(prefs.autoColor());
-            swAutoColor.setOnCheckedChangeListener((b, checked) -> {
-                if (!bindingUi) {
-                    prefs.setAutoColor(checked);
-                    String u = prefs.imageUri();
-                    if (checked && !u.isEmpty()) extractTheme(Uri.parse(u));
+    }
+
+    // ---------------- 对话框 ----------------
+
+    private void showSlider(String title, String unit, int min, int max, int current,
+                            java.util.function.Consumer<Integer> onPick) {
+        final int[] value = {clamp(current, min, max)};
+        TextView label = new TextView(this, null, android.R.attr.textAppearanceMedium);
+        label.setText(value[0] + " " + unit);
+        label.setTextSize(16);
+        label.setPadding(24, 12, 24, 4);
+
+        SeekBar sb = new SeekBar(this);
+        sb.setMax(max - min);
+        sb.setProgress(value[0] - min);
+        sb.setPadding(16, 8, 16, 8);
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(8, 8, 8, 0);
+        box.addView(label);
+        box.addView(sb);
+        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            public void onProgressChanged(SeekBar s, int p, boolean b) {
+                value[0] = p + min;
+                label.setText(value[0] + " " + unit);
+            }
+
+            public void onStartTrackingTouch(SeekBar s) {
+            }
+
+            public void onStopTrackingTouch(SeekBar s) {
+            }
+        });
+
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle(title)
+                .setView(box)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("确定", (d, w) -> {
+                    onPick.accept(value[0]);
+                    syncValueLabels();
                     updatePreview();
-                }
-            });
-        }
-        swLock.setOnCheckedChangeListener((b, checked) -> {
-            if (!bindingUi) prefs.setShowOnLock(checked);
-        });
-        swNoFocus.setOnCheckedChangeListener((b, checked) -> {
-            if (!bindingUi) prefs.setNotFocusable(checked);
-        });
-        findViewById(R.id.btnMiPerm).setOnClickListener(v -> copyMiuiPermCommands());
+                })
+                .show();
     }
 
-    private void syncSeekLabels() {
-        tvWidth.setText("弹窗宽度 " + (sbWidth.getProgress() + 180) + "dp");
-        tvRadius.setText("圆角 " + sbRadius.getProgress() + "dp");
-        tvImgH.setText("图片占弹窗高度 " + (sbImgH.getProgress() + 40) + "%");
-        tvDuration.setText("显示时长 " + ((sbDuration.getProgress() + 1) * 500) + "ms");
-        if (!bindingUi) updatePreview();
-        if (sbDim != null) tvDim.setText("背景压暗 " + sbDim.getProgress() + "%");
-        if (sbBlur != null) {
-            int b = sbBlur.getProgress();
-            tvBlur.setText(b == 0 ? "背景模糊 关闭" : "背景模糊半径 " + b + "dp");
-        }
+    private void showChoice(String title, String[] items, int current,
+                            java.util.function.Consumer<Integer> onPick) {
+        final int[] sel = {current};
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle(title)
+                .setSingleChoiceItems(items, current, (d, w) -> sel[0] = w)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("确定", (d, w) -> {
+                    onPick.accept(sel[0]);
+                    syncValueLabels();
+                })
+                .show();
     }
 
-    // ---------------- 实时预览 ----------------
+    private int clamp(int v, int min, int max) {
+        return Math.max(min, Math.min(max, v));
+    }
+
+    // ---------------- 预览 ----------------
 
     private int parseColor(String v, int fallback) {
         try {
@@ -355,16 +443,13 @@ public class MainActivity extends AppCompatActivity {
 
     private void showDeviceInfo() {
         if (tvDevice == null) return;
-        String model = Build.MODEL;
-        String device = Build.DEVICE;
-        String pretty = model;
-        if ("manet".equalsIgnoreCase(device) || model.contains("23117RK66C")) {
+        String pretty = Build.MODEL;
+        if ("manet".equalsIgnoreCase(Build.DEVICE) || Build.MODEL.contains("23117RK66C")) {
             pretty = "Redmi K70 Pro";
         }
         tvDevice.setText(pretty + "  ·  Android " + Build.VERSION.RELEASE);
     }
 
-    /** 把当前设置渲染到预览卡片上，做到所见即所得 */
     private void updatePreview() {
         if (pvCard == null) return;
 
@@ -374,28 +459,25 @@ public class MainActivity extends AppCompatActivity {
                 prefs.autoColor() ? prefs.autoAccentColor() : prefs.accentColor(), 0xFF00E5A0);
         int textColor = parseColor(prefs.textColor(), Color.WHITE);
 
-        float d = getResources().getDisplayMetrics().density;
-        int w = (int) (prefs.widthDp() * d);
+        int w = (int) dp(prefs.widthDp());
         ViewGroup.LayoutParams lp = pvCard.getLayoutParams();
-        lp.width = w;
+        lp.width = (int) (w * 0.81f);  // 预览按屏幕比例缩小展示
         pvCard.setLayoutParams(lp);
 
         GradientDrawable gd = new GradientDrawable();
         gd.setShape(GradientDrawable.RECTANGLE);
-        gd.setCornerRadius(prefs.radiusDp() * d);
+        gd.setCornerRadius(dp(prefs.radiusDp()) * 0.81f);
         gd.setColor(cardColor);
         pvCard.setBackground(gd);
-        pvCard.setElevation(12 * d);
+        pvCard.setElevation(dp(10));
         pvCard.setClipToOutline(true);
 
-        // 图片区：铺满宽度，高度 = 宽度 × 比例
         if (pvImageArea != null) {
             ViewGroup.LayoutParams ilp = pvImageArea.getLayoutParams();
-            ilp.height = (int) (w * prefs.imageRatio());
+            ilp.height = (int) (lp.width * prefs.imageRatio());
             pvImageArea.setLayoutParams(ilp);
         }
 
-        // 渐变遮罩：图片底部渐隐到卡片底色
         if (pvFade != null) {
             GradientDrawable fade = new GradientDrawable(
                     GradientDrawable.Orientation.BOTTOM_TOP,
@@ -422,8 +504,8 @@ public class MainActivity extends AppCompatActivity {
         pvRingEarbud.setRingColor(accent);
         pvRingEarbud.setTrackColor(adjustAlpha(textColor, 0.22f));
         pvRingEarbud.setTextColor(textColor);
-        // 预览里始终展示充电盒圆环，方便看排版
-        boolean showBox = showBat && swCase != null && swCase.isChecked();
+
+        boolean showBox = showBat && swCase.isChecked();
         pvBoxGroup.setVisibility(showBox ? View.VISIBLE : View.GONE);
         if (showBox) {
             pvRingBox.setProgress(65);
@@ -451,7 +533,23 @@ public class MainActivity extends AppCompatActivity {
         return (a << 24) | (color & 0x00FFFFFF);
     }
 
-    /** 从所选图片提取主色调，压暗后作为卡片底色，强调色取鲜艳色 */
+    private void loadThumb() {
+        if (imgPreview == null) return;
+        String uri = prefs.imageUri();
+        if (!uri.isEmpty()) {
+            imgPreview.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            try {
+                Glide.with(this).load(Uri.parse(uri)).centerCrop().into(imgPreview);
+            } catch (Exception e) {
+                imgPreview.setImageResource(R.drawable.ic_headphone);
+            }
+        } else {
+            imgPreview.setImageResource(R.drawable.ic_headphone);
+            imgPreview.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        }
+    }
+
+    /** 从图片提取主色调，压暗后作为卡片底色，强调色取鲜艳色 */
     private void extractTheme(Uri uri) {
         if (!prefs.autoColor()) return;
         Glide.with(this)
@@ -463,12 +561,8 @@ public class MainActivity extends AppCompatActivity {
                         Palette.from(bmp).generate(p -> {
                             if (p == null) return;
                             int seed = p.getDominantColor(0xFF141620);
-                            if (seed == 0xFF141620) {
-                                seed = p.getDarkVibrantColor(seed);
-                            }
-                            int bg = darken(seed, 0.26f);
-                            prefs.setAutoBgColor(String.format("#%08X", bg));
-
+                            if (seed == 0xFF141620) seed = p.getDarkVibrantColor(seed);
+                            prefs.setAutoBgColor(String.format("#%08X", darken(seed, 0.26f)));
                             int accent = p.getVibrantColor(0);
                             if (accent == 0) accent = p.getLightVibrantColor(0);
                             if (accent == 0) accent = p.getMutedColor(0xFF00E5A0);
@@ -492,72 +586,19 @@ public class MainActivity extends AppCompatActivity {
         return Color.HSVToColor(0xF2, hsv);
     }
 
-    /** 让输入框改动即时反映到预览上 */
-    private void watch(EditText... eds) {
-        TextWatcher tw = new TextWatcher() {
-            public void beforeTextChanged(CharSequence s, int a, int b, int c) {
-            }
-
-            public void onTextChanged(CharSequence s, int a, int b, int c) {
-                if (!bindingUi) updatePreview();
-            }
-
-            public void afterTextChanged(Editable s) {
-            }
-        };
-        for (EditText e : eds) {
-            if (e != null) e.addTextChangedListener(tw);
-        }
-    }
-
-    private void loadPreview() {
-        String uri = prefs.imageUri();
-        if (uri.isEmpty()) {
-            imgPreview.setImageResource(R.drawable.ic_headphone);
-        } else {
-            try {
-                Glide.with(this).load(Uri.parse(uri)).centerCrop().into(imgPreview);
-            } catch (Exception e) {
-                imgPreview.setImageResource(R.drawable.ic_headphone);
-            }
-        }
-    }
-
-    private void saveAll() {
-        String t = etTitle.getText().toString().trim();
-        prefs.setTitleText(t.isEmpty() ? "耳机已连接" : t);
-        prefs.setSubText(etSub.getText().toString());
-        String bg = etBg.getText().toString().trim();
-        prefs.setBgColor(bg.isEmpty() ? "#E6222426" : bg);
-        String tc = etTextColor.getText().toString().trim();
-        prefs.setTextColor(tc.isEmpty() ? "#FFFFFFFF" : tc);
-        String ac = etAccent.getText().toString().trim();
-        prefs.setAccentColor(ac.isEmpty() ? "#FF00E5A0" : ac);
-        prefs.setWidthDp(sbWidth.getProgress() + 180);
-        prefs.setRadiusDp(sbRadius.getProgress());
-        prefs.setImageRatio((sbImgH.getProgress() + 40) / 100f);
-        prefs.setDurationMs((sbDuration.getProgress() + 1) * 500);
-        prefs.setDimAmount(sbDim.getProgress() / 100f);
-        prefs.setBlurRadius(sbBlur.getProgress());
-        prefs.setAllowedDevices(allowSet);
-    }
-
     // ---------------- 设备白名单 ----------------
 
     private void refreshDevices() {
         deviceList.removeAllViews();
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
-                != PackageManager.PERMISSION_GRANTED && Build.VERSION.SDK_INT >= 31) {
-            TextView t = new TextView(this);
-            t.setText("需要「蓝牙连接」权限才能列出已配对设备，点上方按钮授权。");
-            deviceList.addView(t);
+        if (Build.VERSION.SDK_INT >= 31
+                && ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
+                != PackageManager.PERMISSION_GRANTED) {
+            deviceList.addView(hintText("需要「蓝牙连接」权限才能列出已配对设备，先回首页点一键设置。"));
             return;
         }
         BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
         if (adapter == null) {
-            TextView t = new TextView(this);
-            t.setText("本机不支持蓝牙");
-            deviceList.addView(t);
+            deviceList.addView(hintText("本机不支持蓝牙"));
             return;
         }
         Set<BluetoothDevice> bonded;
@@ -567,17 +608,16 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         if (bonded == null || bonded.isEmpty()) {
-            TextView t = new TextView(this);
-            t.setText("没有已配对设备，先在系统蓝牙里配对耳机。");
-            deviceList.addView(t);
+            deviceList.addView(hintText("没有已配对设备，先在系统蓝牙里配对耳机。"));
             return;
         }
         for (BluetoothDevice d : bonded) {
-            CheckBox cb = new CheckBox(this);
-            String name = null;
+            MaterialCheckBox cb = new MaterialCheckBox(this);
+            String name;
             try {
                 name = d.getName();
-            } catch (SecurityException ignored) {
+            } catch (SecurityException e) {
+                name = null;
             }
             cb.setText((name == null ? "未知设备" : name) + "\n" + d.getAddress());
             cb.setChecked(allowSet.isEmpty() || allowSet.contains(d.getAddress()));
@@ -590,10 +630,16 @@ public class MainActivity extends AppCompatActivity {
             deviceList.addView(cb, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
-        TextView hint = new TextView(this);
-        hint.setText("全部取消勾选 = 所有设备都弹窗");
-        hint.setAlpha(0.6f);
-        deviceList.addView(hint);
+        deviceList.addView(hintText("全部取消勾选 = 所有设备都弹窗"));
+    }
+
+    private TextView hintText(String s) {
+        TextView t = new TextView(this);
+        t.setText(s);
+        t.setTextSize(12.5f);
+        t.setAlpha(0.7f);
+        t.setPadding(4, 8, 4, 8);
+        return t;
     }
 
     // ---------------- 权限 ----------------
@@ -632,65 +678,65 @@ public class MainActivity extends AppCompatActivity {
 
     private void refreshPermStatus() {
         boolean overlay = Settings.canDrawOverlays(this);
-        boolean noti;
-        if (Build.VERSION.SDK_INT >= 33) {
-            noti = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                    == PackageManager.PERMISSION_GRANTED;
-        } else {
-            noti = true;
-        }
+        boolean noti = Build.VERSION.SDK_INT < 33
+                || ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED;
         boolean bt = Build.VERSION.SDK_INT < 31
                 || ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
                 == PackageManager.PERMISSION_GRANTED;
-
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         boolean idle = Build.VERSION.SDK_INT < 23
                 || (pm != null && pm.isIgnoringBatteryOptimizations(getPackageName()));
 
+        int ok = overlay && noti && bt ? 1 : 0;
         StringBuilder sb = new StringBuilder();
-        sb.append(overlay ? "✅" : "❌").append(" 悬浮窗权限").append("\n");
-        sb.append(noti ? "✅" : "❌").append(" 通知权限").append("\n");
-        sb.append(bt ? "✅" : "❌").append(" 蓝牙连接权限").append("\n");
-        sb.append(idle ? "✅" : "⚠️").append(" 电池优化白名单").append("\n");
-        if (!overlay) sb.append("\n悬浮窗权限是弹窗的前提，务必先开。");
+        if (ok == 1) {
+            sb.append("权限已就绪，连接耳机就会弹窗。");
+        } else {
+            sb.append("还差一步：");
+            List<String> miss = new ArrayList<>();
+            if (!overlay) miss.add("悬浮窗");
+            if (!noti) miss.add("通知");
+            if (!bt) miss.add("蓝牙");
+            sb.append(android.text.TextUtils.join("、", miss));
+            sb.append("。点下面的按钮，App 会自己跑完。");
+        }
+        if (!idle) sb.append("\n建议加入电池白名单，防止服务被回收。");
         permStatus.setText(sb.toString());
     }
 
     private void openPermissionSettings() {
         if (!Settings.canDrawOverlays(this)) {
-            Intent i = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:" + getPackageName()));
-            startActivity(i);
+            startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + getPackageName())));
             return;
         }
-        Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                Uri.parse("package:" + getPackageName()));
-        startActivity(i);
+        startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:" + getPackageName())));
     }
 
     private void requestBatteryWhitelist() {
         if (Build.VERSION.SDK_INT >= 23) {
             try {
-                Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                        Uri.parse("package:" + getPackageName()));
-                startActivity(i);
+                startActivity(new Intent(
+                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        Uri.parse("package:" + getPackageName())));
                 return;
             } catch (Exception ignored) {
             }
         }
-        Toast.makeText(this, "请在 设置 → 应用设置 → 本应用 → 省电策略 选择「无限制」",
+        Toast.makeText(this, "请手动在系统设置里把本 App 的电池优化设为「无限制」",
                 Toast.LENGTH_LONG).show();
     }
 
-    /** 跳转系统通知设置，用户可手动彻底关闭通知渠道 */
     private void openNotificationSettings() {
         try {
             Intent i;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                i = new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS);
-                i.putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, getPackageName());
+                i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+                i.putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName());
             } else {
-                i = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
                 i.setData(Uri.parse("package:" + getPackageName()));
             }
             startActivity(i);
@@ -701,9 +747,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /** 加入电池优化白名单，防止服务被系统杀掉 */
-
-    /** 设置变更后重启服务，让新策略生效 */
     private void restartService() {
         try {
             Intent s = new Intent(this, PopupService.class);
@@ -714,89 +757,71 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void copyMiuiPermCommands() {
-        String cmds =
-                "# 小米「后台弹出界面」——系统级引擎在 MIUI/HyperOS 上的额外一道闸\n"
-                + "# opcode 10021，先试设置再读值验证\n"
-                + "adb shell appops set com.yuanbao.earbuds 10021 allow\n"
-                + "adb shell appops get com.yuanbao.earbuds 10021\n\n"
-                + "# 锁屏显示（部分版本用 10023/10024，报错就换一个试）\n"
-                + "adb shell appops set com.yuanbao.earbuds 10023 allow\n"
-                + "adb shell appops set com.yuanbao.earbuds 10024 allow\n\n"
-                + "# 基础权限\n"
-                + "adb shell appops set com.yuanbao.earbuds SYSTEM_ALERT_WINDOW allow\n"
-                + "adb shell pm grant com.yuanbao.earbuds android.permission.BLUETOOTH_CONNECT\n"
-                + "adb shell pm grant com.yuanbao.earbuds android.permission.POST_NOTIFICATIONS\n"
-                + "adb shell dumpsys deviceidle whitelist +com.yuanbao.earbuds\n\n"
-                + "# 验证：把上面 get 的结果发我，我来确认 opcode 对不对";
+    // ---------------- 提示与命令 ----------------
+
+    private void showAbout() {
+        String msg = "自定义耳机连接弹窗 · 免 Root\n\n"
+                + "· 不联网、不上传任何数据，配置全部存在手机本地\n"
+                + "· 只在耳机连接事件发生时唤醒，不轮询、不定位\n"
+                + "· 弹窗尺寸参照华为官方公开的耳机弹窗设计规范（1440×1792，圆角约宽度 8.9%）\n\n"
+                + "已知边界：小米「开盖即弹」走私有快连协议，第三方拿不到，"
+                + "本方案在蓝牙真正连上那一刻弹出，比原生晚约 1 秒。";
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle("关于")
+                .setMessage(msg)
+                .setPositiveButton("知道了", null)
+                .show();
+    }
+
+    private void copy(String text, String toast) {
         ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         if (cm != null) {
-            cm.setPrimaryClip(ClipData.newPlainText("adb", cmds));
-            Toast.makeText(this, "已复制。执行后把 get 的结果发我确认", Toast.LENGTH_LONG).show();
+            cm.setPrimaryClip(ClipData.newPlainText("adb", text));
+            Toast.makeText(this, toast, Toast.LENGTH_SHORT).show();
         }
     }
 
     private void showMiPopupGuide() {
         String msg =
-                "Redmi K70 Pro（HyperOS 2）上关掉小米原生快连弹窗，三种方式任选一种：\n\n"
+                "关掉小米原生快连弹窗，三种方式任选一种：\n\n"
                 + "【方式一｜最干净，纯系统设置】\n"
-                + "设置 → 蓝牙 → 右上角/底部「高级设置」→ 关闭「小米快连」。\n"
-                + "关掉后系统原生弹窗不再出现，蓝牙连接、低延迟模式都不受影响，耳机电量仍可在通知栏和蓝牙页面查看。\n\n"
+                + "设置 → 蓝牙 → 高级设置 → 关闭「小米快连」。\n"
+                + "关掉后原生弹窗不再出现，蓝牙连接、电竞低延迟都不受影响，电量照样能在通知栏看到。\n\n"
                 + "【方式二｜只关这一副耳机】\n"
-                + "设置 → 蓝牙 → 点 Redmi Buds 5 Pro 电竞版 右边的「>」→ 关闭「连接弹窗 / 弹窗动画」。\n\n"
-                + "【方式三｜ADB，温和屏蔽】\n"
-                + "adb shell appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW ignore\n"
-                + "（只禁它的悬浮窗，不动蓝牙连接。想恢复把 ignore 换成 allow）\n\n"
-                + "如果三种都不生效：设置 → 蓝牙 → 高级设置 → 把「小米快连」关掉再打开一次，"
-                + "或进 设置 → 应用设置 → 应用管理 → 搜索「MIUI蓝牙」→ 清除数据，然后重连耳机。";
-        new android.app.AlertDialog.Builder(this)
+                + "设置 → 蓝牙 → 点 Redmi Buds 5 Pro 电竞版 右边的「>」→ 关闭「连接弹窗」。\n\n"
+                + "【方式三｜命令，温和屏蔽】\n"
+                + "appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW ignore\n"
+                + "（只禁它的悬浮窗，不动蓝牙。想恢复把 ignore 换成 allow）";
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
                 .setTitle("屏蔽小米原生弹窗")
                 .setMessage(msg)
-                .setPositiveButton("复制ADB命令", (d, w) -> copyMiBlockCommands())
+                .setPositiveButton("复制命令", (d, w) -> copy(
+                        "appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW ignore\n"
+                        + "# 恢复：把 ignore 换成 allow",
+                        "已复制屏蔽命令"))
                 .setNegativeButton("知道了", null)
                 .show();
     }
 
-    private void copyMiBlockCommands() {
-        String cmds =
-                "# 屏蔽小米快连弹窗（不影响蓝牙连接）\n"
-                + "adb shell appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW ignore\n\n"
-                + "# 恢复命令（需要时用）\n"
-                + "# adb shell appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW allow\n\n"
-                + "# 本 App 自身权限\n"
-                + "adb shell appops set com.yuanbao.earbuds SYSTEM_ALERT_WINDOW allow\n"
-                + "adb shell pm grant com.yuanbao.earbuds android.permission.BLUETOOTH_CONNECT\n"
-                + "adb shell pm grant com.yuanbao.earbuds android.permission.BLUETOOTH_SCAN\n"
-                + "adb shell pm grant com.yuanbao.earbuds android.permission.POST_NOTIFICATIONS\n"
-                + "adb shell dumpsys deviceidle whitelist +com.yuanbao.earbuds";
-        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-        if (cm != null) {
-            cm.setPrimaryClip(ClipData.newPlainText("adb", cmds));
-            Toast.makeText(this, "已复制屏蔽命令", Toast.LENGTH_SHORT).show();
-        }
+    private void copyMiuiPermCommands() {
+        copy("appops set com.yuanbao.earbuds SYSTEM_ALERT_WINDOW allow\n"
+                + "appops set com.yuanbao.earbuds 10021 allow\n"
+                + "appops set com.yuanbao.earbuds 10023 allow\n"
+                + "appops set com.yuanbao.earbuds 10024 allow\n"
+                + "pm grant com.yuanbao.earbuds android.permission.BLUETOOTH_CONNECT\n"
+                + "pm grant com.yuanbao.earbuds android.permission.POST_NOTIFICATIONS\n"
+                + "dumpsys deviceidle whitelist +com.yuanbao.earbuds",
+                "已复制，在 Stellar 命令页粘贴执行");
     }
 
     private void copyAdbCommands() {
-        String cmds =
-                "# 1) 悬浮窗权限（小米上最省事的一步）\n"
-                        + "adb shell appops set com.yuanbao.earbuds SYSTEM_ALERT_WINDOW allow\n\n"
-                        + "# 2) 蓝牙 / 通知 / 存储权限\n"
-                        + "adb shell pm grant com.yuanbao.earbuds android.permission.BLUETOOTH_CONNECT\n"
-                        + "adb shell pm grant com.yuanbao.earbuds android.permission.BLUETOOTH_SCAN\n"
-                        + "adb shell pm grant com.yuanbao.earbuds android.permission.POST_NOTIFICATIONS\n"
-                        + "adb shell pm grant com.yuanbao.earbuds android.permission.READ_MEDIA_IMAGES\n"
-                        + "adb shell pm grant com.yuanbao.earbuds android.permission.READ_EXTERNAL_STORAGE\n\n"
-                        + "# 3) 加入省电白名单，防止服务被杀\n"
-                        + "adb shell dumpsys deviceidle whitelist +com.yuanbao.earbuds\n\n"
-                        + "# 4) 屏蔽小米原生快连弹窗（只禁悬浮窗，不影响蓝牙连接）\n"
-                        + "adb shell appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW ignore\n\n"
-                        + "# 5) K70 Pro 后台保活\n"
-                        + "adb shell dumpsys deviceidle whitelist +com.yuanbao.earbuds\n";
-        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-        if (cm != null) {
-            cm.setPrimaryClip(ClipData.newPlainText("adb", cmds));
-            Toast.makeText(this, "ADB 命令已复制", Toast.LENGTH_SHORT).show();
-        }
+        copy("appops set com.yuanbao.earbuds SYSTEM_ALERT_WINDOW allow\n"
+                + "pm grant com.yuanbao.earbuds android.permission.BLUETOOTH_CONNECT\n"
+                + "pm grant com.yuanbao.earbuds android.permission.BLUETOOTH_SCAN\n"
+                + "pm grant com.yuanbao.earbuds android.permission.POST_NOTIFICATIONS\n"
+                + "dumpsys deviceidle whitelist +com.yuanbao.earbuds\n"
+                + "appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW ignore",
+                "已复制，在 Stellar 命令页粘贴执行");
     }
 
     private void toggleService(boolean on) {
