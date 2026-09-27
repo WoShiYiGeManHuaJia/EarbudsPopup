@@ -692,7 +692,17 @@ public class MainActivity extends AppCompatActivity {
             MaterialCheckBox cb = new MaterialCheckBox(this);
             cb.setText((shown == null ? "未知设备" : shown) + "\n" + addr);
             cb.setChecked(allowSet.isEmpty() || allowSet.contains(addr));
+            // 先 setChecked 再挂 listener，避免初始化时误触发
             cb.setOnCheckedChangeListener((b, checked) -> {
+                // 关键修正：allowSet 为空代表「所有设备都弹」。
+                // 此时用户取消勾选某一项，若直接 remove 一个本来就不存在的地址，
+                // 存进去还是空集，等于没设置——永远排除不掉任何设备。
+                // 所以第一次交互时先把全部已配对设备灌进 allowSet，再做增删。
+                if (allowSet.isEmpty()) {
+                    for (BluetoothDevice other : bonded) {
+                        allowSet.add(other.getAddress());
+                    }
+                }
                 if (checked) allowSet.add(addr);
                 else allowSet.remove(addr);
                 prefs.setAllowedDevices(allowSet);
