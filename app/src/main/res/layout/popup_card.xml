@@ -48,6 +48,19 @@
                 android:visibility="gone" />
         </FrameLayout>
 
+        <!-- 实时模糊背景：作为卡片的直接子 View，放在详情区【之前】，
+             于是层级上位于图片之上、文字之下。
+             · 默认 gone：不参与测量，绝不会撑高任何父容器
+             · 高度写死 76dp：不再用 match_parent（那会把整个卡片都糊掉）
+             · 运行时由 PopupRenderer 显示 -->
+        <com.yuanbao.earbuds.LiveBlurView
+            android:id="@+id/detailBlurBg"
+            android:layout_width="match_parent"
+            android:layout_height="76dp"
+            android:layout_gravity="bottom"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
+
         <!-- 详情区：叠在底部，不占位 -->
         <FrameLayout
             android:id="@+id/detailArea"
@@ -60,12 +73,6 @@
                  一旦 setVisible 就会吃掉全部高度，把文字挤到可视区外
                  —— 这就是「1 秒后文字消失」的原因。
                  现在详情区改成 FrameLayout，它只做背景，不参与挤压。 -->
-            <com.yuanbao.earbuds.LiveBlurView
-                android:id="@+id/detailBlurBg"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:importantForAccessibility="no" />
-
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
