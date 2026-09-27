@@ -22,4 +22,31 @@
         <item>顶部下滑</item>
     </string-array>
 
+
+    <!-- 系统级弹窗 Activity：透明全屏、独立任务、系统转场动画 -->
+    <style name="Theme.Popup.System" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowTranslucentStatus">true</item>
+        <item name="android:windowTranslucentNavigation">true</item>
+        <item name="android:windowAnimationStyle">@style/PopupWindowAnimation</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">true</item>
+    </style>
+
+    <style name="PopupWindowAnimation">
+        <item name="android:windowEnterAnimation">@anim/popup_in</item>
+        <item name="android:windowExitAnimation">@anim/popup_out</item>
+    </style>
+
+    <!-- 新增：弹窗引擎 -->
+    <string-array name="popup_engine">
+        <item>系统级（透明 Activity，锁屏也能弹）</item>
+        <item>悬浮窗（兼容性最好）</item>
+        <item>智能：先系统级，失败自动降级悬浮窗</item>
+    </string-array>
+
 </resources>
