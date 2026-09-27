@@ -730,7 +730,8 @@ public class MainActivity extends AppCompatActivity {
             // 长按打开完整色彩盘
             dot.setOnLongClickListener(v -> {
                 applyTextColor((Integer) v.getTag());
-                showColorPicker(currentTextColor(), this::applyTextColor);
+                showColorPicker(currentTextColor(),
+                        hex -> applyTextColor(parseColor(hex, Color.WHITE)));
                 return true;
             });
             box.addView(dot);
@@ -1055,6 +1056,17 @@ public class MainActivity extends AppCompatActivity {
                 && swCase.isChecked()) ? cached.caseBox : -1;
         String devName = etTitle.getText().toString().trim();
         if (devName.isEmpty()) devName = "我的耳机";
+
+        // 三档分别取色，没设过退回通用色（必须先用后定义会编译失败，
+        // 所以这段放在使用之前）
+        int pvTitleC = textColor, pvStatC = textColor, pvBattC = textColor;
+        try {
+            if (!prefs.titleColor().isEmpty()) pvTitleC = Color.parseColor(prefs.titleColor());
+            if (!prefs.statusColor().isEmpty()) pvStatC = Color.parseColor(prefs.statusColor());
+            if (!prefs.batteryColor().isEmpty()) pvBattC = Color.parseColor(prefs.batteryColor());
+        } catch (Exception ignored) {
+        }
+
         if (pvBattery != null) {
             pvBattery.setText(bat >= 0 ? bat + "%" : "--%");
             pvBattery.setTextColor(pvBattC);
@@ -1064,14 +1076,6 @@ public class MainActivity extends AppCompatActivity {
             pvCase.setVisibility(cas >= 0 ? View.VISIBLE : View.GONE);
         }
         if (pvInfo != null) pvInfo.setText(devName);
-        // 与真实弹窗一致：三档分别取色，没设过退回通用色
-        int pvTitleC = textColor, pvStatC = textColor, pvBattC = textColor;
-        try {
-            if (!prefs.titleColor().isEmpty()) pvTitleC = Color.parseColor(prefs.titleColor());
-            if (!prefs.statusColor().isEmpty()) pvStatC = Color.parseColor(prefs.statusColor());
-            if (!prefs.batteryColor().isEmpty()) pvBattC = Color.parseColor(prefs.batteryColor());
-        } catch (Exception ignored) {
-        }
         pvTip.setTextColor(adjustAlpha(pvStatC, 0.55f));
         if (pvDeviceName != null) {
             pvDeviceName.setText(devName);
