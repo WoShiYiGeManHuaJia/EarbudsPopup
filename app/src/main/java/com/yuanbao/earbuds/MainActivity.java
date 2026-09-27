@@ -342,6 +342,20 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.btnNotiSettings).setOnClickListener(v -> openNotificationSettings());
         findViewById(R.id.btnBattery).setOnClickListener(v -> requestBatteryWhitelist());
         findViewById(R.id.rowMiPerm).setOnClickListener(v -> copyMiuiPermCommands());
+        findViewById(R.id.rowClearBattery).setOnClickListener(v ->
+                new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                        .setTitle("重置电量缓存")
+                        .setMessage("会清掉已保存的电量数据。下次连接耳机会重新读取。\n\n"
+                                + "如果弹窗一直显示 0%，先重置一次再试。")
+                        .setNegativeButton("取消", null)
+                        .setPositiveButton("重置", (d, w) -> {
+                            new BatteryStore(this).clearAll();
+                            if (tvProbeHint != null) {
+                                tvProbeHint.setText("已重置，下次连接会重新读取");
+                            }
+                            Toast.makeText(this, "电量缓存已清空", Toast.LENGTH_SHORT).show();
+                        })
+                        .show());
         findViewById(R.id.rowProbe).setOnClickListener(v -> {
             if (lastProbeLog != null && !lastProbeLog.isEmpty()) {
                 new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
