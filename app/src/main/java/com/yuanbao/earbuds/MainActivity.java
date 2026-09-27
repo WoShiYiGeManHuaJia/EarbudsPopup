@@ -42,7 +42,6 @@ import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.transition.Transition;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.checkbox.MaterialCheckBox;
-import com.google.android.material.color.DynamicColors;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 
 import java.util.ArrayList;
@@ -83,6 +82,7 @@ public class MainActivity extends AppCompatActivity {
     private final Set<String> allowSet = new LinkedHashSet<>();
     private boolean bindingUi = false;
     private boolean saving = false;
+    private String lastProbeLog = "";
 
     private final ActivityResultLauncher<String[]> pickImage =
             registerForActivityResult(new ActivityResultContracts.OpenDocument(), uri -> {
@@ -100,8 +100,10 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // Android 12+ 取壁纸色，让 App 跟系统主题融为一体
-        DynamicColors.applyToActivityIfAvailable(this);
+        // 不使用 DynamicColors：它会用壁纸色覆盖主题，浅色壁纸下
+        // 标题、开关、按钮会跟背景融为一体，整页看起来是空白的。
+        // 这里固定用高对比度配色，保证任何壁纸下都看得清。
+        setTheme(R.style.AppTheme);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         prefs = new Prefs(this);
@@ -232,7 +234,7 @@ public class MainActivity extends AppCompatActivity {
         prefs.setTitleText(t.isEmpty() ? "耳机已连接" : t);
         prefs.setSubText(etSub.getText().toString());
         String bg = etBg.getText().toString().trim();
-        prefs.setBgColor(bg.isEmpty() ? "#F2141620" : bg);
+        prefs.setBgColor(bg.isEmpty() ? "#1FFFFFFF" : bg);
         String tc = etTextColor.getText().toString().trim();
         prefs.setTextColor(tc.isEmpty() ? "#FFFFFFFF" : tc);
         String ac = etAccent.getText().toString().trim();
@@ -340,7 +342,20 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.btnNotiSettings).setOnClickListener(v -> openNotificationSettings());
         findViewById(R.id.btnBattery).setOnClickListener(v -> requestBatteryWhitelist());
         findViewById(R.id.rowMiPerm).setOnClickListener(v -> copyMiuiPermCommands());
-        findViewById(R.id.rowProbe).setOnClickListener(v -> runBatteryProbe());
+        findViewById(R.id.rowProbe).setOnClickListener(v -> {
+            if (lastProbeLog != null && !lastProbeLog.isEmpty()) {
+                new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                        .setTitle("上次探测日志")
+                        .setMessage("已保存到「下载/电量探测日志.txt」。\n"
+                                + "要重新探测，还是直接复制上次的？")
+                        .setPositiveButton("重新探测", (d, w) -> runBatteryProbe())
+                        .setNegativeButton("复制上次", (d, w) -> copy(lastProbeLog, "日志已复制"))
+                        .setNeutralButton("关闭", null)
+                        .show();
+            } else {
+                runBatteryProbe();
+            }
+        });
         findViewById(R.id.rowInfo).setOnClickListener(v -> showAbout());
 
         watch(etTitle, etSub, etBg, etTextColor, etAccent);
@@ -467,16 +482,6 @@ public class MainActivity extends AppCompatActivity {
 
     // ---------------- 预览 ----------------
 
-    /** 动态设置 LinearLayout 子项 weight */
-    private void setWeight(View v, int weight) {
-        if (v == null) return;
-        ViewGroup.LayoutParams lp = v.getLayoutParams();
-        if (lp instanceof LinearLayout.LayoutParams) {
-            ((LinearLayout.LayoutParams) lp).weight = weight;
-            v.setLayoutParams(lp);
-        }
-    }
-
     private int parseColor(String v, int fallback) {
         try {
             return Color.parseColor(v);
@@ -508,7 +513,9 @@ public class MainActivity extends AppCompatActivity {
         float d = getResources().getDisplayMetrics().density;
         // 预览按屏幕比例缩小，比例与真实弹窗一致
         int w = (int) (prefs.widthDp() * d * 0.78f);
-        int h = (int) (w * 1.15f);
+        float ratio = Math.max(0.40f, Math.min(0.92f, prefs.imageRatio()));
+        float cardRatio = 0.55f + ratio * 0.80f;
+        int h = (int) (w * cardRatio);
         ViewGroup.LayoutParams lp = pvCard.getLayoutParams();
         lp.width = w;
         lp.height = h;
@@ -523,15 +530,7 @@ public class MainActivity extends AppCompatActivity {
         pvCard.setElevation(12 * d);
         pvCard.setClipToOutline(true);
 
-        // 三区比例与真实弹窗用同一套算法，预览才等于所见即所得
-        float ratio = Math.max(0.30f, Math.min(0.92f, prefs.imageRatio()));
-        int gifW = Math.round(ratio * 100);
-        int rest = Math.max(6, 100 - gifW);
-        int infoW = Math.round(rest * 2f / 3f);
-        int tipW = Math.max(2, rest - infoW);
-        setWeight(pvImageArea, gifW);
-        setWeight(pvInfo, infoW);
-        setWeight(pvTip, tipW);
+        // GIF 区吃掉全部剩余空间，文字区保持紧凑（与真实弹窗一致）
 
         // 预览里的图片区也做圆角裁切，跟真实弹窗保持一致
         if (pvImageArea != null) {
@@ -898,6 +897,10 @@ public class MainActivity extends AppCompatActivity {
         try {
             bonded = adapter.getBondedDevices();
         } catch (SecurityException e) {
+            // 之前这里直接 return，用户点了完全没反应，以为按钮坏了
+            Toast.makeText(this,
+                    "读取已配对设备被拒绝（缺 BLUETOOTH_CONNECT）。\n"
+                            + "请回首页点「一键设置」重新授权。", Toast.LENGTH_LONG).show();
             return;
         }
         if (bonded == null || bonded.isEmpty()) {
@@ -1019,6 +1022,10 @@ public class MainActivity extends AppCompatActivity {
                 + "  来源=" + levels.source;
         final String payload = summary + "\n\n" + (diagnostic == null ? "(无日志)" : diagnostic);
 
+        // 同时静默存一份到下载目录：万一分享面板被错过，文件一定在那里
+        lastProbeLog = payload;
+        saveProbeLogSilently(payload);
+
         new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
                 .setTitle("探测完成")
                 .setMessage(summary + "\n\n点「导出日志」把完整 GATT 服务树和原始字节发出来，"
@@ -1036,6 +1043,20 @@ public class MainActivity extends AppCompatActivity {
                 .setNeutralButton("存到文件", (d, w) -> saveProbeLog(payload))
                 .setNegativeButton("关闭", null)
                 .show();
+    }
+
+    /** 静默存文件，不弹 Toast（与手动「存到文件」区分） */
+    private void saveProbeLogSilently(String content) {
+        try {
+            java.io.File dir = android.os.Environment.getExternalStoragePublicDirectory(
+                    android.os.Environment.DIRECTORY_DOWNLOADS);
+            if (dir != null && !dir.exists()) dir.mkdirs();
+            java.io.File f = new java.io.File(dir, "电量探测日志.txt");
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(f, false);
+            fos.write(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            fos.close();
+        } catch (Exception ignored) {
+        }
     }
 
     /** 日志存到下载目录，方便从文件管理器发出来 */
