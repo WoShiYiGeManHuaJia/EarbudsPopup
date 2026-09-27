@@ -46,6 +46,7 @@ public class PopupService extends Service {
     public static final String EXTRA_NAME = "name";
     public static final String EXTRA_BATTERY = "battery";
     public static final String EXTRA_CASE = "case_battery";
+    public static final String EXTRA_LEFT = "left_battery";
     public static final String EXTRA_ADDRESS = "address";
     public static final String EXTRA_WIRED = "wired";
 
@@ -58,6 +59,8 @@ public class PopupService extends Service {
     private final Handler main = new Handler(Looper.getMainLooper());
     private Prefs prefs;
     private volatile boolean screenOn = true;
+    private View currentRoot;
+    private String currentName;
 
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override
@@ -95,9 +98,14 @@ public class PopupService extends Service {
         if (intent != null && ACTION_SHOW.equals(intent.getAction())) {
             String name = intent.getStringExtra(EXTRA_NAME);
             String addr = intent.getStringExtra(EXTRA_ADDRESS);
-            int battery = intent.getIntExtra(EXTRA_BATTERY, -1);
-            int cb = intent.getIntExtra(EXTRA_CASE, -1);
-            show(name == null ? "耳机" : name, addr, battery, cb);
+            BatteryLevels lv = new BatteryLevels();
+            lv.left = intent.getIntExtra(EXTRA_LEFT, -1);
+            lv.right = intent.getIntExtra(EXTRA_BATTERY, -1);
+            lv.caseBox = intent.getIntExtra(EXTRA_CASE, -1);
+            lv.overall = lv.right;
+            lv.fillFromOverall();
+            lv.timestamp = System.currentTimeMillis();
+            show(name == null ? "耳机" : name, addr, lv, null);
         }
         return START_STICKY;
     }
@@ -179,8 +187,14 @@ public class PopupService extends Service {
         String action = i.getAction();
 
         if (ACTION_SHOW.equals(action)) {
-            show(i.getStringExtra(EXTRA_NAME), i.getStringExtra(EXTRA_ADDRESS),
-                    i.getIntExtra(EXTRA_BATTERY, -1), i.getIntExtra(EXTRA_CASE, -1));
+            BatteryLevels demo = new BatteryLevels();
+            demo.left = i.getIntExtra(EXTRA_LEFT, -1);
+            demo.right = i.getIntExtra(EXTRA_BATTERY, -1);
+            demo.caseBox = i.getIntExtra(EXTRA_CASE, -1);
+            demo.overall = demo.right;
+            demo.fillFromOverall();
+            demo.timestamp = System.currentTimeMillis();
+            show(i.getStringExtra(EXTRA_NAME), i.getStringExtra(EXTRA_ADDRESS), demo, null);
             return;
         }
 
@@ -188,7 +202,9 @@ public class PopupService extends Service {
             int state = i.getIntExtra("state", 0);
             if (state == 1 && prefs.wiredEnabled()) {
                 String name = i.getStringExtra("name");
-                show(name == null || name.isEmpty() ? "有线耳机" : name, null, -1, -1);
+                BatteryLevels none = new BatteryLevels();
+                none.timestamp = System.currentTimeMillis();
+                show(name == null || name.isEmpty() ? "有线耳机" : name, null, none, null);
             }
             return;
         }
@@ -211,7 +227,11 @@ public class PopupService extends Service {
         String name = safeName(dev);
         String addr = dev.getAddress();
         if (!prefs.isAllowed(addr)) return;
-        show(name, addr, prefs.showBattery() ? readBattery(dev) : -1, -1);
+        BatteryLevels cached = new BatteryStore(this).load(addr);
+        int sys = readBattery(dev);
+        if (sys >= 0) cached.overall = sys;
+        cached.fillFromOverall();
+        show(name, addr, cached, dev);
     }
 
     private String safeName(BluetoothDevice dev) {
@@ -269,6 +289,26 @@ public class PopupService extends Service {
         }
     }
 
+    /**
+     * 异步探测三方电量（BLE GATT 多实例 + MiBeacon + 系统隐藏单值）。
+     * GATT 连接通常要 1~5 秒，来不及在弹窗出现瞬间拿到，
+     * 所以先弹（用缓存/整机值），探测回来后原地更新信息条并写缓存，
+     * 下次连接就能立刻显示。
+     */
+    private void startProbe(String name, String address, BluetoothDevice dev) {
+        if (!prefs.showBattery() || address == null) return;
+        new BatteryProbe(this).probe(address, dev, (levels, diagnostic) -> {
+            lastDiagnostic = diagnostic;
+            new BatteryStore(PopupService.this).save(address, levels);
+            if (currentRoot != null && current != null) {
+                PopupRenderer.updateInfo(currentRoot, currentName, levels, prefs);
+            }
+        });
+    }
+
+    /** 最近一次探测的完整日志，供诊断页读取 */
+    public static volatile String lastDiagnostic = "";
+
     /** 安卓没有公开的耳机电量 API，用反射读隐藏方法；失败返回 -1（不显示电量） */
     private int readBattery(BluetoothDevice dev) {
         try {
@@ -282,8 +322,8 @@ public class PopupService extends Service {
 
     // ---------------- 弹窗渲染 ----------------
 
-    private void show(String name, String address, int battery, int caseBattery) {
-        main.post(() -> launch(name, address, battery, caseBattery));
+    private void show(String name, String address, BatteryLevels levels, BluetoothDevice dev) {
+        main.post(() -> launch(name, address, levels, dev));
     }
 
     /**
@@ -291,20 +331,21 @@ public class PopupService extends Service {
      * 之所以能从后台启动 Activity：已授予 SYSTEM_ALERT_WINDOW 的应用
      * 属于 Android 10+ 后台启动 Activity 限制的官方例外之一。
      */
-    private void launch(String name, String address, int battery, int caseBattery) {
+    private void launch(String name, String address, BatteryLevels levels, BluetoothDevice dev) {
         int engine = prefs.engine();
         boolean canOverlay = android.provider.Settings.canDrawOverlays(this);
 
         if (engine == 1) {
-            showOverlay(name, address, battery, caseBattery);
+            showOverlay(name, address, levels);
+            startProbe(name, address, dev);
             return;
         }
 
         if (engine == 0) {
             try {
-                startActivity(PopupActivity.makeIntent(this, name, battery, caseBattery));
+                startActivity(PopupActivity.makeIntent(this, name, levels));
             } catch (Exception e) {
-                if (canOverlay) showOverlay(name, address, battery, caseBattery);
+                if (canOverlay) showOverlay(name, address, levels);
             }
             return;
         }
@@ -312,24 +353,27 @@ public class PopupService extends Service {
         // 智能模式：先试系统级 Activity，800ms 后确认没起来就降级悬浮窗
         PopupActivity.lastShownAt = 0L;
         try {
-            startActivity(PopupActivity.makeIntent(this, name, battery, caseBattery));
+            startActivity(PopupActivity.makeIntent(this, name, levels));
         } catch (Exception e) {
-            if (canOverlay) showOverlay(name, address, battery, caseBattery);
+            if (canOverlay) showOverlay(name, address, levels);
             return;
         }
         main.postDelayed(() -> {
             if (PopupActivity.lastShownAt <= 0L && canOverlay) {
-                showOverlay(name, address, battery, caseBattery);
+                showOverlay(name, address, levels);
             }
+            startProbe(name, address, dev);
         }, 800);
     }
 
-    private void showOverlay(String name, String address, int battery, int caseBattery) {
+    private void showOverlay(String name, String address, BatteryLevels levels) {
         dismiss();
         if (!android.provider.Settings.canDrawOverlays(this)) return;
 
         View v = LayoutInflater.from(this).inflate(R.layout.popup_card, null);
-        PopupRenderer.bind(this, v, name, battery, caseBattery, prefs, this::dismiss);
+        PopupRenderer.bind(this, v, name, levels, prefs, this::dismiss);
+        currentRoot = v;
+        currentName = name;
 
         int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
