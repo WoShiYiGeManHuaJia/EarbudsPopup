@@ -28,6 +28,9 @@
         <item name="android:elevation">0dp</item>
     </style>
 
+    <!-- 隐式父级：Android 的 style 点号继承要求父样式必须存在 -->
+    <style name="Widget.App" />
+
     <!-- ===== 分组容器：M3 的 grouped list，圆角 16dp（large） ===== -->
     <style name="Widget.App.Group">
         <item name="android:background">@drawable/bg_group</item>
