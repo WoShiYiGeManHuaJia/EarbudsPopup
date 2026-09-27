@@ -64,9 +64,7 @@ public final class PopupRenderer {
         final LiveBlurView detailBlurBg = root.findViewById(R.id.detailBlurBg);
         TextView tvDeviceName = root.findViewById(R.id.tvDeviceName);
         TextView tvBattery = root.findViewById(R.id.tvBattery);
-        TextView tvCase = root.findViewById(R.id.tvCase);
         TextView tipText = root.findViewById(R.id.tipText);
-        ImageView icCase = root.findViewById(R.id.icCase);
 
         float d = c.getResources().getDisplayMetrics().density;
 
@@ -118,17 +116,20 @@ public final class PopupRenderer {
             tvBattery.setText(batteryText(levels));
             tvBattery.setTextColor(sub);
         }
-        if (tvCase != null) {
-            // 用户要求始终显示充电盒槽位，读不到就显示 --%
-            tvCase.setText(levels != null && BatteryLevels.valid(levels.caseBox)
-                    ? BatteryLevels.fmt(levels.caseBox) : "--%");
-            tvCase.setTextColor(sub);
-            tvCase.setVisibility(View.VISIBLE);
+        TextView tvBatteryRight = root.findViewById(R.id.tvBatteryRight);
+        if (tvBatteryRight != null) {
+            tvBatteryRight.setText(batteryTextRight(levels));
+            tvBatteryRight.setTextColor(sub);
         }
-        if (icCase != null) icCase.setVisibility(View.VISIBLE);
-        if (icCase != null) icCase.setColorFilter(sub);
+        // 充电盒槽位已从布局里【整个移除】：
+        // 系统蓝牙栈 untethered_case_battery=null，该值根本取不到，
+        // 留着只会一直显示 --% 很难看。
         ImageView icEarbuds = root.findViewById(R.id.icEarbuds);
         if (icEarbuds != null) icEarbuds.setColorFilter(sub);
+        ImageView icEarbudsRight = root.findViewById(R.id.icEarbudsRight);
+        if (icEarbudsRight != null) icEarbudsRight.setColorFilter(sub);
+        // 左右耳塞图标：右耳镜像翻转，形成「一对」
+        if (icEarbudsRight != null) icEarbudsRight.setScaleX(-1f);
 
         // ---------- 媒体区 ----------
         if (gifWrap != null) gifWrap.setBackground(null);
@@ -282,11 +283,22 @@ public final class PopupRenderer {
      * 用户要求左右耳分开显示，所以即便两值相同也照实分列，
      * 读不到就显示 --%，不再合并成一个数字。
      */
+    /**
+     * 耳机电量文本。
+     *
+     * 不能带 "L"/"R" 字样：布局里左右两侧各有【一个耳塞图标】，
+     * 图标本身已经区分了左右，再写字母既多余又丑（用户明确要求去掉）。
+     * 这里只返回纯数字。
+     */
     private static String batteryText(BatteryLevels b) {
-        if (b == null) return "L --%  R --%";
-        String l = BatteryLevels.valid(b.left) ? b.left + "%" : "--%";
-        String r = BatteryLevels.valid(b.right) ? b.right + "%" : "--%";
-        return "L " + l + "  R " + r;
+        if (b == null) return "--%";
+        return BatteryLevels.valid(b.left) ? b.left + "%" : "--%";
+    }
+
+    /** 右耳电量文本（左耳用 batteryText） */
+    private static String batteryTextRight(BatteryLevels b) {
+        if (b == null) return "--%";
+        return BatteryLevels.valid(b.right) ? b.right + "%" : "--%";
     }
 
     public static void applyImageMatrix(ImageView img) {
@@ -405,16 +417,10 @@ public final class PopupRenderer {
     public static void updateInfo(View root, String rawName, BatteryLevels levels, Prefs prefs) {
         if (root == null || levels == null) return;
         TextView tvBattery = root.findViewById(R.id.tvBattery);
-        TextView tvCase = root.findViewById(R.id.tvCase);
-        ImageView icCase = root.findViewById(R.id.icCase);
+        TextView tvBatteryRight = root.findViewById(R.id.tvBatteryRight);
         levels.sanitize();
         if (tvBattery != null) tvBattery.setText(batteryText(levels));
-        if (tvCase != null) {
-            tvCase.setText(BatteryLevels.valid(levels.caseBox)
-                    ? BatteryLevels.fmt(levels.caseBox) : "--%");
-            tvCase.setVisibility(View.VISIBLE);
-        }
-        if (icCase != null) icCase.setVisibility(View.VISIBLE);
+        if (tvBatteryRight != null) tvBatteryRight.setText(batteryTextRight(levels));
     }
 
     private static String fill(String tpl, String dev) {
