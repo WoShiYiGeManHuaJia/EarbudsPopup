@@ -150,7 +150,7 @@ public final class BatteryProbe {
                     log("广播 manufacturer id=0x" + String.format("%04X", id)
                             + " len=" + data.length);
                 }
-                byte[] svc = rec.getServiceData(UUID.fromString("0000fe95-0000-1000-8000-00805f9b34fb"));
+                byte[] svc = rec.getServiceData(android.os.ParcelUuid.fromString("0000fe95-0000-1000-8000-00805f9b34fb"));
                 if (svc != null) {
                     log("Mi Service 0xFE95 data len=" + svc.length + " hex=" + hex(svc));
                 }
