@@ -1,0 +1,25 @@
+<resources>
+
+    <style name="AppTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#FFFF6900</item>
+        <item name="colorPrimaryVariant">#FFE65C00</item>
+        <item name="colorOnPrimary">#FFFFFFFF</item>
+        <item name="colorSecondary">#FFFF6900</item>
+        <item name="colorAccent">#FFFF6900</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <string-array name="popup_position">
+        <item>屏幕顶部</item>
+        <item>屏幕居中</item>
+        <item>屏幕底部</item>
+    </string-array>
+
+    <string-array name="popup_anim">
+        <item>缩放淡入</item>
+        <item>底部上滑</item>
+        <item>顶部下滑</item>
+    </string-array>
+
+</resources>
