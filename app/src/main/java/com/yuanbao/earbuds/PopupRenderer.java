@@ -221,7 +221,7 @@ public final class PopupRenderer {
             main.postDelayed(() -> {
                 // 模糊失败也必须让文字出现，否则用户看到的是"没有文字"
                 try {
-                    setupLiveBlur(detailBlurBg, img, cardBg, prefs.radiusDp());
+                    setupLiveBlur(detailBlurBg, img, cardBg, prefs.radiusDp(), detailArea);
                 } catch (Throwable ignored) {
                 }
                 // 绑定后重新归零：setupLiveBlur 只改内容，不改动画属性，
@@ -265,9 +265,41 @@ public final class PopupRenderer {
      * 背景与动画始终同步，是真正的动态模糊。
      */
     private static void setupLiveBlur(LiveBlurView blur, ImageView img,
-                                       int cardBg, float radiusDp) {
+                                       int cardBg, float radiusDp,
+                                       View detailArea) {
         if (blur == null || img == null) return;
-        float d = blur.getResources().getDisplayMetrics().density;
+        final float d = blur.getResources().getDisplayMetrics().density;
+
+        //
+        // 模糊层高度必须【跟着文字区实测高度】走，不能写死。
+        //
+        // 布局里写死 52dp，而 detailArea 是 wrap_content，实测约 59dp
+        // （paddingBottom 11 + 电量行 18 + marginTop 5 + 设备名 21 + paddingTop 4）。
+        // 两者都贴底对齐 → 模糊层比文字矮约 7dp → 设备名顶部那几 dp
+        // 落在模糊区之外，压在清晰画面上，所以「上半截看不清」。
+        //
+        // 为什么必须 post：此时 detailArea 还没走完 layout，
+        // getHeight() 直接取会是 0。
+        //
+        final int extraPx = (int) (18f * d);   // 文字区之上额外留的渐隐过渡带
+        if (detailArea != null) {
+            detailArea.post(() -> {
+                int h = detailArea.getHeight();
+                if (h <= 0) return;
+                int total = h + extraPx;
+                ViewGroup.LayoutParams lp = blur.getLayoutParams();
+                if (lp != null && lp.height != total) {
+                    lp.height = total;
+                    blur.setLayoutParams(lp);
+                }
+                // 渐隐只占「额外那一段」，保证文字区全域是完全模糊。
+                // 之前写死 0.50，加高后渐隐过长会反噬到文字区。
+                blur.setFadeRatio((float) extraPx / (float) total);
+            });
+        } else {
+            blur.setFadeRatio(0.25f);
+        }
+
         blur.setBlurRadius(26f * d);
         // 之前 dim 给到 0.45，几乎把模糊层盖成一层灰 —— 用户看到的
         // 「直接加一层灰」就是它。降到 0.20，只做轻微压暗保证文字可读，
@@ -278,8 +310,6 @@ public final class PopupRenderer {
         // 改成固定的深色，只做适度压暗，保证文字可读又不会盖住模糊。
         // 30%（原 40%）：压暗只为保证文字可读，太重会把模糊盖成黑块
         blur.setDim(0x4D000000);
-        // 顶部 55% 高度做渐隐，与上方清晰画面平滑过渡（不再一刀切）
-        blur.setFadeRatio(0.50f);
         // 底部两角跟随卡片圆角
         blur.setBottomCornerRadius(radiusDp * d);
         blur.setSource(img);
