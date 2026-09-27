@@ -137,7 +137,7 @@ public class Prefs {
 
     /** 0=顶部 1=居中 2=底部（距底部留 120dp） */
     public int position() {
-        return sp.getInt("pos", 1);
+        return sp.getInt("pos", 0);
     }
 
     public void setPosition(int v) {
@@ -184,7 +184,7 @@ public class Prefs {
 
     /** 图片区高度 = 弹窗宽度 × 该比例（华为规范约 0.70，整体宽高比 1:1.24） */
     public float imageRatio() {
-        return sp.getFloat("img_ratio", 0.70f);
+        return sp.getFloat("img_ratio", 0.76f);
     }
 
     public void setImageRatio(float v) {
