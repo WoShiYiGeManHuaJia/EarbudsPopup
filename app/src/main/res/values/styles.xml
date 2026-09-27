@@ -43,7 +43,7 @@
         <item name="android:textSize">13sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:letterSpacing">0.02</item>
-        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textColor">@color/md_primary</item>
     </style>
 
     <!-- ===== 列表项：leading icon + 标题 + 副标题 ===== -->
@@ -57,7 +57,7 @@
         <item name="android:paddingBottom">8dp</item>
         <item name="android:drawablePadding">20dp</item>
         <item name="android:textSize">15.5sp</item>
-        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:textColor">@color/ui_text_primary</item>
     </style>
 
     <!-- ===== 纯展示/点击型列表项 ===== -->
@@ -76,7 +76,7 @@
         <item name="android:layout_width">24dp</item>
         <item name="android:layout_height">24dp</item>
         <item name="android:layout_gravity">center_vertical</item>
-        <item name="android:tint">?attr/colorOnSurfaceVariant</item>
+        <item name="android:tint">@color/ui_text_secondary</item>
     </style>
 
     <style name="AppRowText">
@@ -92,7 +92,7 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:textSize">15.5sp</item>
-        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="android:textColor">@color/ui_text_primary</item>
     </style>
 
     <style name="TextRowSub">
@@ -100,7 +100,7 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">2dp</item>
         <item name="android:textSize">12.5sp</item>
-        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+        <item name="android:textColor">@color/ui_text_secondary</item>
     </style>
 
     <!-- 行尾当前值 -->
@@ -110,7 +110,7 @@
         <item name="android:layout_gravity">center_vertical</item>
         <item name="android:textSize">13.5sp</item>
         <item name="android:textStyle">bold</item>
-        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textColor">@color/md_primary</item>
     </style>
 
     <!-- ===== 按钮 ===== -->
@@ -138,15 +138,15 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:textSize">14sp</item>
-        <item name="android:textColor">?attr/colorOnSurface</item>
-        <item name="android:textColorHint">?attr/colorOnSurfaceVariant</item>
+        <item name="android:textColor">@color/ui_text_primary</item>
+        <item name="android:textColorHint">@color/ui_text_secondary</item>
     </style>
 
     <style name="TextLabel">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:textSize">12.5sp</item>
-        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+        <item name="android:textColor">@color/ui_text_secondary</item>
     </style>
 
     <!-- ===== 系统级弹窗 Activity ===== -->
