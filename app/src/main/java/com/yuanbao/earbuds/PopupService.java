@@ -44,6 +44,7 @@ public class PopupService extends Service {
     public static final String ACTION_SHOW = "com.yuanbao.earbuds.ACTION_SHOW";
     public static final String EXTRA_NAME = "name";
     public static final String EXTRA_BATTERY = "battery";
+    public static final String EXTRA_CASE = "case_battery";
     public static final String EXTRA_ADDRESS = "address";
     public static final String EXTRA_WIRED = "wired";
 
@@ -85,7 +86,8 @@ public class PopupService extends Service {
             String name = intent.getStringExtra(EXTRA_NAME);
             String addr = intent.getStringExtra(EXTRA_ADDRESS);
             int battery = intent.getIntExtra(EXTRA_BATTERY, -1);
-            show(name == null ? "耳机" : name, addr, battery);
+            int cb = intent.getIntExtra(EXTRA_CASE, -1);
+            show(name == null ? "耳机" : name, addr, battery, cb);
         }
         return START_STICKY;
     }
@@ -123,7 +125,7 @@ public class PopupService extends Service {
 
         if (ACTION_SHOW.equals(action)) {
             show(i.getStringExtra(EXTRA_NAME), i.getStringExtra(EXTRA_ADDRESS),
-                    i.getIntExtra(EXTRA_BATTERY, -1));
+                    i.getIntExtra(EXTRA_BATTERY, -1), i.getIntExtra(EXTRA_CASE, -1));
             return;
         }
 
@@ -131,7 +133,7 @@ public class PopupService extends Service {
             int state = i.getIntExtra("state", 0);
             if (state == 1 && prefs.wiredEnabled()) {
                 String name = i.getStringExtra("name");
-                show(name == null || name.isEmpty() ? "有线耳机" : name, null, -1);
+                show(name == null || name.isEmpty() ? "有线耳机" : name, null, -1, -1);
             }
             return;
         }
@@ -154,7 +156,7 @@ public class PopupService extends Service {
         String name = safeName(dev);
         String addr = dev.getAddress();
         if (!prefs.isAllowed(addr)) return;
-        show(name, addr, prefs.showBattery() ? readBattery(dev) : -1);
+        show(name, addr, prefs.showBattery() ? readBattery(dev) : -1, -1);
     }
 
     private String safeName(BluetoothDevice dev) {
@@ -193,8 +195,8 @@ public class PopupService extends Service {
 
     // ---------------- 弹窗渲染 ----------------
 
-    private void show(String name, String address, int battery) {
-        main.post(() -> launch(name, address, battery));
+    private void show(String name, String address, int battery, int caseBattery) {
+        main.post(() -> launch(name, address, battery, caseBattery));
     }
 
     /**
@@ -202,20 +204,20 @@ public class PopupService extends Service {
      * 之所以能从后台启动 Activity：已授予 SYSTEM_ALERT_WINDOW 的应用
      * 属于 Android 10+ 后台启动 Activity 限制的官方例外之一。
      */
-    private void launch(String name, String address, int battery) {
+    private void launch(String name, String address, int battery, int caseBattery) {
         int engine = prefs.engine();
         boolean canOverlay = android.provider.Settings.canDrawOverlays(this);
 
         if (engine == 1) {
-            showOverlay(name, address, battery);
+            showOverlay(name, address, battery, caseBattery);
             return;
         }
 
         if (engine == 0) {
             try {
-                startActivity(PopupActivity.makeIntent(this, name, battery));
+                startActivity(PopupActivity.makeIntent(this, name, battery, caseBattery));
             } catch (Exception e) {
-                if (canOverlay) showOverlay(name, address, battery);
+                if (canOverlay) showOverlay(name, address, battery, caseBattery);
             }
             return;
         }
@@ -223,9 +225,9 @@ public class PopupService extends Service {
         // 智能模式：先试系统级 Activity，800ms 后确认没起来就降级悬浮窗
         PopupActivity.lastShownAt = 0L;
         try {
-            startActivity(PopupActivity.makeIntent(this, name, battery));
+            startActivity(PopupActivity.makeIntent(this, name, battery, caseBattery));
         } catch (Exception e) {
-            if (canOverlay) showOverlay(name, address, battery);
+            if (canOverlay) showOverlay(name, address, battery, caseBattery);
             return;
         }
         main.postDelayed(() -> {
@@ -235,11 +237,12 @@ public class PopupService extends Service {
         }, 800);
     }
 
-    private void showOverlay(String name, String address, int battery) {
+    private void showOverlay(String name, String address, int battery, int caseBattery) {
         dismiss();
         if (!android.provider.Settings.canDrawOverlays(this)) return;
 
         View v = LayoutInflater.from(this).inflate(R.layout.popup_card, null);
+        PopupRenderer.bind(this, v, name, battery, caseBattery, prefs, this::dismiss);
 
         int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
