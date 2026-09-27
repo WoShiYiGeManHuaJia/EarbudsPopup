@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  弹窗卡片：单张液态玻璃卡片。
-    ① GIF 主视觉区 —— 占满除文字外的全部空间（weight=1）
-    ② 设备信息窄条 —— 固定紧凑高度，小字
-    ③ 操作提示区   —— 固定紧凑高度，更小的字
-  文字区不再按百分比撑开，避免出现大片空白；
-  卡片总高由「图片占弹窗高度」换算，该值越大卡片越高、GIF 区越大。
-  无关闭按钮、无标题栏，点击卡片任意位置关闭。
+  弹窗卡片（类 realme 排版）：
+    ① 媒体区（图片 / GIF）—— 占满除详情外的全部空间
+    ② 底部渐变 —— 图片与详情之间的过渡，让两者融合
+    ③ 详情区 —— 设备名 + 电量 + 提示，弹出 0.8 秒后缓慢升起
+
+  关键：详情区「始终占位」，只做 alpha + translationY 动画，绝不用 GONE。
+       一旦用 GONE 会在升起时触发重新测量，导致 ImageView 重建、GIF 被打断重置。
+  无关闭按钮，点击卡片任意位置关闭。
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -18,24 +19,29 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- ① GIF 主视觉区：吃掉所有剩余空间 -->
+        <!-- ① 媒体区 -->
         <FrameLayout
             android:id="@+id/gifWrap"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1"
-            android:padding="2dp">
+            android:layout_weight="1">
 
+            <!-- scaleType=matrix：由代码用 Matrix 应用 fitCenter + 用户双指变换 -->
             <com.yuanbao.earbuds.RoundedImageView
                 android:id="@+id/popupImage"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_gravity="center"
-                android:adjustViewBounds="false"
                 android:contentDescription="弹窗动画"
-                android:scaleType="fitCenter" />
+                android:scaleType="matrix" />
 
-            <!-- 流光扫过（播完自动隐藏） -->
+            <!-- ② 底部渐变：让图片自然过渡到详情区 -->
+            <View
+                android:id="@+id/gradientFade"
+                android:layout_width="match_parent"
+                android:layout_height="76dp"
+                android:layout_gravity="bottom"
+                android:importantForAccessibility="no" />
+
             <View
                 android:id="@+id/shimmer"
                 android:layout_width="0dp"
@@ -44,37 +50,54 @@
                 android:visibility="gone" />
         </FrameLayout>
 
-        <!-- ② 设备信息窄条：固定紧凑高度 -->
-        <TextView
-            android:id="@+id/infoBar"
+        <!-- ③ 详情区（始终占位，靠动画升起） -->
+        <LinearLayout
+            android:id="@+id/detailArea"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center"
-            android:includeFontPadding="false"
-            android:lines="1"
-            android:paddingStart="12dp"
-            android:paddingTop="2dp"
-            android:paddingEnd="12dp"
-            android:paddingBottom="3dp"
-            android:singleLine="true"
-            android:text="已连接"
-            android:textColor="#D1FFFFFF"
-            android:textSize="11sp" />
+            android:orientation="vertical"
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="16dp">
 
-        <!-- ③ 操作提示区：固定更紧凑高度 -->
-        <TextView
-            android:id="@+id/tipText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:includeFontPadding="false"
-            android:lines="1"
-            android:paddingTop="0dp"
-            android:paddingBottom="7dp"
-            android:singleLine="true"
-            android:text="轻触关闭弹窗"
-            android:textColor="#8CFFFFFF"
-            android:textSize="9sp" />
+            <TextView
+                android:id="@+id/tvDeviceName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:lines="1"
+                android:singleLine="true"
+                android:text="耳机"
+                android:textColor="#FFFFFFFF"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/infoBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:includeFontPadding="false"
+                android:lines="1"
+                android:singleLine="true"
+                android:text="已连接"
+                android:textColor="#D9FFFFFF"
+                android:textSize="12.5sp" />
+
+            <TextView
+                android:id="@+id/tipText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:includeFontPadding="false"
+                android:lines="1"
+                android:singleLine="true"
+                android:text="轻触关闭弹窗"
+                android:textColor="#8CFFFFFF"
+                android:textSize="10sp" />
+        </LinearLayout>
 
     </LinearLayout>
 </FrameLayout>
