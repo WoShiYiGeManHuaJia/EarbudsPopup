@@ -627,8 +627,26 @@ public class PopupService extends Service {
             }
             if (quickDev != null) {
                 int quickV = readBattery(quickDev);
+                // 保守策略：只有缓存里已经有可信值时，才用系统快读值立刻刷新。
+                //
+                // getBatteryLevel() 返回的是【系统蓝牙栈缓存】，不是实时读。
+                // 换设备的瞬间，栈里存的还是「上一台设备」的旧值（或是更新前的
+                // 中间值）。而 applyMeasured 会把它写进缓存并把 timestamp 设成
+                // now —— 之后 30 分钟都当新鲜值用，用户看到的就是
+                // 「换了个耳机，电量还是错的」。
+                //
+                // 所以：缓存里没值（首次连接 / 刚换耳机 / 清过缓存）时，
+                // 不立刻显示这个旧值，交给后台轮询去取稳定值。
                 if (BatteryLevels.valid(quickV)) {
-                    applyMeasured(addr, quickV, "sys-fast", job);
+                    BatteryLevels prevCached =
+                            new BatteryStore(PopupService.this).load(addr);
+                    boolean hasCache = prevCached != null && prevCached.anyKnown();
+                    if (hasCache) {
+                        applyMeasured(addr, quickV, "sys-fast", job);
+                    } else {
+                        android.util.Log.i("Battery",
+                                "无缓存，跳过 sys-fast 快读值 " + quickV + "，等待实测");
+                    }
                 }
             }
         } catch (Throwable ignored) {
@@ -714,20 +732,42 @@ public class PopupService extends Service {
                 }
             }
             if (target != null) {
+                // 轮询之前先等一会儿，让系统把【新设备】的电量填进蓝牙栈缓存。
+                //
+                // 原来的写法 attempt=0 是立刻读，而此刻系统缓存里还是上一台
+                // 设备的旧值 —— 读到就 return，后面的等待一次都没执行过。
+                // 旧值被写进缓存并刷新时间戳，之后 30 分钟不再实测，
+                // 于是「换耳机后电量一直是错的」。
+                try {
+                    Thread.sleep(900);
+                } catch (InterruptedException e) {
+                    return;
+                }
+                int prev = -1;
                 for (int attempt = 0; attempt < 6; attempt++) {
-                    // attempt 会被 ++，不是 effectively final，lambda 里不能直接用
-                    final int tag = attempt;
                     int v = readBattery(target);
                     if (BatteryLevels.valid(v)) {
-                        final int fv = v;
-                        h.post(() -> applyMeasured(addr, fv, "sys-retry" + tag, job));
-                        return;
+                        // 连续两次读到同一个值，才认定系统值已经稳定。
+                        // 只一次就采用，很可能读到的是系统更新过程中的中间态。
+                        if (v == prev) {
+                            final int fv = v;
+                            h.post(() -> applyMeasured(addr, fv, "sys-stable", job));
+                            return;
+                        }
+                        prev = v;
                     }
                     try {
-                        Thread.sleep(700);
+                        Thread.sleep(600);
                     } catch (InterruptedException e) {
                         return;
                     }
+                }
+                // 兜底：始终没等到两次一致，就用最后一次有效读数，
+                // 避免一直空白。
+                if (BatteryLevels.valid(prev)) {
+                    final int fv = prev;
+                    h.post(() -> applyMeasured(addr, fv, "sys-retry", job));
+                    return;
                 }
             }
 
