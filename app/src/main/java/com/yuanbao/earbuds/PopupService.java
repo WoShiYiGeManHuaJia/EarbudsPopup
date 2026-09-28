@@ -124,7 +124,10 @@ public class PopupService extends Service {
      * profile「已连接」广播，于是用户明明是关掉耳机，却仍然弹出弹窗。
      * 断开后 DISCONNECT_SUPPRESS_MS 内一律不再为该设备弹窗。
      */
-    private static final long DISCONNECT_SUPPRESS_MS = 4000L;
+    // 断开后 12 秒内不再为该设备弹窗。
+    // 之前是 4 秒：HyperOS 在断开后会补发一次迟到的「已连接」广播，
+    // 4 秒压不住，于是「关掉蓝牙 / 断开耳机，它又弹一个出来」。
+    private static final long DISCONNECT_SUPPRESS_MS = 12000L;
     private final java.util.concurrent.ConcurrentHashMap<String, Long> lastDisconnectAt =
             new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -713,21 +716,34 @@ public class PopupService extends Service {
         } catch (Throwable ignored) {
         }
 
-        if (XiaomiMmaBatteryReader.likelyXiaomiRedmi(dev)) {
-            XiaomiMmaBatteryReader.read(dev, (mma, diag) -> {
-                android.util.Log.i("MMA", diag);
-                if (mma != null && (BatteryLevels.valid(mma.left)
-                        || BatteryLevels.valid(mma.right)
-                        || BatteryLevels.valid(mma.caseBox))) {
-                    applyMeasuredLevels(addr, mma, job);
-                    return;
-                }
-                // MMA 未成功：继续通用 Android / GATT 路线
-                autoRefreshBatteryFallback(addr, dev, job);
-            });
-            return;
-        }
+        //
+        // 【顺序修正】先跑通用通道，MMA 只作为「升级通道」并行跑。
+        //
+        // 之前是「先 MMA，失败才 fallback」。而 MMA 在这台机器上必然失败：
+        // 8 个 RFCOMM 通道逐个试、每个几秒超时，整套下来十几秒。
+        // 通用通道（唯一真正能拿到实时电量的 GATT 0x2A19）被堵在这十几秒
+        // 之后才执行 —— 弹窗早就显示完了，所以首帧永远是旧值/空值，
+        // 「过一会儿才跳到真实电量」。
+        //
+        // 现在：通用通道立刻启动；MMA 在后台慢慢试，真拿到分项就覆盖升级，
+        // 拿不到也完全不影响已经拿到的整机真值。
+        //
         autoRefreshBatteryFallback(addr, dev, job);
+
+        if (XiaomiMmaBatteryReader.likelyXiaomiRedmi(dev)) {
+            new Thread(() -> {
+                XiaomiMmaBatteryReader.read(dev, (mma, diag) -> {
+                    android.util.Log.i("MMA", diag);
+                    if (mma != null && (BatteryLevels.valid(mma.left)
+                            || BatteryLevels.valid(mma.right)
+                            || BatteryLevels.valid(mma.caseBox))) {
+                        final BatteryLevels fv = mma;
+                        h.post(() -> applyMeasuredLevels(addr, fv, job));
+                    }
+                });
+            }).start();
+        }
+        return;
     }
 
     /** MMA 不可用/失败时的通用电量获取路线（原 autoRefreshBattery 主体）。 */
@@ -752,6 +768,25 @@ public class PopupService extends Service {
         // 这是 AOSP 为 TWS 定义的专用字段，能读到就最可信。
         // 不再用「私有特征里随便找一个 1~100 的数」去猜充电盒。
         //
+        //
+        // 【真值优先】一进来就并发发起 BLE GATT 读取。
+        //
+        // 0x180F/0x2A19 是本机型唯一经日志确认能拿到【实时】电量的通道
+        // （同一副耳机在不同时刻读到 100 和 90，随真实电量变化）。
+        // 之前它排在系统轮询之后、只在系统拿不到时才走，于是真值永远迟到。
+        // 这里先发出去，谁先回来用谁（后续的分项会覆盖整机值）。
+        //
+        try {
+            new BatteryProbe(PopupService.this).quickRead(addr, dev, gattVal -> {
+                if (BatteryLevels.valid(gattVal)) {
+                    if (batteryJobs.get(addr) == null) return;
+                    final long cur = batteryJobs.get(addr);
+                    if (cur == job) scheduleOverall(addr, gattVal, "gatt-quick", job);
+                }
+            });
+        } catch (Throwable ignored) {
+        }
+
         BatteryLevels authority = BatteryAuthority.read(dev);
         if (authority.anyKnown()) {
             authority.source = authority.source + ":fast";
@@ -797,7 +832,7 @@ public class PopupService extends Service {
                     // 原来只等 900ms：系统往往还没开始更新，读到的是上一台设备的
                     // 残值；而「连续两次一致」恰恰因为【都没更新】而成立 ——
                     // 这个判定反而锁死了错误的中间值。这里多给系统一点时间。
-                    Thread.sleep(1600);
+                    Thread.sleep(700);
                 } catch (InterruptedException e) {
                     return;
                 }
