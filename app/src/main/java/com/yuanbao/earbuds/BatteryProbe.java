@@ -686,8 +686,9 @@ public final class BatteryProbe {
         }
         // 给耳机 6 秒时间推送数据
         main.postDelayed(() -> {
-            writeQueries(g, overall, levels, cb);
-            main.postDelayed(then, 8000);
+            // 不再向未知厂商私有特征盲写 opcode —— 未知写命令可能改变耳机状态。
+            // 仅依赖标准 GATT、系统 metadata 和厂商主动 NOTIFY。
+            main.postDelayed(then, 2500);
         }, notifiable.isEmpty() ? 0 : 6000);
     }
 
@@ -879,10 +880,9 @@ public final class BatteryProbe {
 
         // 没有语义标签时，按实例数量推断
         if (b.left < 0 && b.right < 0 && b.caseBox < 0 && vals.size() >= 3) {
-            b.left = vals.get(0);
-            b.right = vals.get(1);
-            b.caseBox = vals.get(2);
-            b.source = "gatt-3instances";
+            // 多实例但没有 0x2904 语义描述时，不猜实例顺序。
+            // 不同厂商/固件的实例顺序没有统一保证。
+            b.source = "gatt-3instances-unlabeled";
         } else if (BatteryLevels.valid(b.left) || BatteryLevels.valid(b.right)
                 || BatteryLevels.valid(b.caseBox)) {
             // 注意：这里【不能】用 b.anyKnown()。
@@ -908,32 +908,8 @@ public final class BatteryProbe {
 
         b.timestamp = System.currentTimeMillis();
         lastResult = b;
-        // ===== 充电盒电量推断 =====
-        // 依据本次日志：标准 0x2A19 只有 1 个实例 = 整机 100；
-        // 私有服务 CHAR-0A 读到 32（0x20）。
-        // 私有特征里出现一个 1..100 且【不等于整机值】的数，
-        // 它几乎不可能是耳机（耳机就是整机 100），最合理的解释就是充电盒。
-        // 只有用户在设置里明确开启才启用。
-        // 默认关闭：该字节未确认是电量，贸然显示会出现乱跳的数字。
-        if (!BatteryLevels.valid(b.caseBox) && ctx != null
-                && new Prefs(ctx).privateCaseEnabled()) {
-            for (java.util.Map.Entry<BluetoothGattCharacteristic, Integer> e
-                    : readValues.entrySet()) {
-                BluetoothGattCharacteristic ch = e.getKey();
-                Integer v = e.getValue();
-                if (v == null) continue;
-                // 跳过标准电量特征（那是整机值）
-                if (ch.getUuid().toString().toLowerCase(Locale.ROOT)
-                        .startsWith("00002a19")) continue;
-                if (BatteryLevels.valid(v) && v != b.overall) {
-                    b.caseBox = v;
-                    b.source = "private-char";
-                    log("充电盒推断：私有特征 " + ch.getUuid().toString().substring(0, 8)
-                            + " = " + v + "%（整机 " + b.overall + "%）");
-                    break;
-                }
-            }
-        }
+        // 严格模式：不再把「任意私有特征里的 1~100」猜成充电盒电量。
+        // 充电盒只有在系统 metadata、明确语义的 GATT 实例或已确认的厂商协议中出现时才显示。
 
         // 标准/私有读取都没拿到完整三值时，再从 NOTIFY 推送包里试一次
         if (!BatteryLevels.valid(b.caseBox) || !BatteryLevels.valid(b.left)
