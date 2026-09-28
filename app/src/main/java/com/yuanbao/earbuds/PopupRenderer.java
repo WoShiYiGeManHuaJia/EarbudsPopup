@@ -352,9 +352,9 @@ public final class PopupRenderer {
         TextView tvL = root.findViewById(R.id.tvBattery);
         TextView tvR = root.findViewById(R.id.tvBatteryRight);
         TextView tvC = root.findViewById(R.id.tvBatteryCase);
-        View icL = root.findViewById(R.id.icEarbuds);
-        View icR = root.findViewById(R.id.icEarbudsRight);
-        View icC = root.findViewById(R.id.icCase);
+        ImageView icL = root.findViewById(R.id.icEarbuds);
+        ImageView icR = root.findViewById(R.id.icEarbudsRight);
+        ImageView icC = root.findViewById(R.id.icCase);
         if (levels != null) levels.sanitize();
 
         boolean pair = levels != null
