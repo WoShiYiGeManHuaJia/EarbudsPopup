@@ -317,6 +317,12 @@ public class PopupService extends Service {
                 if (currentRoot != null && a2.equals(currentAddress)) {
                     PopupRenderer.updateInfo(currentRoot, currentName, bl, prefs);
                 }
+                // 超级岛由 SystemUI 托管，电量更新要重新 post 才能刷新
+                int eng = prefs.engine();
+                if (eng == 3 || eng == 4) {
+                    HyperOSIslandNotifier.post(this,
+                            currentName == null ? "耳机" : currentName, bl, prefs);
+                }
             }
             return;
         }
@@ -474,6 +480,20 @@ public class PopupService extends Service {
         if (now - lastLaunchAt < 3000L) return;
         lastLaunchAt = now;
         int engine = prefs.engine();
+        // 3 = HyperOS 原生超级岛；4 = HyperOS 优先，失败自动回退 Overlay/Activity
+        if (engine == 3 || engine == 4) {
+            boolean gif = HyperOSIslandNotifier.looksLikeGif(this, prefs.imageUri());
+            boolean posted = !gif && HyperOSIslandNotifier.post(this, name, levels, prefs);
+            if (posted) {
+                autoRefreshBattery(address, dev);
+                // 原生岛由 SystemUI 自己管理生命周期，
+                // 不能同时创建 Overlay，否则又是「两个弹窗打架」
+                return;
+            }
+            // GIF、HyperOS 不支持、焦点通知权限关闭等情况：退回旧引擎
+            engine = 1;
+        }
+
         boolean canOverlay = android.provider.Settings.canDrawOverlays(this);
 
         // 无论走哪个引擎，都必须启动自动电量探测。
