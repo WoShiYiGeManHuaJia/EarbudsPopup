@@ -138,6 +138,9 @@ public class LiveBlurView extends View {
         // ensureCornerPath 有「已存在就复用」的缓存，如果这里不清，
         // 之后会一直用第一次（可能是错的）尺寸画圆角。
         cornerPath = null;
+        // 渐变同样依赖高度（fh = h * fadeRatio），尺寸变了也要重建，
+        // 否则会一直用首次布局时的高度画渐隐 —— 高度改变后渐变位置就错了。
+        fadeGradient = null;
     }
 
     @Override
