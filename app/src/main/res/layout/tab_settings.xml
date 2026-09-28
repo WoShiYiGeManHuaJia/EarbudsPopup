@@ -114,6 +114,7 @@
                     <LinearLayout style="@style/AppRow"><ImageView style="@style/AppRowIcon" android:src="@drawable/ic_info" android:contentDescription="metadata"/><LinearLayout style="@style/AppRowText"><TextView style="@style/TextRowTitle" android:text="系统 TWS metadata"/><TextView android:id="@+id/tvDiagMeta" style="@style/TextRowSub" android:text="未知"/></LinearLayout></LinearLayout>
                     <LinearLayout style="@style/AppRow"><ImageView style="@style/AppRowIcon" android:src="@drawable/ic_bluetooth" android:contentDescription="MMA"/><LinearLayout style="@style/AppRowText"><TextView style="@style/TextRowTitle" android:text="小米 MMA 语义电量"/><TextView android:id="@+id/tvDiagMma" style="@style/TextRowSub" android:text="未知"/></LinearLayout></LinearLayout>
                     <com.google.android.material.button.MaterialButton android:id="@+id/btnDiagRefresh" style="@style/AppButtonTonal" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="8dp" android:text="刷新诊断 / 立即排保活" app:icon="@drawable/ic_refresh" app:iconGravity="textStart" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/btnClearBattery" style="@style/AppButtonTonal" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="8dp" android:text="清空电量缓存（读数异常时用）" app:icon="@drawable/ic_battery" app:iconGravity="textStart" />
                 </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
