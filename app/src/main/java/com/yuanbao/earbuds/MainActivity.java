@@ -258,6 +258,20 @@ public class MainActivity extends AppCompatActivity {
             KeepAliveController.arm(this);   // 立即排一次保活 Alarm
             refreshDiag(tvDiagMma, tvDiagIsland, tvDiagService, tvDiagKeep, tvDiagBatSrc, tvDiagMeta);
         });
+        // 弹窗弹出「一瞬间」显示的那个固定数字，来自上一次的电量缓存：
+        // 连接瞬间先读缓存立刻出数，实测完成后才被刷新覆盖。
+        // 若某次读到的是错值（例：MMA 握手半途返回的中间值），
+        // 它会一直留在缓存里当「第一帧」。这个按钮清掉它，
+        // 下次连接就从 --% 直接跳到实测值，不再闪旧数字。
+        View btnClearBattery = findViewById(R.id.btnClearBattery);
+        if (btnClearBattery != null) {
+            btnClearBattery.setOnClickListener(v -> {
+                new BatteryStore(MainActivity.this).clearAll();
+                if (tvDiagBatSrc != null) tvDiagBatSrc.setText("已清空");
+                if (tvDiagMeta != null) tvDiagMeta.setText("已清空");
+                Toast.makeText(MainActivity.this, "电量缓存已清空", Toast.LENGTH_SHORT).show();
+            });
+        }
         refreshDiag(tvDiagMma, tvDiagIsland, tvDiagService, tvDiagKeep, tvDiagBatSrc, tvDiagMeta);
         swHideRecents = findViewById(R.id.swHideRecents);
     }
