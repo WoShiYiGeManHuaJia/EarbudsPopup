@@ -5,20 +5,23 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 
-/**
- * 开机 / 应用更新后拉起弹窗服务。
- */
+/** 开机 / 解锁 / 更新 / 低频自恢复：重新拉起弹窗前台服务。 */
 public class BootReceiver extends BroadcastReceiver {
+    public static final String ACTION_RECOVER_SERVICE = "com.yuanbao.earbuds.ACTION_RECOVER_SERVICE";
 
     @Override
     public void onReceive(Context c, Intent intent) {
         if (intent == null) return;
         String a = intent.getAction();
-        if (!Intent.ACTION_BOOT_COMPLETED.equals(a)
-                && !Intent.ACTION_LOCKED_BOOT_COMPLETED.equals(a)
-                && !Intent.ACTION_MY_PACKAGE_REPLACED.equals(a)) return;
+        boolean normalBoot = Intent.ACTION_BOOT_COMPLETED.equals(a)
+                || Intent.ACTION_LOCKED_BOOT_COMPLETED.equals(a)
+                || Intent.ACTION_MY_PACKAGE_REPLACED.equals(a)
+                || Intent.ACTION_USER_UNLOCKED.equals(a)
+                || ACTION_RECOVER_SERVICE.equals(a);
+        if (!normalBoot) return;
 
-        if (!new Prefs(c).autoStart()) return;
+        Prefs p = new Prefs(c);
+        if (!p.autoStart() || !p.masterEnabled()) return;
 
         Intent s = new Intent(c, PopupService.class);
         try {
@@ -28,7 +31,8 @@ public class BootReceiver extends BroadcastReceiver {
                 c.startService(s);
             }
         } catch (Exception ignored) {
-            // 部分 ROM 禁止开机自启，忽略即可，用户手动打开 App 也能启动
+            // HyperOS 仍可能拦截后台启动；下一轮 Alarm / 用户启动会再次尝试。
         }
+        KeepAliveController.arm(c);
     }
 }
