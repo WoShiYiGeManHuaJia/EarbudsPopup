@@ -128,7 +128,43 @@ public class LiveBlurView extends View {
     public void setBottomCornerRadius(float px) {
         this.bottomRadiusPx = Math.max(0f, px);
         cornerPath = null;   // 半径变了要重建路径
+        applyOutlineClip();
         invalidate();
+    }
+
+    /**
+     * 框架级圆角裁剪（兜底中的兜底）。
+     *
+     * onDraw 里已经用 canvas.clipPath(shape) 裁过一次，但那次裁剪在
+     * saveLayer 内部生效与否，取决于硬件加速管线的实现，不同 ROM 上
+     * 并不一致。一旦它没生效，drawPath(shape, dimPaint) 就会把
+     * 0x4D000000（30% 黑）铺成【直角矩形】—— 同样是「圆角还在，
+     * 但角落多出黑色直角边」。
+     *
+     * setClipToOutline(true) 的裁剪由框架在合成阶段统一执行，
+     * 不依赖 canvas 的合成模式，必然生效。
+     *
+     * 顶部两角要保持直角，做法是把圆角矩形的上边推到 View 上方（-r），
+     * 这样顶部两个圆角落在可视区之外，裁剪后顶部仍是直角。
+     */
+    private void applyOutlineClip() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return;
+        if (bottomRadiusPx <= 0f) {
+            setClipToOutline(false);
+            return;
+        }
+        setOutlineProvider(new android.view.ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline outline) {
+                int w = view.getWidth(), h = view.getHeight();
+                if (w <= 0 || h <= 0) return;
+                int r = Math.round(Math.min(bottomRadiusPx, Math.min(w, h) / 2f));
+                if (r <= 0) return;
+                outline.setRoundRect(0, -r, w, h, r);
+            }
+        });
+        setClipToOutline(true);
+        invalidateOutline();
     }
 
     @Override
@@ -149,6 +185,12 @@ public class LiveBlurView extends View {
         if (changed && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
                 && bottomRadiusPx > 0f) {
             invalidateOutline();
+        }
+        // 尺寸变化后圆角路径/裁剪都要跟着变，否则会一直用首次布局的尺寸裁剪
+        if (changed) {
+            cornerPath = null;
+            fadeGradient = null;
+            applyOutlineClip();
         }
     }
 
