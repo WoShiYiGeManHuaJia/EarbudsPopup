@@ -365,6 +365,33 @@ public final class BatteryProbe {
     @SuppressLint("MissingPermission")
     private void scanThenConnect(String address, BluetoothDevice device,
                                  int overall, Callback cb) {
+        // Redmi/Xiaomi TWS 优先走真正的语义电量通道（MMA GET_DEVICE_INFO）。
+        // 成功直接结束探测，不再执行 GATT 猜测链；失败才继续原有流程，
+        // 以便保留完整诊断信息。
+        if (XiaomiMmaBatteryReader.likelyXiaomiRedmi(device)) {
+            log("检测到 Redmi/Xiaomi TWS，优先走 MMA 语义电量通道");
+            XiaomiMmaBatteryReader.read(device, (mma, mmaDiag) -> {
+                log(mmaDiag);
+                if (mma != null && (BatteryLevels.valid(mma.left)
+                        || BatteryLevels.valid(mma.right)
+                        || BatteryLevels.valid(mma.caseBox))) {
+                    mma.sanitize();
+                    mma.timestamp = System.currentTimeMillis();
+                    lastResult = mma;
+                    log("采用 Xiaomi MMA 语义电量，跳过 GATT 猜测链");
+                    finish(overall, cb);
+                } else {
+                    log("MMA 未拿到语义电量，继续 BLE 扫描 / GATT 诊断");
+                    scanThenConnectInner(address, device, overall, cb);
+                }
+            });
+            return;
+        }
+        scanThenConnectInner(address, device, overall, cb);
+    }
+
+    private void scanThenConnectInner(String address, BluetoothDevice device,
+                                      int overall, Callback cb) {
         BluetoothManager bm = (BluetoothManager) ctx.getSystemService(Context.BLUETOOTH_SERVICE);
         BluetoothAdapter adapter = bm != null ? bm.getAdapter() : BluetoothAdapter.getDefaultAdapter();
         if (adapter == null) {
