@@ -115,6 +115,50 @@ public class PopupService extends Service {
     private final java.util.concurrent.ConcurrentHashMap<String, Long> batteryJobs =
             new java.util.concurrent.ConcurrentHashMap<>();
 
+    // 【整机值延迟显示】
+    // getBatteryLevel() 返回的是系统蓝牙栈缓存，连接后会【逐步更新】：
+    // 中途读到的 85 / 95 往往只是"还没更新完"的中间态。
+    // applyMeasured 会把整机值写进界面并 keepOverallOnly() —— 左右耳被清成
+    // 无效，于是弹出一个「单耳图标 + 中间值」；等真实分项（左/右/盒）到达
+    // 再被覆盖，用户看到的就是「先闪一个单耳错误数字，再跳真实电量」。
+    //
+    // 现在：整机值不立刻显示，先挂一个延迟任务；延迟期内更权威的分项值
+    // 到达就取消它、直接用分项覆盖 —— 界面一次性落到真实值，不再闪。
+    private Runnable pendingOverall;
+    private String pendingOverallAddr;
+    private static final long OVERALL_DEFER_MS = 1500L;
+
+    /** 取消尚未执行的整机值显示任务（分项值到达时调用）。 */
+    private void cancelPendingOverall() {
+        if (pendingOverall != null) {
+            main.removeCallbacks(pendingOverall);
+            android.util.Log.i("Battery", "取消待显示的整机值，改用分项 " + pendingOverallAddr);
+            pendingOverall = null;
+            pendingOverallAddr = null;
+        }
+    }
+
+    /**
+     * 整机值延迟显示：先挂 OVERALL_DEFER_MS 等分项，分项先到就取消。
+     * 延迟期内界面保持原样 / 空，不会再闪一个错的单耳数字。
+     */
+    private void scheduleOverall(String addr, int value, String source, long job) {
+        cancelPendingOverall();
+        final String a = addr;
+        final int v = value;
+        final String src = source;
+        final long jb = job;
+        pendingOverallAddr = addr;
+        pendingOverall = () -> {
+            pendingOverall = null;
+            pendingOverallAddr = null;
+            applyMeasured(a, v, src, jb);
+        };
+        android.util.Log.i("Battery", "整机值 " + v + "(" + src + ") 延迟 "
+                + OVERALL_DEFER_MS + "ms 显示，等分项");
+        main.postDelayed(pendingOverall, OVERALL_DEFER_MS);
+    }
+
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context c, Intent i) {
@@ -739,20 +783,31 @@ public class PopupService extends Service {
                 // 旧值被写进缓存并刷新时间戳，之后 30 分钟不再实测，
                 // 于是「换耳机后电量一直是错的」。
                 try {
-                    Thread.sleep(900);
+                    // 原来只等 900ms：系统往往还没开始更新，读到的是上一台设备的
+                    // 残值；而「连续两次一致」恰恰因为【都没更新】而成立 ——
+                    // 这个判定反而锁死了错误的中间值。这里多给系统一点时间。
+                    Thread.sleep(1600);
                 } catch (InterruptedException e) {
                     return;
                 }
                 int prev = -1;
+                int stableHits = 0;
                 for (int attempt = 0; attempt < 6; attempt++) {
                     int v = readBattery(target);
                     if (BatteryLevels.valid(v)) {
                         // 连续两次读到同一个值，才认定系统值已经稳定。
                         // 只一次就采用，很可能读到的是系统更新过程中的中间态。
                         if (v == prev) {
-                            final int fv = v;
-                            h.post(() -> applyMeasured(addr, fv, "sys-stable", job));
-                            return;
+                            stableHits++;
+                            // 连续三次一致才认定稳定：两次一致很容易在
+                            // 「系统还没开始更新」时误成立。
+                            if (stableHits >= 2) {
+                                final int fv = v;
+                                h.post(() -> scheduleOverall(addr, fv, "sys-stable", job));
+                                return;
+                            }
+                        } else {
+                            stableHits = 0;
                         }
                         prev = v;
                     }
@@ -766,7 +821,7 @@ public class PopupService extends Service {
                 // 避免一直空白。
                 if (BatteryLevels.valid(prev)) {
                     final int fv = prev;
-                    h.post(() -> applyMeasured(addr, fv, "sys-retry", job));
+                    h.post(() -> scheduleOverall(addr, fv, "sys-retry", job));
                     return;
                 }
             }
@@ -786,7 +841,7 @@ public class PopupService extends Service {
             h.post(() -> new BatteryProbe(PopupService.this)
                     .quickRead(addr, dev, gattVal -> {
                         if (BatteryLevels.valid(gattVal)) {
-                            applyMeasured(addr, gattVal, "gatt-auto", job);
+                            scheduleOverall(addr, gattVal, "gatt-auto", job);
                         } else {
                             // 拿不到分项 ≠ 没电。
                             // 之前这里无条件把 overall 也清成 -1 —— 于是
@@ -812,6 +867,8 @@ public class PopupService extends Service {
 
     /** 带 job 校验写入：切了耳机，旧回调直接丢弃 */
     private void applyMeasuredLevels(String addr, BatteryLevels levels, long job) {
+        // 真实分项（左/右/盒）到了：取消待显示的整机值，避免先闪单耳再跳三个。
+        cancelPendingOverall();
         if (levels == null) return;
         Long cur = batteryJobs.get(addr);
         if (cur == null || cur != job) return;   // 已切换到别的耳机/新任务
