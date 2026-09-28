@@ -121,8 +121,27 @@
                     android:textColor="#E6FFFFFF"
                     android:textSize="12.5sp" />
 
-                <!-- 充电盒槽位已移除：系统蓝牙栈 untethered_case_battery 为 null，
-                     该值取不到，留着只会一直显示占位符 -->
+                <!-- 充电盒：保留槽位。MMA 通道能给出真实值；
+                     取不到时显示占位横线，绝不伪造数字。 -->
+                <ImageView
+                    android:id="@+id/icCase"
+                    android:layout_width="15dp"
+                    android:layout_height="15dp"
+                    android:layout_marginStart="14dp"
+                    android:contentDescription="充电盒电量"
+                    android:src="@drawable/ic_case" />
+
+                <TextView
+                    android:id="@+id/tvBatteryCase"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:includeFontPadding="false"
+                    android:lines="1"
+                    android:singleLine="true"
+                    android:text="--%"
+                    android:textColor="#E6FFFFFF"
+                    android:textSize="12.5sp" />
 
                 <!-- 右耳：图标加纯数字，不带字母 -->
                 <ImageView
