@@ -50,7 +50,7 @@ public final class BatteryAuthority {
                 if (!metadataAny) out.source = "android-battery-level";
             }
         } catch (Throwable ignored) {}
-        out.fillFromOverall();
+        out.keepOverallOnly();
         out.sanitize();
         out.timestamp = System.currentTimeMillis();
         return out;
