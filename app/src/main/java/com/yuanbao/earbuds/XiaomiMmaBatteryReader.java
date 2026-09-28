@@ -65,8 +65,14 @@ public final class XiaomiMmaBatteryReader {
     /** 电量在设备信息 TLV 里的 index */
     private static final int TLV_INDEX_BATTERY = 0x07;
 
-    private static final int CONNECT_TIMEOUT_MS = 2500;
-    private static final int READ_TIMEOUT_MS = 2500;
+    /**
+     * Gadgetbridge 的 BtClassicIoThread 对 socket.connect()【不设任何超时】，
+     * 说明小米耳机的 SPP 建链可能需要好几秒（SDP 未就绪时会一直阻塞）。
+     * 之前这里写 2500ms，于是每次都在耳机应答前就放弃 —— 日志里
+     * 「FD2D-insecure 超时 / FD2D-secure 超时」全是这个原因，不是耳机不支持。
+     */
+    private static final int CONNECT_TIMEOUT_MS = 10000;
+    private static final int READ_TIMEOUT_MS = 4000;
     private static final int HANDSHAKE_ROUNDS = 12;
 
     private static final ExecutorService IO = Executors.newCachedThreadPool();
@@ -379,19 +385,28 @@ public final class XiaomiMmaBatteryReader {
 
     @SuppressLint("MissingPermission")
     private static BluetoothSocket openSocket(BluetoothDevice device, StringBuilder log) {
+        // SDP 没就绪时 createRfcommSocketToServiceRecord 会一直阻塞到超时。
+        // Gadgetbridge 建连前先 getUuids()，非 null 才继续 —— 这里照做。
+        ensureSdp(device, log);
+
+        // Gadgetbridge 只用 FD2D(0000fd2d)，且用 secure 通道。
+        // 之前把 XiaoAI / 标准 SPP 排在前面，纯属瞎猜，白白耗掉十几秒。
         UUID[] uuids = {UUID_FAST_CONNECT, UUID_XIAOAI, UUID_SPP_STD};
         String[] names = {"FD2D(FastConnect)", "XiaoAI(自定义)", "SPP(标准)"};
+        // FD2D 给足时间（GB 无超时），其余快速试过即可
+        int[] timeouts = {CONNECT_TIMEOUT_MS, 2500, 2500};
 
         for (int i = 0; i < uuids.length; i++) {
             for (int pass = 0; pass < 2; pass++) {
-                boolean insecure = (pass == 0);
+                // secure 优先：Gadgetbridge 用的是 createRfcommSocketToServiceRecord（secure）
+                boolean insecure = (pass == 1);
                 String tag = names[i] + (insecure ? "-insecure" : "-secure");
                 BluetoothSocket s = null;
                 try {
                     s = insecure
                             ? device.createInsecureRfcommSocketToServiceRecord(uuids[i])
                             : device.createRfcommSocketToServiceRecord(uuids[i]);
-                    if (connectWithTimeout(s, CONNECT_TIMEOUT_MS)) {
+                    if (connectWithTimeout(s, timeouts[i])) {
                         log.append("MMA: 已连接 ").append(tag).append('\n');
                         return s;
                     }
@@ -404,7 +419,7 @@ public final class XiaomiMmaBatteryReader {
             }
         }
 
-        int[] channels = {6, 4, 5, 12};
+        int[] channels = {6, 4};
         for (int ch : channels) {
             BluetoothSocket s = null;
             try {
@@ -412,7 +427,7 @@ public final class XiaomiMmaBatteryReader {
                         device.getClass().getMethod("createRfcommSocket", int.class);
                 m.setAccessible(true);
                 s = (BluetoothSocket) m.invoke(device, ch);
-                if (connectWithTimeout(s, CONNECT_TIMEOUT_MS)) {
+                if (connectWithTimeout(s, 2000)) {
                     log.append("MMA: 已连接 反射信道 ").append(ch).append('\n');
                     return s;
                 }
@@ -420,8 +435,32 @@ public final class XiaomiMmaBatteryReader {
             }
             close(s);
         }
-        log.append("MMA: 反射信道 6/4/5/12 全部失败\n");
+        log.append("MMA: 反射信道 6/4 全部失败\n");
         return null;
+    }
+
+    /** 触发 SDP 发现并等它完成，避免 connect() 卡在 SDP 未就绪上 */
+    @SuppressLint("MissingPermission")
+    private static void ensureSdp(BluetoothDevice device, StringBuilder log) {
+        try {
+            if (device.getUuids() != null) {
+                log.append("MMA: SDP 已缓存\n");
+                return;
+            }
+            log.append("MMA: SDP 未就绪，触发 fetchUuidsWithSdp()\n");
+            device.fetchUuidsWithSdp();
+            long deadline = System.currentTimeMillis() + 4000;
+            while (System.currentTimeMillis() < deadline) {
+                if (device.getUuids() != null) {
+                    log.append("MMA: SDP 完成\n");
+                    return;
+                }
+                Thread.sleep(200);
+            }
+            log.append("MMA: SDP 等待超时（仍尝试建链）\n");
+        } catch (Throwable t) {
+            log.append("MMA: SDP 异常: ").append(shortErr(t)).append('\n');
+        }
     }
 
     /** BluetoothSocket.connect() 没有超时参数，卡住会拖垮整个探测 */
