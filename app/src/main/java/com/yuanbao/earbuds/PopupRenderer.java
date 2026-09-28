@@ -217,7 +217,8 @@ public final class PopupRenderer {
             main.postDelayed(() -> {
                 // 模糊失败也必须让文字出现，否则用户看到的是"没有文字"
                 try {
-                    setupLiveBlur(detailBlurBg, img, cardBg, prefs.radiusDp(), detailArea);
+                    setupLiveBlur(detailBlurBg, img, cardBg, prefs.radiusDp(), detailArea,
+                            prefs.dimAmount());
                 } catch (Throwable ignored) {
                 }
                 // 绑定后重新归零：setupLiveBlur 只改内容，不改动画属性，
@@ -262,7 +263,8 @@ public final class PopupRenderer {
      */
     private static void setupLiveBlur(LiveBlurView blur, ImageView img,
                                        int cardBg, float radiusDp,
-                                       View detailArea) {
+                                       View detailArea,
+                                       float dimAmount) {
         if (blur == null || img == null) return;
         final float d = blur.getResources().getDisplayMetrics().density;
 
@@ -307,7 +309,13 @@ public final class PopupRenderer {
         // 加上模糊区本身内容偏淡，整体看着就「几乎透明」。
         // 改成固定的深色，只做适度压暗，保证文字可读又不会盖住模糊。
         // 30%（原 40%）：压暗只为保证文字可读，太重会把模糊盖成黑块
-        blur.setDim(0x4D000000);
+        //
+        // 现在由「详情区压暗」滑块控制。
+        // 原来这个滑块调的是【窗口级】FLAG_DIM_BEHIND，而窗口级压暗会
+        // 在圆角卡片之外的四个角落露出来，就是那两块黑色直角边。
+        // 压暗挪进卡片内部后，它被裁在圆角形状里，不会再溢出成直角。
+        int dimAlpha = Math.round(Math.max(0f, Math.min(0.70f, dimAmount)) * 255f);
+        blur.setDim((dimAlpha << 24) | 0x000000);
         // 底部两角跟随卡片圆角
         blur.setBottomCornerRadius(radiusDp * d);
         blur.setSource(img);
