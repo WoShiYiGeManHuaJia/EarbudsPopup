@@ -377,7 +377,16 @@ public class PopupService extends Service {
         // 关键：缓存必须「够新鲜」才敢显示。
         // 之前直接拿几小时前的旧值当实时电量，用户充完电还看到 30%。
         // 超过 STALE_MS 就作废，先显示 --%，由 autoRefreshBattery 实测后刷新。
-        if (cached.timestamp > 0L
+        // STALE 只应该作废「旧缓存里的值」，绝不能作废【本次刚实测到的值】。
+        // 之前无条件清 overall：上面第 362 行刚把 readBattery()=100 赋进去，
+        // 这里立刻因为 timestamp 陈旧而清成 -1。
+        // 用户日志里 getBatteryLevel()=100 明明读到了，弹窗却显示 --%
+        // ——真凶就在这里。
+        // 而且走系统级 Activity 引擎时，弹窗用的是这次传入的 levels，
+        // 后续 applyMeasured 只刷新 Overlay 的 root，Activity 界面根本不更新，
+        // 于是 --% 会一直卡住不动。
+        if (!BatteryLevels.valid(sys)
+                && cached.timestamp > 0L
                 && System.currentTimeMillis() - cached.timestamp > BatteryStore.STALE_MS) {
             cached.left = -1;
             cached.right = -1;
