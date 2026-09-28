@@ -24,10 +24,15 @@ public class Prefs {
         migrateEngineDefault();
     }
 
-    /** 默认切换到 HyperOS 原生超级岛优先模式；不支持时自动回退。 */
+    /**
+     * 超级岛档位（3/4）已随功能移除。这里把引擎默认值收敛到 2（智能），
+     * 并把已经存成 3/4 的老配置一次性拉回 2，避免越界。
+     */
     private void migrateEngineDefault() {
-        if (sp.getInt("engine_schema", 0) >= 2) return;
-        sp.edit().putInt("engine", 4).putInt("engine_schema", 2).apply();
+        if (sp.getInt("engine_schema", 0) >= 3) return;
+        int cur = sp.getInt("engine", 2);
+        if (cur < 0 || cur > 2) cur = 2;
+        sp.edit().putInt("engine", cur).putInt("engine_schema", 3).apply();
     }
 
     /**
@@ -335,31 +340,21 @@ public class Prefs {
     // ---------- 系统级弹窗引擎 ----------
     /**
      * 0=系统级Activity 1=悬浮窗 2=智能降级
-     * 3=HyperOS 原生超级岛 4=HyperOS 智能（超级岛优先，失败回退）
+     * （原 3/4 为 HyperOS 超级岛档位，功能已移除）
      */
     public int engine() {
-        return sp.getInt("engine", 4);
+        int v = sp.getInt("engine", 2);
+        if (v < 0 || v > 2) return 2;
+        return v;
     }
 
     public void setEngine(int v) {
-        sp.edit().putInt("engine", v).apply();
+        int c = Math.max(0, Math.min(2, v));
+        sp.edit().putInt("engine", c).apply();
     }
 
-    /**
-     * 强制上岛：跳过小米 canShowFocus 查询。
-     *
-     * 部分 HyperOS 机器上 content://miui.statusbar.notification.public 的
-     * canShowFocus 恒返回 false（ROM 未授权第三方 / provider 未暴露），
-     * 但实际上 SystemUI 仍能渲染焦点通知。默认关闭表示尊重系统判定；
-     * 用户确认自己机型支持时可打开，由用户自己承担「上不了岛」的结果。
-     */
-    public boolean forceIsland() {
-        return sp.getBoolean("force_island", false);
-    }
+    // 超级岛功能已移除：force_island / 强制上岛开关一并删除。
 
-    public void setForceIsland(boolean v) {
-        sp.edit().putBoolean("force_island", v).apply();
-    }
 
     /** 背景压暗程度 0~1 */
     public float dimAmount() {
