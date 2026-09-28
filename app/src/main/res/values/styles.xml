@@ -40,5 +40,5 @@
     <style name="PopupWindowAnimation"><item name="android:windowEnterAnimation">@anim/popup_in</item><item name="android:windowExitAnimation">@anim/popup_out</item></style>
     <string-array name="popup_position"><item>屏幕顶部</item><item>屏幕居中</item><item>屏幕底部</item></string-array>
     <string-array name="popup_anim"><item>缩放淡入</item><item>底部上滑</item><item>顶部下滑</item></string-array>
-    <string-array name="popup_engine"><item>系统级（锁屏也能弹）</item><item>悬浮窗（兼容性最好）</item><item>智能（失败自动降级）</item></string-array>
+    <string-array name="popup_engine"><item>系统级（锁屏也能弹）</item><item>悬浮窗（兼容性最好）</item><item>智能（失败自动降级）</item><item>HyperOS 原生超级岛（SystemUI 渲染）</item><item>HyperOS 智能（超级岛优先，失败回退）</item></string-array>
 </resources>
