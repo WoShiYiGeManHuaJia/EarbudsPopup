@@ -88,7 +88,7 @@ public class MainActivity extends AppCompatActivity {
 
     private View tabHome, tabLook, tabSet;
 
-    private final Set<String> allowSet = new LinkedHashSet<>();
+    private final Set<String> denySet = new LinkedHashSet<>();
     private boolean bindingUi = false;
     private boolean saving = false;
     private String lastProbeLog = "";
@@ -249,8 +249,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void loadPrefsToUi() {
         bindingUi = true;
-        allowSet.clear();
-        allowSet.addAll(prefs.allowedDevices());
+        denySet.clear();
+        prefs.migrateLegacyAllowedIfNeeded();
+        denySet.addAll(prefs.deniedDevices());
 
         etTitle.setText(prefs.titleText());
         etSub.setText(prefs.subText());
@@ -281,7 +282,7 @@ public class MainActivity extends AppCompatActivity {
         prefs.setTitleText(t.isEmpty() ? "耳机已连接" : t);
         prefs.setSubText(etSub.getText().toString());
         // 颜色现在由色彩盘写入 Prefs，这里不再从输入框读取
-        prefs.setAllowedDevices(allowSet);
+        prefs.setDeniedDevices(denySet);
         syncValueLabels();
     }
 
@@ -1384,21 +1385,14 @@ public class MainActivity extends AppCompatActivity {
 
             MaterialCheckBox cb = new MaterialCheckBox(this);
             cb.setText((shown == null ? "未知设备" : shown) + "\n" + addr);
-            cb.setChecked(allowSet.isEmpty() || allowSet.contains(addr));
-            // 先 setChecked 再挂 listener，避免初始化时误触发
+            // 勾选 = 允许弹窗（默认），取消勾选 = 排除这台设备。
+            // 新配对的设备从没被排除过，默认就是允许的 ——
+            // 这样换任何耳机都能弹、都能读电量。
+            cb.setChecked(!denySet.contains(addr));
             cb.setOnCheckedChangeListener((b, checked) -> {
-                // 关键修正：allowSet 为空代表「所有设备都弹」。
-                // 此时用户取消勾选某一项，若直接 remove 一个本来就不存在的地址，
-                // 存进去还是空集，等于没设置——永远排除不掉任何设备。
-                // 所以第一次交互时先把全部已配对设备灌进 allowSet，再做增删。
-                if (allowSet.isEmpty()) {
-                    for (BluetoothDevice other : bonded) {
-                        allowSet.add(other.getAddress());
-                    }
-                }
-                if (checked) allowSet.add(addr);
-                else allowSet.remove(addr);
-                prefs.setAllowedDevices(allowSet);
+                if (checked) denySet.remove(addr);
+                else denySet.add(addr);
+                prefs.setDeniedDevices(denySet);
             });
             LinearLayout.LayoutParams cbLp = new LinearLayout.LayoutParams(
                     0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
@@ -1422,7 +1416,7 @@ public class MainActivity extends AppCompatActivity {
             deviceList.addView(row, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
-        deviceList.addView(hintText("全部取消勾选 = 所有设备都弹窗"));
+        deviceList.addView(hintText("默认所有耳机都弹窗；取消勾选 = 排除这台设备"));
         deviceList.addView(hintText("点「改名」可自定义弹窗上显示的名字，优先级高于系统蓝牙名"));
     }
 
