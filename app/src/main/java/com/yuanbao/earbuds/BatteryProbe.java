@@ -872,7 +872,7 @@ public final class BatteryProbe {
             b.left = metaLevels.left;
             b.right = metaLevels.right;
             b.caseBox = metaLevels.caseBox;
-            b.fillFromOverall();
+            b.keepOverallOnly();
             b.source = "system-metadata";
             b.timestamp = System.currentTimeMillis();
             lastResult = b;
@@ -926,12 +926,12 @@ public final class BatteryProbe {
             b.right = v > 0 ? v : -1;
             b.source = "gatt-single";
         } else {
-            b.fillFromOverall();
+            b.keepOverallOnly();
             b.source = overall >= 0 ? "system-single" : "none";
         }
 
         // 统一兜底：无论走哪个分支，左右耳缺失且整机值有效时用整机值补齐
-        b.fillFromOverall();
+        b.keepOverallOnly();
 
         b.timestamp = System.currentTimeMillis();
         lastResult = b;
@@ -1007,7 +1007,7 @@ public final class BatteryProbe {
         if (b == null) {
             b = new BatteryLevels();
             b.overall = overall;
-            b.fillFromOverall();
+            b.keepOverallOnly();
             b.source = overall >= 0 ? "system-single" : "none";
             b.timestamp = System.currentTimeMillis();
         }
