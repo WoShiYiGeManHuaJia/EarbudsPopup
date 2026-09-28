@@ -161,3 +161,38 @@ adb shell dumpsys deviceidle whitelist +com.yuanbao.earbuds
 ## 八、许可
 
 代码可自由使用与修改，仅供个人学习与自用，请勿用于商业分发。
+
+## 九、HyperOS 3 原生超级岛模式（新增）
+
+本版本新增 **HyperOS 原生超级岛优先模式**。与旧版本自己创建悬浮窗不同，它会按照小米公开的岛通知客户端协议，在 Notification extras 中写入 `miui.focus.param` 和 `miui.focus.pics`，由 HyperOS SystemUI 自己渲染顶部超级岛。小米开发者文档明确说明：客户端可以正常发送 Notification，并附加岛通知 JSON 参数；支持设备会以岛通知形式展示。OS3 支持“小米超级岛”，OS2 主要是焦点通知。
+
+默认引擎现在为：
+
+```text
+HyperOS 智能
+  ↓
+HyperOS 原生超级岛
+  ↓（不支持 / 权限关闭 / GIF）
+原有 Overlay / Activity 回退
+```
+
+### 自定义图片
+
+静态 PNG/JPG/WEBP 会尝试通过 `miui.focus.pics` 作为超级岛图片传给 SystemUI。小米官方文档提供了 `miui.focus.pics` 与 `miui.focus.pic_xxx` 的客户端示例。
+
+### GIF
+
+公开文档没有承诺第三方可以在所有 HyperOS 3 模板中直接播放任意 GIF。因此本版本不会假装“GIF 一定原生上岛”：检测到 GIF 时，HyperOS 智能模式直接切换原来的 Overlay GIF 引擎，保证功能可用；静态图片优先使用原生超级岛。
+
+### HyperOS 权限检测
+
+App 会读取 `notification_focus_protocol` 判断 ROM 能力，并查询小米公开的 `content://miui.statusbar.notification.public` `canShowFocus` 接口判断当前应用是否可以发送焦点通知/超级岛。小米官方文档给出了这两种检测方式。
+
+### 运行时诊断
+
+打开 App 的“弹出引擎”，选择：
+
+- `HyperOS 原生超级岛`：只尝试原生超级岛，失败后走 Overlay。
+- `HyperOS 智能`：超级岛优先，自动回退，推荐日常使用。
+
+项目根目录的 `HYPEROS_ISLAND.md` 有详细协议说明。
