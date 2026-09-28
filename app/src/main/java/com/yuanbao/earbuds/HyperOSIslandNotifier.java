@@ -93,7 +93,17 @@ public final class HyperOSIslandNotifier {
      * 根据 ROM、用户焦点通知权限和模板支持情况决定。
      */
     public static boolean post(Context context, String name, BatteryLevels levels, Prefs prefs) {
-        if (!isSupported(context) || !hasFocusPermission(context) || !hasNotificationPermission(context)) {
+        return post(context, name, levels, prefs, false);
+    }
+
+    /**
+     * @param force 为 true 时跳过 canShowFocus 判定（用户手动开启「强制上岛」）。
+     */
+    public static boolean post(Context context, String name, BatteryLevels levels, Prefs prefs, boolean force) {
+        if (!isSupported(context) || !hasNotificationPermission(context)) {
+            return false;
+        }
+        if (!force && !hasFocusPermission(context)) {
             return false;
         }
         try {
