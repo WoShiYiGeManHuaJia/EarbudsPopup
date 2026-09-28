@@ -598,6 +598,30 @@ public class PopupService extends Service {
         // MMA 的 GET_DEVICE_INFO 能一次返回 [LL RR CC] 三元组，这是唯一能拿到
         // 真实左右耳与充电盒的只读通道。成功即采用并结束；失败才继续通用路线。
         //
+        //
+        // 第 -2 步（最快，最先执行）：系统隐藏 API 立刻给一个整机值。
+        //
+        // 之前 Xiaomi 设备一上来就走 MMA RFCOMM，连接要几秒甚至超时，
+        // 期间 UI 一直是 --%；而这台机器上 MMA 必然失败
+        // （日志: FD2D connect failed / all RFCOMM transports failed），
+        // 失败后才 fallback，于是「永远吃不到电量」。
+        // 这里先同步读一次，有效就立刻显示，MMA 再到后台慢慢试分项。
+        //
+        try {
+            BluetoothDevice quickDev = dev;
+            if (quickDev == null) {
+                BluetoothAdapter ba0 = BluetoothAdapter.getDefaultAdapter();
+                if (ba0 != null) quickDev = ba0.getRemoteDevice(addr);
+            }
+            if (quickDev != null) {
+                int quickV = readBattery(quickDev);
+                if (BatteryLevels.valid(quickV)) {
+                    applyMeasured(addr, quickV, "sys-fast", job);
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+
         if (XiaomiMmaBatteryReader.likelyXiaomiRedmi(dev)) {
             XiaomiMmaBatteryReader.read(dev, (mma, diag) -> {
                 android.util.Log.i("MMA", diag);
@@ -712,16 +736,22 @@ public class PopupService extends Service {
                         if (BatteryLevels.valid(gattVal)) {
                             applyMeasured(addr, gattVal, "gatt-auto", job);
                         } else {
-                            // 两条路都没取到真值：把陈旧缓存作废，显示 --%
+                            // 拿不到分项 ≠ 没电。
+                            // 之前这里无条件把 overall 也清成 -1 —— 于是
+                            // getBatteryLevel()=100、2A19=100 都读到了，
+                            // 弹窗却显示 --%、来源"未取到"。这是核心 bug。
+                            // 现在：整机值还在就保留，真的什么都没有才作废。
                             BatteryStore st = new BatteryStore(PopupService.this);
                             BatteryLevels b = st.load(addr);
-                            b.left = -1;
-                            b.right = -1;
-                            b.caseBox = -1;
-                            b.overall = -1;
-                            b.source = "unavailable";
-                            if (currentRoot != null && addr.equals(currentAddress)) {
-                                PopupRenderer.updateInfo(currentRoot, currentName, b, prefs);
+                            if (!BatteryLevels.valid(b.overall)) {
+                                b.left = -1;
+                                b.right = -1;
+                                b.caseBox = -1;
+                                b.overall = -1;
+                                b.source = "unavailable";
+                                if (currentRoot != null && addr.equals(currentAddress)) {
+                                    PopupRenderer.updateInfo(currentRoot, currentName, b, prefs);
+                                }
                             }
                         }
                     }));
