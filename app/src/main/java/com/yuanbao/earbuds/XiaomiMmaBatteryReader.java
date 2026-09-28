@@ -567,7 +567,7 @@ public final class XiaomiMmaBatteryReader {
                     g.requestMtu(517);
                 } catch (Throwable ignored) {
                 }
-                s.deadline = System.currentTimeMillis() + 18000;
+                s.deadline = System.currentTimeMillis() + 10000;
                 main.postDelayed(() -> sendChallenge(g, s, log), 800);
                 s.tick = () -> pump(g, s, main, done, log, cb);
                 main.postDelayed(s.tick, 1000);
@@ -602,6 +602,18 @@ public final class XiaomiMmaBatteryReader {
             return;
         }
         gg[0] = g;
+
+        // 硬超时：必须与 GATT 回调无关。
+        // 之前只在 onServicesDiscovered 之后才设 deadline，如果 connectGatt /
+        // discoverServices 永不回调（HyperOS 上很常见），endBle 永远不会执行，
+        // 这个 GATT 就一直不断开 —— 僵尸连接占住 BLE 资源，
+        // 后续所有电量读取全部失败，表现为「电量锁死不动」。
+        // 这正是用户看到「锁定 95%」的真凶：不是缓存，是 GATT 被占死。
+        main.postDelayed(() -> {
+            if (done[0]) return;
+            log.append("[BLE-MMA] 硬超时(12s)，强制断开\n");
+            endBle(g, s, done, log, cb);
+        }, 12000);
     }
 
     /** 挑出可写通道与通知通道 */
@@ -654,8 +666,8 @@ public final class XiaomiMmaBatteryReader {
         System.arraycopy(rnd, 0, p, 1, 16);
         if (bleWrite(g, s, TYPE_PHONE_REQUEST, OP_AUTH_CHALLENGE, s.sn++, p, log)) {
             s.sentChallenge = true;
-            s.candDeadline = System.currentTimeMillis() + 4000;
-            log.append("[BLE-MMA] 已发挑战，等 4s\n");
+            s.candDeadline = System.currentTimeMillis() + 2500;
+            log.append("[BLE-MMA] 已发挑战，等 2.5s\n");
         } else {
             s.candDeadline = System.currentTimeMillis() + 500;
         }
