@@ -377,7 +377,12 @@ public class LiveBlurView extends View {
     }
 
     /** 最小重绘间隔（ms）：把模糊重算限制在 ~30fps，降低 CPU 占用 */
-    private static final long MIN_REDRAW_MS = 33L;
+    // 从 33ms 放宽到 66ms（约 15fps）。
+    // 原因：降采样倍数从 4 改成 2 后（为消除马赛克），stackBlur 要处理的像素量
+    // 变成 4 倍。GIF 每前进一帧就触发一次全量模糊，30fps 下 CPU 吃满，
+    // 表现为「GIF 变卡」。模糊是背景视觉，15fps 完全够用，
+    // 动图本身仍由源 ImageView 按原帧率刷新（不受此限制）。
+    private static final long MIN_REDRAW_MS = 66L;
     private long lastDrawAt = 0L;
 
     private void attachCallback(Drawable dr) {
