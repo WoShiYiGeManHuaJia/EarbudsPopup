@@ -312,10 +312,17 @@ public class MainActivity extends AppCompatActivity {
             s.setAction(PopupService.ACTION_SHOW);
             s.putExtra(PopupService.EXTRA_NAME, "我的耳机");
             boolean show = prefs.showBattery();
-            s.putExtra(PopupService.EXTRA_LEFT, show ? 78 : -1);
-            s.putExtra(PopupService.EXTRA_BATTERY, show ? 78 : -1);
-            s.putExtra(PopupService.EXTRA_CASE,
-                    (show && prefs.showCaseBattery()) ? 65 : -1);
+            // 预览改用真实探测结果，不再写死 78 / 65。
+            // 之前无论什么设备都是这两个数，用户以为电量已经读到了，实际是假的。
+            BatteryLevels pv = new BatteryStore(this).load(prefs.lastAddress());
+            int l = show ? pv.left : -1;
+            int r = show ? pv.right : -1;
+            int c = (show && prefs.showCaseBattery()) ? pv.caseBox : -1;
+            if (!show || !BatteryLevels.valid(l)) l = show ? pv.overall : -1;
+            if (!show || !BatteryLevels.valid(r)) r = show ? pv.overall : -1;
+            s.putExtra(PopupService.EXTRA_LEFT, l);
+            s.putExtra(PopupService.EXTRA_BATTERY, r);
+            s.putExtra(PopupService.EXTRA_CASE, c);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(s);
             else startService(s);
         });
