@@ -281,7 +281,9 @@ public final class PopupRenderer {
         // 为什么必须 post：此时 detailArea 还没走完 layout，
         // getHeight() 直接取会是 0。
         //
-        final int extraPx = (int) (18f * d);   // 文字区之上额外留的渐隐过渡带
+        // 18dp 的过渡带太短，视觉上接近硬边（用户反馈「一刀切」）。
+        // 加到 28dp，让上边界有足够距离柔和地融进清晰画面。
+        final int extraPx = (int) (28f * d);   // 文字区之上额外留的渐隐过渡带
         if (detailArea != null) {
             detailArea.post(() -> {
                 int h = detailArea.getHeight();
