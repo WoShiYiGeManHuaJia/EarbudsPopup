@@ -243,13 +243,8 @@ public class MainActivity extends AppCompatActivity {
         deviceList = findViewById(R.id.deviceList);
         tvProbeHint = findViewById(R.id.tvProbeHint);
         TextView tvDiagMma = findViewById(R.id.tvDiagMma);
-        TextView tvDiagIsland = findViewById(R.id.tvDiagIsland);
-        com.google.android.material.switchmaterial.SwitchMaterial swForceIsland =
-                findViewById(R.id.swForceIsland);
-        if (swForceIsland != null) {
-            swForceIsland.setChecked(prefs.forceIsland());
-            swForceIsland.setOnCheckedChangeListener((btn, on) -> prefs.setForceIsland(on));
-        }
+        // 超级岛功能已整体移除（菜单与诊断都不再保留）
+        TextView tvDiagIsland = null;
         TextView tvDiagService = findViewById(R.id.tvDiagService);
         TextView tvDiagKeep = findViewById(R.id.tvDiagKeep);
         TextView tvDiagBatSrc = findViewById(R.id.tvDiagBatSrc);
@@ -325,8 +320,10 @@ public class MainActivity extends AppCompatActivity {
         tvDuration.setText(prefs.durationMs() + " ms");
         tvPos.setText(prefs.verticalPos() + "%");
         tvAnim.setText(new String[]{"缩放淡入", "底部上滑", "顶部下滑"}[prefs.animStyle()]);
-        String[] engineLabels = {"系统级", "悬浮窗", "智能", "HyperOS 超级岛", "HyperOS 智能"};
-        tvEngine.setText(engineLabels[Math.max(0, Math.min(engineLabels.length - 1, prefs.engine()))]);
+        String[] engineLabels = {"系统级", "悬浮窗", "智能"};
+        int engIdx = Math.max(0, Math.min(engineLabels.length - 1, prefs.engine()));
+        if (engIdx != prefs.engine()) prefs.setEngine(engIdx);   // 超级岛档位已移除，旧值收敛到 0..2
+        tvEngine.setText(engineLabels[engIdx]);
         tvDim.setText(Math.round(prefs.dimAmount() * 100) + "%");
         tvBlur.setText(prefs.blurRadius() + " dp");
     }
@@ -390,10 +387,8 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.rowEngine).setOnClickListener(v -> showChoice("弹出引擎",
                 new String[]{"系统级（透明 Activity，锁屏也能弹）",
                         "悬浮窗（兼容性最好）",
-                        "智能：先系统级，失败自动降级悬浮窗",
-                        "HyperOS 原生超级岛（由系统 SystemUI 渲染）",
-                        "HyperOS 智能（超级岛优先，失败自动回退）"},
-                Math.max(0, Math.min(4, prefs.engine())), prefs::setEngine));
+                        "智能：先系统级，失败自动降级悬浮窗"},
+                Math.max(0, Math.min(2, prefs.engine())), prefs::setEngine));
 
         // 开关
         bindSwitch(swMaster, prefs::setMasterEnabled, () -> toggleService(swMaster.isChecked()));
@@ -452,30 +447,8 @@ public class MainActivity extends AppCompatActivity {
                 runBatteryProbe();
             }
         });
-        // 充电盒电量推断开关：默认关闭（该字节未确认是电量，贸然显示会乱跳）
-        View rowCase = findViewById(R.id.rowPrivateCase);
-        if (rowCase != null) {
-            final com.google.android.material.materialswitch.MaterialSwitch swCaseSrc =
-                    rowCase.findViewById(R.id.swPrivateCase);
-            final android.widget.TextView tvCaseDesc =
-                    rowCase.findViewById(R.id.tvPrivateCaseDesc);
-            if (swCaseSrc != null) {
-                swCaseSrc.setChecked(prefs.privateCaseEnabled());
-                swCaseSrc.setOnCheckedChangeListener((btn, on) -> {
-                    prefs.setPrivateCaseEnabled(on);
-                    if (tvCaseDesc != null) {
-                        tvCaseDesc.setText(on
-                                ? "开启：用私有特征读数（已验证恒为32，非电量，仅调试用）"
-                                : "关闭：充电盒显示 --%（该特征值已被证实不是电量）");
-                    }
-                });
-                if (tvCaseDesc != null) {
-                    tvCaseDesc.setText(prefs.privateCaseEnabled()
-                            ? "开启：用私有特征读数当充电盒电量（未确认，可能不准）"
-                            : "关闭：充电盒显示 --%");
-                }
-            }
-        }
+        // 充电盒电量推断开关已移除：该私有特征已被证实恒为 32、不是电量。
+        // 设置里只保留「显示充电盒电量」一个开关。
         findViewById(R.id.rowInfo).setOnClickListener(v -> showAbout());
 
         watch(etTitle, etSub);
@@ -1235,10 +1208,19 @@ public class MainActivity extends AppCompatActivity {
         updatePreview();
     }
 
-    /** 给相框和首页预览都挂上双指缩放 / 单指拖动 */
+    /**
+     * 只给「外观」页的相框挂手势。
+     *
+     * 首页那个弹窗预览是【只读预览】：它显示的就是弹窗真实效果，
+     * 手指划它不该改到图片（之前两个 ImageView 共用同一套
+     * imageScale / dx / dy，在首页调一下会连带改掉实际弹窗）。
+     */
     private void setupImageGesture() {
         attachGesture(pvFrameImage);
-        attachGesture(pvImage);
+        if (pvImage != null) {
+            pvImage.setOnTouchListener(null);
+            pvImage.setClickable(false);
+        }
     }
 
     /**
@@ -1968,41 +1950,13 @@ public class MainActivity extends AppCompatActivity {
             boolean xiaomi = XiaomiMmaBatteryReader.likelyXiaomiRedmi(dev0);
             StringBuilder sb = new StringBuilder();
             sb.append("设备匹配=").append(xiaomi ? "是（Redmi/Xiaomi TWS）" : "否");
-            String err = HyperOSIslandNotifier.lastError;
-            if (err != null && !err.isEmpty()) sb.append("\n").append(err);
             if (xiaomi) {
                 sb.append("\n通道：RFCOMM MMA GET_DEVICE_INFO");
                 sb.append("\n成功则返回真实 左/右/盒，否则显示占位");
             }
             mma.setText(sb.toString());
         }
-        // 0) HyperOS 超级岛：把「为什么没上岛」直接摊开
-        if (island != null) {
-            boolean hyper = HyperOSIslandNotifier.isHyperOS(this);
-            int ver = HyperOSIslandNotifier.protocolVersion(this);
-            boolean focus = HyperOSIslandNotifier.hasFocusPermission(this);
-            boolean noti = HyperOSIslandNotifier.hasNotificationPermission(this);
-            boolean gif;
-            try {
-                gif = HyperOSIslandNotifier.looksLikeGif(this, prefs.imageUri());
-            } catch (Throwable t) {
-                gif = false;
-            }
-            StringBuilder sb = new StringBuilder();
-            sb.append("协议版本=").append(ver)
-              .append(" · HyperOS=").append(hyper ? "是" : "否")
-              .append(" · 焦点资格=").append(focus ? "有" : "无")
-              .append("\n通知权限=").append(noti ? "已授予" : "未授予");
-            if (gif) sb.append("\n当前是 GIF → 岛不支持动图，已回退悬浮窗");
-            if (noti && (focus || prefs.forceIsland()) && !gif && ver >= 2) {
-                sb.append("\n条件满足，下次连接应上岛");
-            } else if (ver < 2) {
-                sb.append("\nROM 未开启焦点协议（<2），无法上岛");
-            } else if (!focus) {
-                sb.append("\n系统未授予焦点资格 → 可开「强制上岛」试试");
-            }
-            island.setText(sb.toString());
-        }
+        // 0) 超级岛诊断已随功能一并移除
         // 1) 服务是否在运行
         boolean running = false;
         try {
