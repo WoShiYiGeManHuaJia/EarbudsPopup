@@ -438,8 +438,6 @@ public class PopupService extends Service {
      */
     private void startProbe(String name, String address, BluetoothDevice dev) {
         if (!prefs.showBattery() || address == null || address.isEmpty()) return;
-        final long job = System.nanoTime();
-        batteryJobs.put(addr, job);
         new BatteryProbe(this).probe(address, dev, (levels, diagnostic) -> {
             lastDiagnostic = diagnostic;
             if (levels != null) levels.sanitize();
@@ -564,9 +562,11 @@ public class PopupService extends Service {
      * 绝不再把几小时前的旧数字当实时电量显示。
      */
     private void autoRefreshBattery(String address, BluetoothDevice dev) {
-        if (!prefs.showBattery() || address == null) return;
+        if (!prefs.showBattery() || address == null || address.isEmpty()) return;
         final String addr = address;
         final Handler h = main;
+        final long job = System.nanoTime();
+        batteryJobs.put(addr, job);
 
         //
         // 【新增】第 0 步：系统隐藏 API getBatteryLevel()
