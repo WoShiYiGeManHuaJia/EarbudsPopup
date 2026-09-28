@@ -242,6 +242,15 @@ public class MainActivity extends AppCompatActivity {
         tvBlur = findViewById(R.id.tvBlur);
         deviceList = findViewById(R.id.deviceList);
         tvProbeHint = findViewById(R.id.tvProbeHint);
+        TextView tvDiagService = findViewById(R.id.tvDiagService);
+        TextView tvDiagKeep = findViewById(R.id.tvDiagKeep);
+        TextView tvDiagBatSrc = findViewById(R.id.tvDiagBatSrc);
+        TextView tvDiagMeta = findViewById(R.id.tvDiagMeta);
+        findViewById(R.id.btnDiagRefresh).setOnClickListener(v -> {
+            KeepAliveController.arm(this);   // 立即排一次保活 Alarm
+            refreshDiag(tvDiagService, tvDiagKeep, tvDiagBatSrc, tvDiagMeta);
+        });
+        refreshDiag(tvDiagService, tvDiagKeep, tvDiagBatSrc, tvDiagMeta);
         swHideRecents = findViewById(R.id.swHideRecents);
     }
 
@@ -1910,4 +1919,72 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         refreshPermStatus();
     }
+    /**
+     * 补丁状态诊断 —— Patch1/Patch2 都是底层改动，界面上看不到，
+     * 所以这里把「代码到底跑没跑」直接显示出来。
+     */
+    private void refreshDiag(TextView svc, TextView keep, TextView src, TextView meta) {
+        // 1) 服务是否在运行
+        boolean running = false;
+        try {
+            android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+            if (am != null) {
+                for (android.app.ActivityManager.RunningServiceInfo i : am.getRunningServices(200)) {
+                    if (i.service != null && PopupService.class.getName().equals(i.service.getClassName())) {
+                        running = true;
+                        break;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        svc.setText(running ? "运行中 ✓" : "未运行（点按钮会启动）");
+
+        // 2) 保活 Alarm 是否已排（PendingIntent 存在即代表已注册过）
+        boolean armed = false;
+        try {
+            android.app.AlarmManager am = (android.app.AlarmManager) getSystemService(Context.ALARM_SERVICE);
+            android.content.Intent i = new android.content.Intent(this, BootReceiver.class)
+                    .setAction(BootReceiver.ACTION_RECOVER_SERVICE).setPackage(getPackageName());
+            android.app.PendingIntent pi = android.app.PendingIntent.getBroadcast(this, 9147, i,
+                    android.app.PendingIntent.FLAG_NO_CREATE |
+                            (android.os.Build.VERSION.SDK_INT >= 23 ? android.app.PendingIntent.FLAG_IMMUTABLE : 0));
+            armed = pi != null;
+        } catch (Throwable ignored) {}
+        keep.setText(armed ? "已排定（15 分钟低频自恢复）✓" : "未排定 → 点上方按钮");
+
+        // 3) 电量来源 + 4) metadata 实读
+        String addr = prefs.lastAddress();
+        BatteryLevels b = addr == null ? null : new BatteryStore(this).load(addr);
+        if (b == null || (b.source == null || b.source.isEmpty())) {
+            src.setText("暂无（连接一次耳机后再看）");
+        } else {
+            src.setText(b.source);
+        }
+        if (addr == null) {
+            meta.setText("无设备地址");
+        } else {
+            String r = BatteryAuthorityProbeText(addr);
+            meta.setText(r);
+        }
+    }
+
+    /** 直接反射读一次系统 TWS metadata，把结果当字符串显示 */
+    private String BatteryAuthorityProbeText(String addr) {
+        try {
+            android.bluetooth.BluetoothAdapter ba = android.bluetooth.BluetoothAdapter.getDefaultAdapter();
+            if (ba == null || !ba.isEnabled()) return "蓝牙未开启";
+            android.bluetooth.BluetoothDevice d = ba.getRemoteDevice(addr);
+            BatteryLevels lv = BatteryAuthority.read(d);
+            StringBuilder sb = new StringBuilder();
+            sb.append("左=").append(BatteryLevels.valid(lv.left) ? lv.left + "%" : "--")
+              .append(" 右=").append(BatteryLevels.valid(lv.right) ? lv.right + "%" : "--")
+              .append(" 盒=").append(BatteryLevels.valid(lv.caseBox) ? lv.caseBox + "%" : "--");
+            if (!lv.anyKnown()) sb.append("（该 ROM 未暴露给第三方）");
+            return sb.toString();
+        } catch (Throwable e) {
+            return "读取异常: " + e.getClass().getSimpleName();
+        }
+    }
+
+
 }
