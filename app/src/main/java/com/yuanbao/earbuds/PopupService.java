@@ -660,9 +660,6 @@ public class PopupService extends Service {
         final long job = System.nanoTime();
         batteryJobs.put(addr, job);
 
-            } catch (Throwable ignored) {
-            }
-        });
 
         //
         // 第 -1 步（优先级最高）：Redmi/Xiaomi TWS 走厂商语义通道 MMA。
@@ -1001,39 +998,6 @@ public class PopupService extends Service {
                     try {
                         wm.removeView(v);
                     } catch (Exception ignored) {
-                    }
-                }).start();
-    }
-
-    @Override
-    public void onTaskRemoved(Intent rootIntent) {
-        // 用户从最近任务划掉 UI 不等于关闭后台服务；安排一次低频自恢复。
-        KeepAliveController.arm(this);
-        super.onTaskRemoved(rootIntent);
-    }
-
-    private float dp(float v) {
-        return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v,
-                getResources().getDisplayMetrics());
-    }
-
-    @Override
-    public void onDestroy() {
-        KeepAliveController.arm(this);
-        dismiss();
-        try {
-            unregisterReceiver(receiver);
-        } catch (Exception ignored) {
-        }
-        super.onDestroy();
-    }
-
-    @Override
-    public IBinder onBind(Intent intent) {
-        return null;
-    }
-}
-eption ignored) {
                     }
                 }).start();
     }
