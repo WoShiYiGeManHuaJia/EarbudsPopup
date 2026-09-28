@@ -105,6 +105,8 @@ public class PopupService extends Service {
 
     private WindowManager wm;
     private View current;
+    /** 尚未执行的自动消失回调，dismiss 时要一并撤销 */
+    private Runnable pendingDismiss;
     private final Handler main = new Handler(Looper.getMainLooper());
     private Prefs prefs;
     private volatile boolean screenOn = true;
@@ -113,6 +115,17 @@ public class PopupService extends Service {
     private volatile String currentAddress;
     /** 每台设备独立的刷新序号：切换耳机后旧的探测结果绝不会覆盖新耳机的弹窗。 */
     private final java.util.concurrent.ConcurrentHashMap<String, Long> batteryJobs =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * 每台设备最近一次【断开】的时刻。
+     *
+     * 部分 ROM（HyperOS 尤其）在耳机断开或关闭蓝牙时，会乱序补发一条
+     * profile「已连接」广播，于是用户明明是关掉耳机，却仍然弹出弹窗。
+     * 断开后 DISCONNECT_SUPPRESS_MS 内一律不再为该设备弹窗。
+     */
+    private static final long DISCONNECT_SUPPRESS_MS = 4000L;
+    private final java.util.concurrent.ConcurrentHashMap<String, Long> lastDisconnectAt =
             new java.util.concurrent.ConcurrentHashMap<>();
 
     // 【整机值延迟显示】
@@ -366,12 +379,6 @@ public class PopupService extends Service {
                 if (currentRoot != null && a2.equals(currentAddress)) {
                     PopupRenderer.updateInfo(currentRoot, currentName, bl, prefs);
                 }
-                // 超级岛由 SystemUI 托管，电量更新要重新 post 才能刷新
-                int eng = prefs.engine();
-                if (eng == 3 || eng == 4) {
-                    HyperOSIslandNotifier.post(this,
-                            currentName == null ? "耳机" : currentName, bl, prefs);
-                }
             }
             return;
         }
@@ -379,19 +386,38 @@ public class PopupService extends Service {
         BluetoothDevice dev = i.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
         if (dev == null) return;
 
+        String addr = dev.getAddress();
+        final long nowMs = System.currentTimeMillis();
+
         boolean connected;
         if (BluetoothDevice.ACTION_ACL_CONNECTED.equals(action)) {
             connected = true;
         } else if (BluetoothDevice.ACTION_ACL_DISCONNECTED.equals(action)) {
             connected = false;
         } else {
+            // A2DP 与 HFP 用的是两个不同的 extra key，之前只读了 A2DP 的，
+            // 于是 HFP 广播永远读不到状态。这里两个都读。
             int st = i.getIntExtra(BluetoothA2dp.EXTRA_STATE, -1);
+            if (st < 0) st = i.getIntExtra(BluetoothHeadset.EXTRA_STATE, -1);
             connected = (st == BluetoothA2dp.STATE_CONNECTED
                     || st == BluetoothHeadset.STATE_CONNECTED);
+            // 断开中 / 已断开：一律视为断开，绝不弹窗
+            if (st == BluetoothA2dp.STATE_DISCONNECTED
+                    || st == BluetoothA2dp.STATE_DISCONNECTING) {
+                connected = false;
+            }
         }
-        if (!connected) return;
+        if (!connected) {
+            // 断开信号：记下时刻，并在一段时间内抑制该设备的误触发
+            if (addr != null) lastDisconnectAt.put(addr, nowMs);
+            return;
+        }
+        if (addr != null) {
+            Long t = lastDisconnectAt.get(addr);
+            if (t != null && nowMs - t < DISCONNECT_SUPPRESS_MS) return;
+            lastDisconnectAt.remove(addr);
+        }
 
-        String addr = dev.getAddress();
         if (!prefs.isAllowed(addr)) return;
         String custom = prefs.deviceName(addr);
         String name = (custom != null && !custom.trim().isEmpty())
@@ -411,15 +437,24 @@ public class PopupService extends Service {
         // 小米 TWS：只要不是 MMA 真实三元组，就不把聚合值当左右耳显示。
         // 必须同时放行 BLE 通道的 source，否则 BLE MMA 好不容易拿到的真实三元组，
         // 在下一次连接时会被这里当成「非真实分项」清成 -1，白干一场。
-        if (xiaomiTws && !"xiaomi-mma-rfcomm".equals(cached.source)
-                && !"xiaomi-mma-ble".equals(cached.source)) {
-            // 只清掉「分项」，保留整机值。
-            // 之前连 overall 一起清了，于是整机 100% 明明在手里，
-            // 弹窗却什么都不显示 —— 这是「换什么耳机都不显示」的一个放大器。
-            cached.left = -1;
-            cached.right = -1;
-            cached.caseBox = -1;
-            cached.source = "xiaomi-awaiting-mma";
+        if (xiaomiTws) {
+            //
+            // 整机聚合值不能伪装成左右耳（那是伪造数据）。
+            // 但【缓存里已有的真实分项必须保留】：那是上一次实测到的真值，
+            // 首帧直接显示它，弹窗一出现就是完整的一对耳机，
+            // 不会先闪一个「单耳 + 中间态数字」再跳变。
+            //
+            // 之前的写法无条件把 left/right/caseBox 清成 -1，
+            // 于是每次连接都得等后台实测，首帧永远是单耳 + 一个不准的数。
+            //
+            cached.left = BatteryLevels.norm(cached.left);
+            cached.right = BatteryLevels.norm(cached.right);
+            cached.caseBox = BatteryLevels.norm(cached.caseBox);
+            if (!BatteryLevels.valid(cached.left)
+                    && !BatteryLevels.valid(cached.right)
+                    && !BatteryLevels.valid(cached.caseBox)) {
+                cached.source = "xiaomi-awaiting-mma";
+            }
         }
         // 关键：缓存必须「够新鲜」才敢显示。
         // 之前直接拿几小时前的旧值当实时电量，用户充完电还看到 30%。
@@ -555,28 +590,6 @@ public class PopupService extends Service {
         if (now - lastLaunchAt < 3000L) return;
         lastLaunchAt = now;
         int engine = prefs.engine();
-        // 3 = HyperOS 原生超级岛；4 = HyperOS 优先，失败自动回退 Overlay/Activity
-        if (engine == 3 || engine == 4) {
-            boolean gif = HyperOSIslandNotifier.looksLikeGif(this, prefs.imageUri());
-            // 「强制上岛」打开时，跳过 canShowFocus 判定，直接按岛协议发通知。
-            boolean posted = !gif
-                    && HyperOSIslandNotifier.post(this, name, levels, prefs, prefs.forceIsland());
-            android.util.Log.i("Island", "engine=" + engine
-                    + " gif=" + gif + " posted=" + posted
-                    + " ver=" + HyperOSIslandNotifier.protocolVersion(this)
-                    + " hyperOS=" + HyperOSIslandNotifier.isHyperOS(this)
-                    + " focus=" + HyperOSIslandNotifier.hasFocusPermission(this)
-                    + " noti=" + HyperOSIslandNotifier.hasNotificationPermission(this)
-                    + " force=" + prefs.forceIsland());
-            if (posted) {
-                autoRefreshBattery(address, dev);
-                // 原生岛由 SystemUI 自己管理生命周期，
-                // 不能同时创建 Overlay，否则又是「两个弹窗打架」
-                return;
-            }
-            // GIF、HyperOS 不支持、焦点通知权限关闭等情况：退回旧引擎
-            engine = 1;
-        }
 
         boolean canOverlay = android.provider.Settings.canDrawOverlays(this);
 
@@ -648,6 +661,26 @@ public class PopupService extends Service {
         batteryJobs.put(addr, job);
 
         //
+        // 【实时优先】0x180F / 0x2A19 是实测唯一能拿到真实电量的通道。
+        //
+        // 原顺序：先读系统缓存（旧值，首帧就顶上）→ 再跑 MMA（HyperOS 上
+        // 第三方必然 connect 超时，白白耗十几秒）→ 最后才轮到 GATT。
+        // 所以「第一次连接」看到的永远是缓存里的旧数字，真实值十几秒后才到。
+        //
+        // 现在：连接一建立就立刻发起一次全新 GATT 读取，拿到即本次真实电量。
+        //
+        h.post(() -> {
+            try {
+                new BatteryProbe(PopupService.this).quickRead(addr, dev, gattVal -> {
+                    if (BatteryLevels.valid(gattVal)) {
+                        scheduleOverall(addr, gattVal, "gatt-live", job);
+                    }
+                });
+            } catch (Throwable ignored) {
+            }
+        });
+
+        //
         // 第 -1 步（优先级最高）：Redmi/Xiaomi TWS 走厂商语义通道 MMA。
         //
         // 0x180F/0x2A19 对这类 TWS 往往只有一个聚合百分比，无法区分 L/R/Case；
@@ -684,7 +717,10 @@ public class PopupService extends Service {
                 if (BatteryLevels.valid(quickV)) {
                     BatteryLevels prevCached =
                             new BatteryStore(PopupService.this).load(addr);
-                    boolean hasCache = prevCached != null && prevCached.anyKnown();
+                    // 首帧绝不再用系统缓存旧值顶数。
+                    // getBatteryLevel() 是蓝牙栈缓存，换耳机瞬间拿到的还是上一台的值，
+                    // 之前却会立刻显示并把 timestamp 刷成 now，之后 30 分钟都当新鲜值。
+                    boolean hasCache = false;
                     if (hasCache) {
                         applyMeasured(addr, quickV, "sys-fast", job);
                     } else {
@@ -703,12 +739,6 @@ public class PopupService extends Service {
                         || BatteryLevels.valid(mma.right)
                         || BatteryLevels.valid(mma.caseBox))) {
                     applyMeasuredLevels(addr, mma, job);
-                    // 原生岛也要同步真实三元组
-                    if (prefs.engine() == 3 || prefs.engine() == 4) {
-                        HyperOSIslandNotifier.post(PopupService.this,
-                                currentName == null ? "耳机" : currentName, mma, prefs,
-                                prefs.forceIsland());
-                    }
                     return;
                 }
                 // MMA 未成功：继续通用 Android / GATT 路线
@@ -961,23 +991,67 @@ public class PopupService extends Service {
         // 于是弹窗滑上来后又被拽回起点重新播一遍 ——
         // 这就是「弹出来一瞬间，然后又被压下去」的原因。
 
-        v.postDelayed(this::dismiss, prefs.durationMs());
+        final Runnable dr = this::dismiss;
+        pendingDismiss = dr;
+        v.postDelayed(dr, prefs.durationMs());
     }
 
     private void dismiss() {
-        if (current != null) {
-            final View v = current;
-            current = null;
-            currentRoot = null;
-            v.animate().cancel();
-            v.animate().alpha(0f).translationY(-dp(24)).setDuration(200)
-                    .withEndAction(() -> {
-                        try {
-                            wm.removeView(v);
-                        } catch (Exception ignored) {
-                        }
-                    }).start();
+        // 取消尚未到期的自动消失，避免同一张卡片被 dismiss 两次
+        if (pendingDismiss != null) {
+            main.removeCallbacks(pendingDismiss);
+            pendingDismiss = null;
         }
+        final View v = current;
+        if (v == null) return;
+        current = null;
+        currentRoot = null;
+        // 淡出期间先停掉模糊层的逐帧重算。
+        // 否则背景还在每一帧重算模糊，与淡出的 alpha 动画叠加，
+        // 表现为「弹窗结束前抖动/闪烁一下」。
+        View blur = v.findViewById(R.id.detailBlurBg);
+        if (blur instanceof LiveBlurView) ((LiveBlurView) blur).stop();
+        v.animate().cancel();
+        v.animate().alpha(0f).translationY(-dp(24)).setDuration(200)
+                .withEndAction(() -> {
+                    try {
+                        wm.removeView(v);
+                    } catch (Exception ignored) {
+                    }
+                }).start();
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        // 用户从最近任务划掉 UI 不等于关闭后台服务；安排一次低频自恢复。
+        KeepAliveController.arm(this);
+        super.onTaskRemoved(rootIntent);
+    }
+
+    private float dp(float v) {
+        return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v,
+                getResources().getDisplayMetrics());
+    }
+
+    @Override
+    public void onDestroy() {
+        KeepAliveController.arm(this);
+        dismiss();
+        try {
+            unregisterReceiver(receiver);
+        } catch (Exception ignored) {
+        }
+        super.onDestroy();
+    }
+
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null;
+    }
+}
+eption ignored) {
+                    }
+                }).start();
     }
 
     @Override
