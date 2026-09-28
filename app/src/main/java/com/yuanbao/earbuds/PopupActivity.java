@@ -211,6 +211,13 @@ public class PopupActivity extends AppCompatActivity {
             i.putExtra(PopupService.EXTRA_LEFT, levels.left);
             i.putExtra(PopupService.EXTRA_BATTERY, levels.right);
             i.putExtra(PopupService.EXTRA_CASE, levels.caseBox);
+            // 整机值必须一起传！
+            // 小米/Redmi TWS 拿不到左右耳分项，show() 里只保留了 overall=100，
+            // 而这里从来没把 overall 放进 Intent —— 于是 Activity 收到的
+            // left/right/case 全是 -1，弹窗只能显示 --%。
+            // 用户日志里 getBatteryLevel()=100 明明读到了，界面却是两横杠，
+            // 真凶就是这行缺失。
+            i.putExtra(PopupService.EXTRA_OVERALL, levels.overall);
         }
         return i;
     }
