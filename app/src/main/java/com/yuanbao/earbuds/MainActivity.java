@@ -242,15 +242,22 @@ public class MainActivity extends AppCompatActivity {
         tvBlur = findViewById(R.id.tvBlur);
         deviceList = findViewById(R.id.deviceList);
         tvProbeHint = findViewById(R.id.tvProbeHint);
+        TextView tvDiagIsland = findViewById(R.id.tvDiagIsland);
+        com.google.android.material.switchmaterial.SwitchMaterial swForceIsland =
+                findViewById(R.id.swForceIsland);
+        if (swForceIsland != null) {
+            swForceIsland.setChecked(prefs.forceIsland());
+            swForceIsland.setOnCheckedChangeListener((btn, on) -> prefs.setForceIsland(on));
+        }
         TextView tvDiagService = findViewById(R.id.tvDiagService);
         TextView tvDiagKeep = findViewById(R.id.tvDiagKeep);
         TextView tvDiagBatSrc = findViewById(R.id.tvDiagBatSrc);
         TextView tvDiagMeta = findViewById(R.id.tvDiagMeta);
         findViewById(R.id.btnDiagRefresh).setOnClickListener(v -> {
             KeepAliveController.arm(this);   // 立即排一次保活 Alarm
-            refreshDiag(tvDiagService, tvDiagKeep, tvDiagBatSrc, tvDiagMeta);
+            refreshDiag(tvDiagIsland, tvDiagService, tvDiagKeep, tvDiagBatSrc, tvDiagMeta);
         });
-        refreshDiag(tvDiagService, tvDiagKeep, tvDiagBatSrc, tvDiagMeta);
+        refreshDiag(tvDiagIsland, tvDiagService, tvDiagKeep, tvDiagBatSrc, tvDiagMeta);
         swHideRecents = findViewById(R.id.swHideRecents);
     }
 
@@ -1923,7 +1930,34 @@ public class MainActivity extends AppCompatActivity {
      * 补丁状态诊断 —— Patch1/Patch2 都是底层改动，界面上看不到，
      * 所以这里把「代码到底跑没跑」直接显示出来。
      */
-    private void refreshDiag(TextView svc, TextView keep, TextView src, TextView meta) {
+    private void refreshDiag(TextView island, TextView svc, TextView keep, TextView src, TextView meta) {
+        // 0) HyperOS 超级岛：把「为什么没上岛」直接摊开
+        if (island != null) {
+            boolean hyper = HyperOSIslandNotifier.isHyperOS(this);
+            int ver = HyperOSIslandNotifier.protocolVersion(this);
+            boolean focus = HyperOSIslandNotifier.hasFocusPermission(this);
+            boolean noti = HyperOSIslandNotifier.hasNotificationPermission(this);
+            boolean gif;
+            try {
+                gif = HyperOSIslandNotifier.looksLikeGif(this, prefs.imageUri());
+            } catch (Throwable t) {
+                gif = false;
+            }
+            StringBuilder sb = new StringBuilder();
+            sb.append("协议版本=").append(ver)
+              .append(" · HyperOS=").append(hyper ? "是" : "否")
+              .append(" · 焦点资格=").append(focus ? "有" : "无")
+              .append("\n通知权限=").append(noti ? "已授予" : "未授予");
+            if (gif) sb.append("\n当前是 GIF → 岛不支持动图，已回退悬浮窗");
+            if (noti && (focus || prefs.forceIsland()) && !gif && ver >= 2) {
+                sb.append("\n条件满足，下次连接应上岛");
+            } else if (ver < 2) {
+                sb.append("\nROM 未开启焦点协议（<2），无法上岛");
+            } else if (!focus) {
+                sb.append("\n系统未授予焦点资格 → 可开「强制上岛」试试");
+            }
+            island.setText(sb.toString());
+        }
         // 1) 服务是否在运行
         boolean running = false;
         try {
