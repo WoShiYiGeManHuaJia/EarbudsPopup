@@ -100,11 +100,20 @@ public final class HyperOSIslandNotifier {
      * @param force 为 true 时跳过 canShowFocus 判定（用户手动开启「强制上岛」）。
      */
     public static boolean post(Context context, String name, BatteryLevels levels, Prefs prefs, boolean force) {
-        if (!isSupported(context) || !hasNotificationPermission(context)) {
+        if (!isSupported(context)) {
+            lastError = "HyperOS 焦点协议不可用: protocol=" + protocolVersion(context);
             return false;
         }
-        if (!force && !hasFocusPermission(context)) {
+        if (!hasNotificationPermission(context)) {
+            lastError = "未授予 POST_NOTIFICATIONS";
             return false;
+        }
+        // canShowFocus 只是「资格诊断」，不是拒绝发送的理由。
+        // 小米客户端指南说明：通知可以照常发出，由 SystemUI 决定是否渲染成岛。
+        // 某些 ROM 在首次通知前 provider 恒返回 false —— 之前正是在这里
+        // 被拦掉，导致永远上不了岛。现在只记录原因，不再阻断。
+        if (!hasFocusPermission(context)) {
+            lastError = "系统未返回焦点资格（已照常发送，由 SystemUI 决定）";
         }
         try {
             ensureChannel(context);
@@ -113,8 +122,8 @@ public final class HyperOSIslandNotifier {
                     .setContentTitle(name == null ? "蓝牙耳机" : name)
                     .setContentText(buildContent(levels, prefs))
                     .setCategory(NotificationCompat.CATEGORY_EVENT)
-                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                    .setOngoing(false)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setOngoing(true)
                     .setAutoCancel(true)
                     .setOnlyAlertOnce(true);
 
