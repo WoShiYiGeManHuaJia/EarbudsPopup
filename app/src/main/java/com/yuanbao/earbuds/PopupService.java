@@ -354,12 +354,24 @@ public class PopupService extends Service {
                 ? custom.trim() : safeName(dev);
         BatteryLevels cached = new BatteryStore(this).load(addr);
         int sys = readBattery(dev);
+        // 小米/Redmi TWS 的聚合值不是 L/R 语义：0x180F 只有一个整机百分比，
+        // 把它复制成「L=100 R=100」是伪造。这类设备改由 MMA 通道给真实三元组；
+        // MMA 成功前宁可显示 --%。
+        boolean xiaomiTws = XiaomiMmaBatteryReader.likelyXiaomiRedmi(dev);
         // 只有有效值才采用；0 是「未上报」，不能当 0% 显示
         if (BatteryLevels.valid(sys)) {
             cached.overall = sys;
-            cached.fillFromOverall();
+            if (!xiaomiTws) cached.fillFromOverall();
         }
         cached.sanitize();
+        // 小米 TWS：只要不是 MMA 真实三元组，就不把聚合值当左右耳显示。
+        if (xiaomiTws && !"xiaomi-mma-rfcomm".equals(cached.source)) {
+            cached.left = -1;
+            cached.right = -1;
+            cached.caseBox = -1;
+            cached.overall = -1;
+            cached.source = "xiaomi-awaiting-mma";
+        }
         // 关键：缓存必须「够新鲜」才敢显示。
         // 之前直接拿几小时前的旧值当实时电量，用户充完电还看到 30%。
         // 超过 STALE_MS 就作废，先显示 --%，由 autoRefreshBattery 实测后刷新。
@@ -576,6 +588,41 @@ public class PopupService extends Service {
         final Handler h = main;
         final long job = System.nanoTime();
         batteryJobs.put(addr, job);
+
+        //
+        // 第 -1 步（优先级最高）：Redmi/Xiaomi TWS 走厂商语义通道 MMA。
+        //
+        // 0x180F/0x2A19 对这类 TWS 往往只有一个聚合百分比，无法区分 L/R/Case；
+        // MMA 的 GET_DEVICE_INFO 能一次返回 [LL RR CC] 三元组，这是唯一能拿到
+        // 真实左右耳与充电盒的只读通道。成功即采用并结束；失败才继续通用路线。
+        //
+        if (XiaomiMmaBatteryReader.likelyXiaomiRedmi(dev)) {
+            XiaomiMmaBatteryReader.read(dev, (mma, diag) -> {
+                android.util.Log.i("MMA", diag);
+                if (mma != null && (BatteryLevels.valid(mma.left)
+                        || BatteryLevels.valid(mma.right)
+                        || BatteryLevels.valid(mma.caseBox))) {
+                    applyMeasuredLevels(addr, mma, job);
+                    // 原生岛也要同步真实三元组
+                    if (prefs.engine() == 3 || prefs.engine() == 4) {
+                        HyperOSIslandNotifier.post(PopupService.this,
+                                currentName == null ? "耳机" : currentName, mma, prefs,
+                                prefs.forceIsland());
+                    }
+                    return;
+                }
+                // MMA 未成功：继续通用 Android / GATT 路线
+                autoRefreshBatteryFallback(addr, dev, job);
+            });
+            return;
+        }
+        autoRefreshBatteryFallback(addr, dev, job);
+    }
+
+    /** MMA 不可用/失败时的通用电量获取路线（原 autoRefreshBattery 主体）。 */
+    private void autoRefreshBatteryFallback(String address, BluetoothDevice dev, long job) {
+        final String addr = address;
+        final Handler h = main;
 
         //
         // 【新增】第 0 步：系统隐藏 API getBatteryLevel()
