@@ -21,6 +21,13 @@ public class Prefs {
     public Prefs(Context c) {
         sp = c.getSharedPreferences(NAME, Context.MODE_PRIVATE);
         migrateSizeDefaults();
+        migrateEngineDefault();
+    }
+
+    /** 默认切换到 HyperOS 原生超级岛优先模式；不支持时自动回退。 */
+    private void migrateEngineDefault() {
+        if (sp.getInt("engine_schema", 0) >= 2) return;
+        sp.edit().putInt("engine", 4).putInt("engine_schema", 2).apply();
     }
 
     /**
@@ -326,9 +333,12 @@ public class Prefs {
     }
 
     // ---------- 系统级弹窗引擎 ----------
-    /** 0=系统级Activity 1=悬浮窗 2=智能降级 */
+    /**
+     * 0=系统级Activity 1=悬浮窗 2=智能降级
+     * 3=HyperOS 原生超级岛 4=HyperOS 智能（超级岛优先，失败回退）
+     */
     public int engine() {
-        return sp.getInt("engine", 2);
+        return sp.getInt("engine", 4);
     }
 
     public void setEngine(int v) {
