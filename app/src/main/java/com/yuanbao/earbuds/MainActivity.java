@@ -294,7 +294,8 @@ public class MainActivity extends AppCompatActivity {
         tvDuration.setText(prefs.durationMs() + " ms");
         tvPos.setText(prefs.verticalPos() + "%");
         tvAnim.setText(new String[]{"缩放淡入", "底部上滑", "顶部下滑"}[prefs.animStyle()]);
-        tvEngine.setText(new String[]{"系统级", "悬浮窗", "智能"}[prefs.engine()]);
+        String[] engineLabels = {"系统级", "悬浮窗", "智能", "HyperOS 超级岛", "HyperOS 智能"};
+        tvEngine.setText(engineLabels[Math.max(0, Math.min(engineLabels.length - 1, prefs.engine()))]);
         tvDim.setText(Math.round(prefs.dimAmount() * 100) + "%");
         tvBlur.setText(prefs.blurRadius() + " dp");
     }
@@ -351,8 +352,10 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.rowEngine).setOnClickListener(v -> showChoice("弹出引擎",
                 new String[]{"系统级（透明 Activity，锁屏也能弹）",
                         "悬浮窗（兼容性最好）",
-                        "智能：先系统级，失败自动降级悬浮窗"},
-                prefs.engine(), prefs::setEngine));
+                        "智能：先系统级，失败自动降级悬浮窗",
+                        "HyperOS 原生超级岛（由系统 SystemUI 渲染）",
+                        "HyperOS 智能（超级岛优先，失败自动回退）"},
+                Math.max(0, Math.min(4, prefs.engine())), prefs::setEngine));
 
         // 开关
         bindSwitch(swMaster, prefs::setMasterEnabled, () -> toggleService(swMaster.isChecked()));
