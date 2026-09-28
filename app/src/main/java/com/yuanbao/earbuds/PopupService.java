@@ -488,7 +488,16 @@ public class PopupService extends Service {
         // 3 = HyperOS 原生超级岛；4 = HyperOS 优先，失败自动回退 Overlay/Activity
         if (engine == 3 || engine == 4) {
             boolean gif = HyperOSIslandNotifier.looksLikeGif(this, prefs.imageUri());
-            boolean posted = !gif && HyperOSIslandNotifier.post(this, name, levels, prefs);
+            // 「强制上岛」打开时，跳过 canShowFocus 判定，直接按岛协议发通知。
+            boolean posted = !gif
+                    && HyperOSIslandNotifier.post(this, name, levels, prefs, prefs.forceIsland());
+            android.util.Log.i("Island", "engine=" + engine
+                    + " gif=" + gif + " posted=" + posted
+                    + " ver=" + HyperOSIslandNotifier.protocolVersion(this)
+                    + " hyperOS=" + HyperOSIslandNotifier.isHyperOS(this)
+                    + " focus=" + HyperOSIslandNotifier.hasFocusPermission(this)
+                    + " noti=" + HyperOSIslandNotifier.hasNotificationPermission(this)
+                    + " force=" + prefs.forceIsland());
             if (posted) {
                 autoRefreshBattery(address, dev);
                 // 原生岛由 SystemUI 自己管理生命周期，
