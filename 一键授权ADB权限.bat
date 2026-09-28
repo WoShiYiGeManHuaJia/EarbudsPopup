@@ -1,23 +1,45 @@
-:: 耳机弹窗 ADB 授权脚本（Windows 双击运行，手机需开启 USB 调试并已连接）
-:: 如提示找不到 adb，把 platform-tools 里的 adb.exe 放到本文件同目录
 @echo off
+setlocal
 set PKG=com.yuanbao.earbuds
 
-echo === 1/3 悬浮窗权限 ===
+echo ========================================
+echo   耳机弹窗 - HyperOS 超级岛 ADB 配置
+echo ========================================
+echo.
+
+echo [1/8] 检查设备...
+adb get-state >nul 2>&1 || (
+  echo 未检测到 ADB 设备，请开启 USB 调试后重试。
+  pause
+  exit /b 1
+)
+
+echo [2/8] 悬浮窗权限...
 adb shell appops set %PKG% SYSTEM_ALERT_WINDOW allow
 
-echo === 2/3 蓝牙 / 通知 / 存储 权限 ===
-adb shell pm grant %PKG% android.permission.BLUETOOTH_CONNECT
-adb shell pm grant %PKG% android.permission.BLUETOOTH_SCAN
-adb shell pm grant %PKG% android.permission.POST_NOTIFICATIONS
-adb shell pm grant %PKG% android.permission.READ_MEDIA_IMAGES
-adb shell pm grant %PKG% android.permission.READ_EXTERNAL_STORAGE
+echo [3/8] 蓝牙连接权限...
+adb shell pm grant %PKG% android.permission.BLUETOOTH_CONNECT 2>nul
+adb shell pm grant %PKG% android.permission.BLUETOOTH_SCAN 2>nul
 
-echo === 3/3 省电白名单 ===
+echo [4/8] 通知权限...
+adb shell pm grant %PKG% android.permission.POST_NOTIFICATIONS 2>nul
+
+echo [5/8] 图片权限（系统版本允许时授予）...
+adb shell pm grant %PKG% android.permission.READ_MEDIA_IMAGES 2>nul
+adb shell pm grant %PKG% android.permission.READ_EXTERNAL_STORAGE 2>nul
+
+echo [6/8] 加入 Doze 白名单...
 adb shell dumpsys deviceidle whitelist +%PKG%
 
-echo === 可选：屏蔽小米原生快连弹窗（只禁悬浮窗，不影响蓝牙连接） ===
-:: adb shell appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW ignore
+echo [7/8] 输出 HyperOS 岛/通知诊断...
+echo --- focus protocol ---
+adb shell settings get system notification_focus_protocol
+echo --- appops overlay ---
+adb shell appops get %PKG% SYSTEM_ALERT_WINDOW
 
-echo 完成。若某条报错，多为该权限在本系统版本不存在，可忽略。
+echo [8/8] 完成。
+echo.
+echo 注意：超级岛本身还需要在 HyperOS 的通知/焦点通知设置中允许本 App。
+echo 如果你的 ROM 没有该设置，App 会自动回退到悬浮窗。
+echo.
 pause
