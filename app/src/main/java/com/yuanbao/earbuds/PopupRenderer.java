@@ -473,11 +473,31 @@ public final class PopupRenderer {
         }
     }
 
+    /**
+     * 标题模板填充。
+     *
+     * 【重要行为变更】设备名必须跟着实际连接的蓝牙设备走。
+     *
+     * 之前：用户一旦在 APP 里填了名字（比如「菠萝耳机 5 Pro」），
+     * 无论连哪个设备都显示这一个名字 —— 换耳机也不变，这就是
+     * 「弹窗弹出来还是上一个设备的名字」的根因。
+     *
+     * 现在：
+     *   模板为空           → 直接用蓝牙真实名
+     *   模板含 {name}/%s   → 替换成蓝牙真实名
+     *   模板不含变量       → 视为固定文字，但用户明确要求名字跟设备走，
+     *                        所以这种情况也返回蓝牙真实名
+     *
+     * 也就是说，除非模板里写了变量，否则永远显示蓝牙名。
+     */
     private static String fill(String tpl, String dev) {
-        if (tpl == null) return "";
+        String name = (dev == null || dev.trim().isEmpty()) ? "耳机" : dev.trim();
+        if (tpl == null) return name;
         String v = tpl.trim();
-        if (v.isEmpty()) return "";
-        return v.contains("%s") ? v.replace("%s", dev) : v;
+        if (v.isEmpty()) return name;
+        boolean hasVar = v.contains("{name}") || v.contains("%s");
+        if (!hasVar) return name;
+        return v.replace("{name}", name).replace("%s", name);
     }
 
     private static void startShimmer(Context c, View shimmer, int cardWidth) {
