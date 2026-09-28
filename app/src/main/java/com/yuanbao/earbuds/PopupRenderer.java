@@ -367,34 +367,49 @@ public final class PopupRenderer {
 
         boolean hasLeft = levels != null && BatteryLevels.valid(levels.left);
         boolean hasRight = levels != null && BatteryLevels.valid(levels.right);
-        // 两侧都有真值才显示「一对」。只有一侧时不能让另一侧显示 --%，
-        // 那会让人以为「另一只耳机没电了」，实际只是没读到。
-        boolean pair = hasLeft && hasRight;
-        int singleVal = -1;
-        if (!pair && levels != null) {
-            if (hasLeft) singleVal = levels.left;
-            else if (hasRight) singleVal = levels.right;
-            else if (BatteryLevels.valid(levels.overall)) singleVal = levels.overall;
-        }
-        boolean single = singleVal >= 0;
         boolean hasCase = levels != null && BatteryLevels.valid(levels.caseBox);
+        boolean hasOverall = levels != null && BatteryLevels.valid(levels.overall);
 
-        if (tvL != null) {
-            tvL.setText(pair ? batteryText(levels) : (single ? singleVal + "%" : "--%"));
-            tvL.setTextColor(sub);
-            tvL.setVisibility(View.VISIBLE);
-        }
-        // 只有真实分项才显示「一对」；单值模式下隐藏右耳，不伪造两只耳朵
-        if (tvR != null) tvR.setVisibility(pair ? View.VISIBLE : View.GONE);
-        if (icR != null) icR.setVisibility(pair ? View.VISIBLE : View.GONE);
+        //
+        // 两个耳塞图标【恒定显示】，绝不退化成「单个耳朵」。
+        //
+        // 之前只要拿不到左右分项就隐藏右耳图标、只留一个耳机图标 ——
+        // 用户看到的「弹窗只显示单个耳朵」就是这么来的。
+        // 现在左耳 / 右耳两个图标永远在；数值有多少显示多少，
+        // 读不到的一侧显示 --%，而不是把一只耳朵藏掉、也不是编一个假值。
+        //
+        // 整机值（overall）只补在【左耳】槽位：它是「整副耳机」这一个
+        // 真实读数，不能再复制一份到右耳（那会变成两个相同的假左右耳）。
+        //
+        String textL;
+        if (hasLeft) textL = batteryText(levels);
+        else if (hasOverall) textL = levels.overall + "%";
+        else textL = "--%";
+
+        String textR;
+        if (hasRight) textR = batteryTextRight(levels);
+        else textR = "--%";
+
         if (icL != null) {
             icL.setVisibility(View.VISIBLE);
             icL.setAlpha(1f);
         }
-        if (pair && tvR != null) tvR.setText(batteryTextRight(levels));
-        if (pair && tvR != null) tvR.setTextColor(sub);
+        if (icR != null) {
+            icR.setVisibility(View.VISIBLE);
+            icR.setAlpha(1f);
+        }
+        if (tvL != null) {
+            tvL.setVisibility(View.VISIBLE);
+            tvL.setText(textL);
+            tvL.setTextColor(sub);
+        }
+        if (tvR != null) {
+            tvR.setVisibility(View.VISIBLE);
+            tvR.setText(textR);
+            tvR.setTextColor(sub);
+        }
 
-        // 充电盒：拿到真实值才显示，绝不显示占位（之前一直是 --%，很难看）
+        // 充电盒：拿到真实值才显示，绝不显示占位
         boolean showCase = hasCase && prefs.showCaseBattery();
         if (tvC != null) {
             tvC.setText(hasCase ? batteryTextCase(levels) : "");
