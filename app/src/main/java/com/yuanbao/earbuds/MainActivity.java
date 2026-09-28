@@ -376,7 +376,7 @@ public class MainActivity extends AppCompatActivity {
                 val -> prefs.setImageRatio(val / 100f)));
         findViewById(R.id.rowDuration).setOnClickListener(v -> showSlider("显示时长", "ms",
                 500, 20000, prefs.durationMs(), val -> prefs.setDurationMs(val)));
-        findViewById(R.id.rowDim).setOnClickListener(v -> showSlider("背景压暗", "%",
+        findViewById(R.id.rowDim).setOnClickListener(v -> showSlider("详情区压暗", "%",
                 0, 70, Math.round(prefs.dimAmount() * 100),
                 val -> prefs.setDimAmount(val / 100f)));
         findViewById(R.id.rowBlur).setOnClickListener(v -> showSlider("背景模糊半径", "dp",
