@@ -142,6 +142,29 @@ public final class BatteryProbe {
                     return;
                 }
                 final BluetoothGattCharacteristic targetCh = ch;
+
+                //
+                // 【新增】先订阅通知（第三方弹窗 App 的标准做法）
+                //
+                // 标准 Battery Service (0x180F) 的 Battery Level (0x2A19)
+                // 支持 Notify。绝大多数耳机连上后【会主动推一次】电量，
+                // 之后电量变化也会推。订阅后 1 秒内就能拿到，不必等
+                // 主动 read 的完整往返。
+                //
+                // 之前只做 readCharacteristic，没开 CCCD，所以只能靠
+                // 「手动点探测」——这就是本 App 比别家麻烦的根因。
+                //
+                try {
+                    g.setCharacteristicNotification(targetCh, true);
+                    BluetoothGattDescriptor cccd = targetCh.getDescriptor(
+                            UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"));
+                    if (cccd != null) {
+                        cccd.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+                        g.writeDescriptor(cccd);
+                    }
+                } catch (Throwable ignored) {
+                }
+
                 try {
                     boolean ok = g.readCharacteristic(targetCh);
                     if (!ok) finishQuick(g, doneOnce, cb, -1);
@@ -154,6 +177,15 @@ public final class BatteryProbe {
             public void onCharacteristicRead(BluetoothGatt g, BluetoothGattCharacteristic ch,
                                              int status) {
                 // 绝不能 ch.setValue()，会把刚读到的真实值覆盖掉
+                Integer v = decodeLevel(ch);
+                finishQuick(g, doneOnce, cb, v == null ? -1 : v);
+            }
+
+            @Override
+            public void onCharacteristicChanged(BluetoothGatt g,
+                                                BluetoothGattCharacteristic ch) {
+                // 耳机主动推送的电量：这是最实时、也是第三方 App 主要依赖的通道
+                if (!UUID_BATTERY_LEVEL.equals(ch.getUuid())) return;
                 Integer v = decodeLevel(ch);
                 finishQuick(g, doneOnce, cb, v == null ? -1 : v);
             }
