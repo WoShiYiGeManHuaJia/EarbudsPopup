@@ -3,7 +3,15 @@ package com.yuanbao.earbuds;
 import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothGatt;
+import android.bluetooth.BluetoothGattCallback;
+import android.bluetooth.BluetoothGattCharacteristic;
+import android.bluetooth.BluetoothGattDescriptor;
+import android.bluetooth.BluetoothGattService;
+import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothSocket;
+import android.content.Context;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -15,6 +23,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -461,6 +470,321 @@ public final class XiaomiMmaBatteryReader {
         } catch (Throwable t) {
             log.append("MMA: SDP 异常: ").append(shortErr(t)).append('\n');
         }
+    }
+
+    // ---------------- BLE 传输 ----------------
+
+    /** PRIM：5052494d = "PRIM" 的 ASCII，其下 43484152 = "CHAR" 是命令通道 */
+    private static final UUID UUID_PRIM_SERVICE =
+            UUID.fromString("5052494D-2DAB-0341-6972-6F6861424C45");
+    private static final UUID UUID_CCCD =
+            UUID.fromString("00002902-0000-1000-8000-00805F9B34FB");
+
+    /** FastConnect 下的三个数据通道（props=24 = WRITE|NOTIFY），FF12 优先 */
+    private static final String[] FD2D_DATA = {"0000ff12", "0000ff11", "0000ff13"};
+    /** PRIM 下的 "CHAR" 通道：3241(props=12=WRITE|WRITE_NR)、3141(props=16=NOTIFY) */
+    private static final String[] PRIM_DATA = {"43484152-2dab-3241", "43484152-2dab-3141"};
+
+    private static final class BleSession {
+        final List<BluetoothGattCharacteristic> writes = new ArrayList<>();
+        final List<BluetoothGattCharacteristic> notifies = new ArrayList<>();
+        final ByteArrayOutputStream rx = new ByteArrayOutputStream();
+        final XiaomiSaferAuth auth = new XiaomiSaferAuth();
+        int sn = 1;
+        int candIdx = 0;
+        boolean sentChallenge = false;
+        boolean gotChallengeResponse = false;
+        boolean answeredEarbudsChallenge = false;
+        boolean sentDeviceInfo = false;
+        long deadline = 0L;
+        long candDeadline = 0L;
+        BatteryLevels result;
+        Runnable tick;
+    }
+
+    /**
+     * 走 BLE 发同一套 MMA 帧。
+     *
+     * HyperOS 不让第三方 App 建 RFCOMM/SPP（日志里 8 个通道全超时），
+     * 但控制协议不一定只绑在 SPP 上：FastConnect(0000fd2d) 的 FF11/FF12/FF13
+     * 是 WRITE|NOTIFY，PRIM 下的 CHAR-32 也是可写通道 —— 形态上就是命令口。
+     *
+     * 之前只订阅了 CHAR 的通知、从没往任何私有特征写过一个字节，
+     * 所以它「一直静默」：不是耳机不说话，是我们没开口。
+     *
+     * 这是探索性通道：Gadgetbridge 走的是经典蓝牙，没有 BLE 证据。
+     * 能通就拿到真实 L/R/Case，不通日志会明确记录无响应。
+     */
+    @SuppressLint("MissingPermission")
+    public static void readViaBle(Context ctx, BluetoothDevice dev,
+                                  StringBuilder log, Callback cb) {
+        Handler main = new Handler(Looper.getMainLooper());
+        final boolean[] done = {false};
+        final BleSession s = new BleSession();
+        final BluetoothGatt[] gg = {null};
+
+        BluetoothGattCallback gc = new BluetoothGattCallback() {
+            @Override
+            public void onConnectionStateChange(BluetoothGatt g, int status, int newState) {
+                if (newState == BluetoothProfile.STATE_CONNECTED) {
+                    log.append("[BLE-MMA] 已连接，发现服务\n");
+                    try {
+                        if (!g.discoverServices()) endBle(g, s, done, log, cb);
+                    } catch (Throwable t) {
+                        endBle(g, s, done, log, cb);
+                    }
+                } else {
+                    endBle(g, s, done, log, cb);
+                }
+            }
+
+            @Override
+            public void onServicesDiscovered(BluetoothGatt g, int status) {
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    endBle(g, s, done, log, cb);
+                    return;
+                }
+                collect(g, s, log);
+                if (s.writes.isEmpty()) {
+                    log.append("[BLE-MMA] 没有可写的私有特征，放弃\n");
+                    endBle(g, s, done, log, cb);
+                    return;
+                }
+                for (BluetoothGattCharacteristic ch : s.notifies) {
+                    try {
+                        g.setCharacteristicNotification(ch, true);
+                        BluetoothGattDescriptor d = ch.getDescriptor(UUID_CCCD);
+                        if (d != null) {
+                            d.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+                            g.writeDescriptor(d);
+                        }
+                    } catch (Throwable ignored) {
+                    }
+                }
+                log.append("[BLE-MMA] 已订阅 ").append(s.notifies.size()).append(" 个通知通道\n");
+                // 默认 MTU 23，鉴权帧 26 字节会写不进去
+                try {
+                    g.requestMtu(517);
+                } catch (Throwable ignored) {
+                }
+                s.deadline = System.currentTimeMillis() + 18000;
+                main.postDelayed(() -> sendChallenge(g, s, log), 800);
+                s.tick = () -> pump(g, s, main, done, log, cb);
+                main.postDelayed(s.tick, 1000);
+            }
+
+            @Override
+            public void onCharacteristicChanged(BluetoothGatt g,
+                                                BluetoothGattCharacteristic ch) {
+                byte[] v = ch.getValue();
+                if (v == null || v.length == 0) return;
+                synchronized (s.rx) {
+                    s.rx.write(v, 0, v.length);
+                }
+            }
+        };
+
+        BluetoothGatt g;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                g = dev.connectGatt(ctx, false, gc, BluetoothDevice.TRANSPORT_LE);
+            } else {
+                g = dev.connectGatt(ctx, false, gc);
+            }
+        } catch (Throwable t) {
+            log.append("[BLE-MMA] connectGatt 失败: ").append(shortErr(t)).append('\n');
+            finish(cb, null, log.toString());
+            return;
+        }
+        if (g == null) {
+            log.append("[BLE-MMA] connectGatt 返回 null\n");
+            finish(cb, null, log.toString());
+            return;
+        }
+        gg[0] = g;
+    }
+
+    /** 挑出可写通道与通知通道 */
+    private static void collect(BluetoothGatt g, BleSession s, StringBuilder log) {
+        List<BluetoothGattCharacteristic> fd2d = new ArrayList<>();
+        List<BluetoothGattCharacteristic> prim = new ArrayList<>();
+        for (BluetoothGattService svc : g.getServices()) {
+            for (BluetoothGattCharacteristic ch : svc.getCharacteristics()) {
+                String u = ch.getUuid().toString().toLowerCase(Locale.ROOT);
+                boolean isFd2d = UUID_FAST_CONNECT.equals(svc.getUuid());
+                boolean isPrim = UUID_PRIM_SERVICE.equals(svc.getUuid());
+                if (isFd2d) {
+                    for (String want : FD2D_DATA) {
+                        if (u.startsWith(want)) fd2d.add(ch);
+                    }
+                } else if (isPrim) {
+                    for (String want : PRIM_DATA) {
+                        if (u.startsWith(want)) prim.add(ch);
+                    }
+                }
+            }
+        }
+        // 可写：PROPERTY_WRITE(8) 或 WRITE_NO_RESPONSE(4)
+        for (BluetoothGattCharacteristic ch : fd2d) {
+            if ((ch.getProperties() & 0x0C) != 0) s.writes.add(ch);
+        }
+        for (BluetoothGattCharacteristic ch : prim) {
+            if ((ch.getProperties() & 0x0C) != 0) s.writes.add(ch);
+        }
+        for (BluetoothGattCharacteristic ch : fd2d) {
+            if ((ch.getProperties() & 0x10) != 0) s.notifies.add(ch);
+        }
+        for (BluetoothGattCharacteristic ch : prim) {
+            if ((ch.getProperties() & 0x10) != 0 && !s.notifies.contains(ch)) {
+                s.notifies.add(ch);
+            }
+        }
+        log.append("[BLE-MMA] 可写通道 ").append(s.writes.size())
+                .append(" / 通知通道 ").append(s.notifies.size()).append('\n');
+        for (BluetoothGattCharacteristic ch : s.writes) {
+            log.append("[BLE-MMA]   写 ").append(ch.getUuid()).append(" props=")
+                    .append(ch.getProperties()).append('\n');
+        }
+    }
+
+    private static void sendChallenge(BluetoothGatt g, BleSession s, StringBuilder log) {
+        byte[] rnd = XiaomiSaferAuth.getRandomChallenge();
+        byte[] p = new byte[17];
+        p[0] = 0x01;
+        System.arraycopy(rnd, 0, p, 1, 16);
+        if (bleWrite(g, s, TYPE_PHONE_REQUEST, OP_AUTH_CHALLENGE, s.sn++, p, log)) {
+            s.sentChallenge = true;
+            s.candDeadline = System.currentTimeMillis() + 4000;
+            log.append("[BLE-MMA] 已发挑战，等 4s\n");
+        } else {
+            s.candDeadline = System.currentTimeMillis() + 500;
+        }
+    }
+
+    private static boolean bleWrite(BluetoothGatt g, BleSession s, int type, int opcode,
+                                    int sn, byte[] payload, StringBuilder log) {
+        if (s.candIdx >= s.writes.size()) return false;
+        BluetoothGattCharacteristic ch = s.writes.get(s.candIdx);
+        byte[] f = encode(type, opcode, sn, payload);
+        try {
+            ch.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
+            ch.setValue(f);
+            boolean ok = g.writeCharacteristic(ch);
+            log.append("[BLE-MMA] TX ").append(hex(f)).append(" -> ")
+                    .append(ch.getUuid().toString().substring(0, 8))
+                    .append(ok ? "" : " (write 返回 false)").append('\n');
+            return ok;
+        } catch (Throwable t) {
+            log.append("[BLE-MMA] 写失败: ").append(shortErr(t)).append('\n');
+            return false;
+        }
+    }
+
+    private static void pump(BluetoothGatt g, BleSession s, Handler main, boolean[] done,
+                             StringBuilder log, Callback cb) {
+        if (done[0]) return;
+        byte[] pending;
+        synchronized (s.rx) {
+            pending = s.rx.toByteArray();
+            s.rx.reset();
+        }
+        if (pending.length > 0) {
+            log.append("[BLE-MMA] RX ").append(hex(pending)).append('\n');
+            handleBle(g, s, pending, log);
+        }
+        if (s.result != null) {
+            endBle(g, s, done, log, cb);
+            return;
+        }
+        if (System.currentTimeMillis() > s.deadline) {
+            log.append("[BLE-MMA] 总超时，无有效电量响应\n");
+            endBle(g, s, done, log, cb);
+            return;
+        }
+        // 当前写通道无响应 → 换下一个重发
+        if (s.sentChallenge && System.currentTimeMillis() > s.candDeadline) {
+            s.candIdx++;
+            s.sentChallenge = false;
+            s.gotChallengeResponse = false;
+            s.answeredEarbudsChallenge = false;
+            s.sentDeviceInfo = false;
+            if (s.candIdx < s.writes.size()) {
+                log.append("[BLE-MMA] 通道无响应，换下一个\n");
+                sendChallenge(g, s, log);
+            } else {
+                log.append("[BLE-MMA] 所有写通道均无响应\n");
+                endBle(g, s, done, log, cb);
+                return;
+            }
+        }
+        if (s.tick != null) main.postDelayed(s.tick, 400);
+    }
+
+    private static void handleBle(BluetoothGatt g, BleSession s, byte[] raw, StringBuilder log) {
+        for (Msg m : splitMessages(raw)) {
+            if (m.opcode == OP_AUTH_CHALLENGE) {
+                if (m.type == TYPE_RESPONSE) {
+                    if (!s.gotChallengeResponse) {
+                        s.gotChallengeResponse = true;
+                        bleWrite(g, s, TYPE_PHONE_REQUEST, OP_AUTH_CONFIRM, s.sn++,
+                                new byte[]{0x01, 0x00}, log);
+                        log.append("[BLE-MMA] 挑战被应答，发确认\n");
+                    }
+                } else if (m.payload != null && m.payload.length >= 17
+                        && !s.answeredEarbudsChallenge) {
+                    byte[] challenge = new byte[16];
+                    System.arraycopy(m.payload, 1, challenge, 0, 16);
+                    byte[] resp = s.auth.computeChallengeResponse(challenge);
+                    byte[] p = new byte[17];
+                    p[0] = 0x01;
+                    System.arraycopy(resp, 0, p, 1, 16);
+                    bleWrite(g, s, TYPE_RESPONSE, OP_AUTH_CHALLENGE, m.sn, p, log);
+                    s.answeredEarbudsChallenge = true;
+                    log.append("[BLE-MMA] 已应答耳机挑战 ").append(hex(resp)).append('\n');
+                }
+            } else if (m.opcode == OP_AUTH_CONFIRM) {
+                if (m.type == TYPE_RESPONSE) {
+                    log.append("[BLE-MMA] 确认完成\n");
+                } else {
+                    bleWrite(g, s, TYPE_RESPONSE, OP_AUTH_CONFIRM, m.sn, new byte[]{0x01}, log);
+                    log.append("[BLE-MMA] 已确认，请求设备信息\n");
+                    if (!s.sentDeviceInfo) {
+                        s.sentDeviceInfo = true;
+                        bleWrite(g, s, TYPE_PHONE_REQUEST, OP_GET_DEVICE_INFO, s.sn++,
+                                new byte[]{(byte) 0xFF, (byte) 0xFF,
+                                        (byte) 0xFF, (byte) 0xFF}, log);
+                    }
+                }
+            } else if (m.opcode == OP_GET_DEVICE_INFO) {
+                BatteryLevels parsed = parseDeviceInfo(m.payload, log);
+                if (parsed != null) {
+                    s.result = parsed;
+                    log.append("[BLE-MMA] 电量 L=").append(parsed.left)
+                            .append(" R=").append(parsed.right)
+                            .append(" Case=").append(parsed.caseBox).append('\n');
+                }
+            } else {
+                log.append("[BLE-MMA] 其他帧 type=").append(Integer.toHexString(m.type))
+                        .append(" opcode=").append(Integer.toHexString(m.opcode)).append('\n');
+            }
+        }
+    }
+
+    private static void endBle(BluetoothGatt g, BleSession s, boolean[] done,
+                               StringBuilder log, Callback cb) {
+        if (done[0]) return;
+        done[0] = true;
+        try {
+            g.disconnect();
+            g.close();
+        } catch (Throwable ignored) {
+        }
+        if (s.result != null) {
+            s.result.source = "xiaomi-mma-ble";
+            s.result.timestamp = System.currentTimeMillis();
+            s.result.sanitize();
+        }
+        finish(cb, s.result, log.toString());
     }
 
     /** BluetoothSocket.connect() 没有超时参数，卡住会拖垮整个探测 */
