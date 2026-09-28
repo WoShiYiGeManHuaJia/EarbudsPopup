@@ -504,22 +504,47 @@ public class Prefs {
         sp.edit().putFloat("sound_vol", Math.max(0f, Math.min(1f, v))).apply();
     }
 
-    // ---------- 设备白名单 ----------
-    /** 返回 null 或空集表示“所有设备都弹” */
-    public Set<String> allowedDevices() {
+    // ---------- 设备过滤 ----------
+    //
+    // 【重大修正】原来是「允许列表」语义：setAllowedDevices 存的是用户勾选过的
+    // 设备地址集合。只要用户在设置页动过勾选框，这个集合就固化成【当时的】
+    // 已配对设备快照。之后新配对的耳机不在集合里，
+    // PopupService 里 if (!prefs.isAllowed(addr)) return; 会把它直接拦掉 ——
+    // 表现就是「换了个耳机，弹窗不弹、电量不显示，只能认一个耳机」。
+    //
+    // 改成「排除列表」语义：默认所有设备都弹，只有用户明确取消勾选过的才拦截。
+    // 新设备没见过、没被排除 → 一律放行。
+    //
+
+    /** 被用户明确排除（取消勾选）的设备地址 */
+    public Set<String> deniedDevices() {
         // 必须返回拷贝：SharedPreferences.getStringSet 返回的是内部实例引用，
         // 调用方一旦修改它，再存回去时会出现「改了但不生效」的诡异现象。
-        Set<String> v = sp.getStringSet("allowed", null);
+        Set<String> v = sp.getStringSet("denied", null);
         return v == null ? new HashSet<>() : new HashSet<>(v);
     }
 
-    public void setAllowedDevices(Set<String> s) {
-        sp.edit().putStringSet("allowed", new HashSet<>(s)).apply();
+    public void setDeniedDevices(Set<String> s) {
+        sp.edit().putStringSet("denied", new HashSet<>(s)).apply();
+        // 同时标记已迁移，避免下次又把旧的 allowed 当成排除集
+        sp.edit().putBoolean("denied_migrated", true).apply();
+    }
+
+    /**
+     * 一次性迁移：老版本存的 allowed 是「允许列表」，语义与现在相反。
+     * 直接沿用会让用户原本勾选的设备变成被排除 —— 所以一律丢弃，
+     * 重置为「所有设备都弹」。这正好也是本次要修的目标行为。
+     */
+    public void migrateLegacyAllowedIfNeeded() {
+        if (sp.getBoolean("denied_migrated", false)) return;
+        if (sp.contains("allowed")) {
+            sp.edit().remove("allowed").apply();
+        }
+        sp.edit().putBoolean("denied_migrated", true).apply();
     }
 
     public boolean isAllowed(String address) {
         if (address == null) return true;
-        Set<String> s = allowedDevices();
-        return s.isEmpty() || s.contains(address);
+        return !deniedDevices().contains(address);
     }
 }
