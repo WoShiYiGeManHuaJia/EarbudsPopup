@@ -43,6 +43,9 @@ public final class HyperOSIslandNotifier {
     private static final String FOCUS_PICS = "miui.focus.pics";
     private static final String PIC_IMAGE = "miui.focus.pic_imageText";
 
+    /** 最近一次上岛失败/降级的诊断原因，供设置页显示。 */
+    public static volatile String lastError = "";
+
     private HyperOSIslandNotifier() {}
 
     /** 0/未知=不支持；1=OS1；2=OS2；3=OS3。 */
