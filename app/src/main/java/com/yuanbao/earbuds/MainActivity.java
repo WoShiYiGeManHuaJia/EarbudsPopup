@@ -1705,22 +1705,27 @@ public class MainActivity extends AppCompatActivity {
 
         final android.app.ProgressDialog pd = new android.app.ProgressDialog(this);
         pd.setTitle("正在探测");
-        pd.setMessage((n == null ? addr : n) + "\n扫描 BLE 广播并读取 GATT，最多 25 秒…");
+        pd.setMessage((n == null ? addr : n) + "\nRFCOMM → BLE 私有通道 → GATT，最多 90 秒…");
         pd.setCancelable(false);
         pd.show();
 
         final BatteryProbe probe = new BatteryProbe(this);
         final boolean[] finished = new boolean[1];
 
-        // 硬超时兜底：GATT 卡死或回调没来时也不能让用户干等，
-        // 25 秒后强制用当前累积日志弹出结果窗口
+        // 硬超时兜底：GATT 卡死或回调没来时也不能让用户干等。
+        //
+        // 之前只有 25 秒，而整条链路是：
+        //   RFCOMM 8 个通道（约 15~35 秒）→ BLE 私有通道（最多 12 秒）→ GATT 诊断
+        // 25 秒一到就把日志截断了，用户看到的日志永远停在
+        // 「改走 BLE MMA 通道」这一行 —— 因为 BLE 那段【从来没机会执行】。
+        // 这是「BLE 通道看起来完全没生效」的真凶，跟协议本身无关。
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             if (finished[0]) return;
             finished[0] = true;
             dismissQuietly(pd);
             showProbeResult(n, addr, null, probe.currentLog()
-                    + "\n\n[超时兜底] 探测超过 25 秒未结束，以上是不完整日志。");
-        }, 25000);
+                    + "\n\n[超时兜底] 探测超过 90 秒未结束，以上是不完整日志。");
+        }, 90000);
 
         probe.probe(addr, dev, (levels, diagnostic) -> {
             if (finished[0]) return;
