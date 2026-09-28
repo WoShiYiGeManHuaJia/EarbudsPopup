@@ -143,8 +143,15 @@ public class PopupActivity extends AppCompatActivity {
         w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         w.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL);  // 弹窗外区域点击穿透到下层应用
         w.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
-        w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);       // 系统弹窗标志性的背景压暗
-        w.setDimAmount(prefs.dimAmount());
+        // 背景压暗【已关闭】。
+        // 之前 FLAG_DIM_BEHIND + setDimAmount(0.30) 会把整个窗口后面压一层
+        // 30% 黑。而卡片是 match_parent 铺满窗口、四角圆角 ——
+        // 圆角之外的四个角落没有被卡片覆盖，露出来的正是这层压暗，
+        // 于是用户看到「圆角还在，但左下/右下多出两块半透明黑色直角边」。
+        // 小米原生弹窗也是不压暗的：卡片直接浮在当前应用之上。
+        // 需要压暗的话用卡片自身的 bgColor / LiveBlurView 的 dim 就够了。
+        w.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        w.setDimAmount(0f);
         if (prefs.notFocusable()) {
             w.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE); // 打游戏/输入时不夺取焦点
         }
