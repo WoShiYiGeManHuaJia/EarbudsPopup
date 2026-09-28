@@ -242,6 +242,7 @@ public class MainActivity extends AppCompatActivity {
         tvBlur = findViewById(R.id.tvBlur);
         deviceList = findViewById(R.id.deviceList);
         tvProbeHint = findViewById(R.id.tvProbeHint);
+        TextView tvDiagMma = findViewById(R.id.tvDiagMma);
         TextView tvDiagIsland = findViewById(R.id.tvDiagIsland);
         com.google.android.material.switchmaterial.SwitchMaterial swForceIsland =
                 findViewById(R.id.swForceIsland);
@@ -255,9 +256,9 @@ public class MainActivity extends AppCompatActivity {
         TextView tvDiagMeta = findViewById(R.id.tvDiagMeta);
         findViewById(R.id.btnDiagRefresh).setOnClickListener(v -> {
             KeepAliveController.arm(this);   // 立即排一次保活 Alarm
-            refreshDiag(tvDiagIsland, tvDiagService, tvDiagKeep, tvDiagBatSrc, tvDiagMeta);
+            refreshDiag(tvDiagMma, tvDiagIsland, tvDiagService, tvDiagKeep, tvDiagBatSrc, tvDiagMeta);
         });
-        refreshDiag(tvDiagIsland, tvDiagService, tvDiagKeep, tvDiagBatSrc, tvDiagMeta);
+        refreshDiag(tvDiagMma, tvDiagIsland, tvDiagService, tvDiagKeep, tvDiagBatSrc, tvDiagMeta);
         swHideRecents = findViewById(R.id.swHideRecents);
     }
 
@@ -1930,7 +1931,32 @@ public class MainActivity extends AppCompatActivity {
      * 补丁状态诊断 —— Patch1/Patch2 都是底层改动，界面上看不到，
      * 所以这里把「代码到底跑没跑」直接显示出来。
      */
-    private void refreshDiag(TextView island, TextView svc, TextView keep, TextView src, TextView meta) {
+    private void refreshDiag(TextView mma, TextView island, TextView svc, TextView keep,
+                             TextView src, TextView meta) {
+        // -1) 小米 MMA 语义电量：这是唯一能给真实 L/R/Case 的只读通道
+        if (mma != null) {
+            android.bluetooth.BluetoothDevice dev0 = null;
+            try {
+                android.bluetooth.BluetoothAdapter ad =
+                        android.bluetooth.BluetoothAdapter.getDefaultAdapter();
+                String a0 = prefs.lastAddress();
+                if (ad != null && a0 != null && !a0.isEmpty()) {
+                    dev0 = ad.getRemoteDevice(a0);
+                }
+            } catch (Throwable ignored) {
+                dev0 = null;
+            }
+            boolean xiaomi = XiaomiMmaBatteryReader.likelyXiaomiRedmi(dev0);
+            StringBuilder sb = new StringBuilder();
+            sb.append("设备匹配=").append(xiaomi ? "是（Redmi/Xiaomi TWS）" : "否");
+            String err = HyperOSIslandNotifier.lastError;
+            if (err != null && !err.isEmpty()) sb.append("\n").append(err);
+            if (xiaomi) {
+                sb.append("\n通道：RFCOMM MMA GET_DEVICE_INFO");
+                sb.append("\n成功则返回真实 左/右/盒，否则显示占位");
+            }
+            mma.setText(sb.toString());
+        }
         // 0) HyperOS 超级岛：把「为什么没上岛」直接摊开
         if (island != null) {
             boolean hyper = HyperOSIslandNotifier.isHyperOS(this);
