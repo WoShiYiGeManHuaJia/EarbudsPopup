@@ -4,6 +4,7 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
+import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHeadset;
@@ -562,6 +563,41 @@ public class PopupService extends Service {
 
         // 后台线程：先试系统栈（dumpsys 较慢，不能占主线程）
         new Thread(() -> {
+            //
+            // 【新增】第 0.5 步：轮询重试系统隐藏 API
+            //
+            // getBatteryLevel() 返回的是【系统蓝牙栈缓存】的电量，不是实时读。
+            // 耳机刚连上时，系统往往要 1~3 秒才通过 HFP AT 命令或 GATT
+            // 把电量填进缓存；连接那一刻读，几乎必然是 -1。
+            // 原来只在连接瞬间读一次，拿不到就直接跳到慢路径，
+            // 于是「换个耳机，电量就不显示」。
+            // 这里轮询约 4 秒，系统一填上就能立刻拿到。
+            //
+            BluetoothAdapter ba = BluetoothAdapter.getDefaultAdapter();
+            BluetoothDevice target = dev;
+            if (target == null && ba != null) {
+                try {
+                    target = ba.getRemoteDevice(addr);
+                } catch (Throwable ignored) {
+                    target = null;
+                }
+            }
+            if (target != null) {
+                for (int attempt = 0; attempt < 6; attempt++) {
+                    int v = readBattery(target);
+                    if (BatteryLevels.valid(v)) {
+                        final int fv = v;
+                        h.post(() -> applyMeasured(addr, fv, "sys-retry" + attempt));
+                        return;
+                    }
+                    try {
+                        Thread.sleep(700);
+                    } catch (InterruptedException e) {
+                        return;
+                    }
+                }
+            }
+
             int sysLvl = -1;
             if (ShizukuHelper.hasPermission()) {
                 sysLvl = BatterySysQuery.query(addr);
