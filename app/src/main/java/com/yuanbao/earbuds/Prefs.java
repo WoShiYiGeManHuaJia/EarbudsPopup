@@ -345,6 +345,22 @@ public class Prefs {
         sp.edit().putInt("engine", v).apply();
     }
 
+    /**
+     * 强制上岛：跳过小米 canShowFocus 查询。
+     *
+     * 部分 HyperOS 机器上 content://miui.statusbar.notification.public 的
+     * canShowFocus 恒返回 false（ROM 未授权第三方 / provider 未暴露），
+     * 但实际上 SystemUI 仍能渲染焦点通知。默认关闭表示尊重系统判定；
+     * 用户确认自己机型支持时可打开，由用户自己承担「上不了岛」的结果。
+     */
+    public boolean forceIsland() {
+        return sp.getBoolean("force_island", false);
+    }
+
+    public void setForceIsland(boolean v) {
+        sp.edit().putBoolean("force_island", v).apply();
+    }
+
     /** 背景压暗程度 0~1 */
     public float dimAmount() {
         return sp.getFloat("dim", 0.30f);
