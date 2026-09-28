@@ -10,6 +10,11 @@ package com.yuanbao.earbuds;
 public class BatteryLevels {
 
     public int left = -1;
+
+    /** 系统元数据提供的真实充电状态。 */
+    public boolean leftCharging = false;
+    public boolean rightCharging = false;
+    public boolean caseCharging = false;
     public int right = -1;
     public int caseBox = -1;
     /** 只拿到一个整机值时的兜底 */
