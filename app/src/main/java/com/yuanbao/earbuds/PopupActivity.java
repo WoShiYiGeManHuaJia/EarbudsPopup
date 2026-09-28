@@ -88,7 +88,7 @@ public class PopupActivity extends AppCompatActivity {
             levels.overall = levels.right;
         }
         levels.sanitize();
-        levels.fillFromOverall();
+        levels.keepOverallOnly();
         levels.timestamp = System.currentTimeMillis();
 
         View card = findViewById(R.id.card);
