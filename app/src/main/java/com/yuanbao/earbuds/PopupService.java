@@ -584,10 +584,12 @@ public class PopupService extends Service {
             }
             if (target != null) {
                 for (int attempt = 0; attempt < 6; attempt++) {
+                    // attempt 会被 ++，不是 effectively final，lambda 里不能直接用
+                    final int tag = attempt;
                     int v = readBattery(target);
                     if (BatteryLevels.valid(v)) {
                         final int fv = v;
-                        h.post(() -> applyMeasured(addr, fv, "sys-retry" + attempt));
+                        h.post(() -> applyMeasured(addr, fv, "sys-retry" + tag));
                         return;
                     }
                     try {
