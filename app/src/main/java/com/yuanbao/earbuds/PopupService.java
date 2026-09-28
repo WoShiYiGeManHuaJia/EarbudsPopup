@@ -660,22 +660,6 @@ public class PopupService extends Service {
         final long job = System.nanoTime();
         batteryJobs.put(addr, job);
 
-        //
-        // 【实时优先】0x180F / 0x2A19 是实测唯一能拿到真实电量的通道。
-        //
-        // 原顺序：先读系统缓存（旧值，首帧就顶上）→ 再跑 MMA（HyperOS 上
-        // 第三方必然 connect 超时，白白耗十几秒）→ 最后才轮到 GATT。
-        // 所以「第一次连接」看到的永远是缓存里的旧数字，真实值十几秒后才到。
-        //
-        // 现在：连接一建立就立刻发起一次全新 GATT 读取，拿到即本次真实电量。
-        //
-        h.post(() -> {
-            try {
-                new BatteryProbe(PopupService.this).quickRead(addr, dev, gattVal -> {
-                    if (BatteryLevels.valid(gattVal)) {
-                        scheduleOverall(addr, gattVal, "gatt-live", job);
-                    }
-                });
             } catch (Throwable ignored) {
             }
         });
