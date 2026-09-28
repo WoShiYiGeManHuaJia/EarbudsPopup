@@ -293,9 +293,25 @@ public class LiveBlurView extends View {
         try {
             drawBlur(canvas);
         } catch (Throwable t) {
-            // 退化：画一层半透明底色，保证文字仍可读
+            // 退化：画一层半透明底色，保证文字仍可读。
+            //
+            // 之前这里是 canvas.drawColor(dimColor) —— 画满整个 View 的
+            // 【直角矩形】。弹窗卡片是圆角的，于是底部左右两角多出
+            // 两块直角黑边，这正是用户看到的
+            // 「圆角还在，但多出两个半透明黑色直角边」。
+            // 兜底也必须走同一个圆角形状，不能因为是降级路径就画矩形。
             try {
-                canvas.drawColor(dimColor);
+                int vw = getWidth(), vh = getHeight();
+                ensureCornerPath(vw, vh);
+                android.graphics.Path shape = cornerPath;
+                if (shape != null) {
+                    canvas.save();
+                    canvas.clipPath(shape);
+                    canvas.drawColor(dimColor);
+                    canvas.restore();
+                } else {
+                    canvas.drawColor(dimColor);
+                }
             } catch (Throwable ignored) {
             }
         }
@@ -356,6 +372,22 @@ public class LiveBlurView extends View {
         // → 再在同一个图层里用 DST_OUT 擦顶部。此时图层里已有内容，
         // 擦除才真正生效：上边缘全擦（露出清晰动画），往下渐弱。
         //
+        //
+        // 圆角裁剪必须在建图层【之前】做。
+        // 之前只靠「用圆角 Path 填充」来保证圆角，但图层内还有两处
+        // 不守规矩的矩形绘制：
+        //   ① 下面的渐隐 canvas.drawRect(0,0,vw,fh)
+        //   ② shaderPaint 在 CLAMP 模式下会沿 Path 外包盒铺满
+        // 这两处一旦越过圆角边界，角落就会补上半透明黑 ——
+        // 用户看到的「左下/右下两个黑色直角边」就是这么来的。
+        // clipPath 是一刀切：不管里面画什么，都出不了圆角。
+        int clipped = canvas.save();
+        if (shape != null) {
+            try {
+                canvas.clipPath(shape);
+            } catch (Throwable ignored) {
+            }
+        }
         int saved = canvas.saveLayer(0f, 0f, vw, vh, null);
         try {
             if (blurred != null) {
@@ -376,6 +408,7 @@ public class LiveBlurView extends View {
             }
         } finally {
             canvas.restoreToCount(saved);
+            canvas.restoreToCount(clipped);
         }
     }
 
