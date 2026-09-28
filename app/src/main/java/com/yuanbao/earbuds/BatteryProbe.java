@@ -381,8 +381,23 @@ public final class BatteryProbe {
                     log("采用 Xiaomi MMA 语义电量，跳过 GATT 猜测链");
                     finish(overall, cb);
                 } else {
-                    log("MMA 未拿到语义电量，继续 BLE 扫描 / GATT 诊断");
-                    scanThenConnectInner(address, device, overall, cb);
+                    log("MMA(RFCOMM) 未拿到语义电量，改走 BLE MMA 通道");
+                    StringBuilder bleLog = new StringBuilder();
+                    XiaomiMmaBatteryReader.readViaBle(ctx, device, bleLog, (ble, diag2) -> {
+                        log(diag2);
+                        if (ble != null && (BatteryLevels.valid(ble.left)
+                                || BatteryLevels.valid(ble.right)
+                                || BatteryLevels.valid(ble.caseBox))) {
+                            ble.sanitize();
+                            ble.timestamp = System.currentTimeMillis();
+                            lastResult = ble;
+                            log("采用 BLE MMA 语义电量");
+                            finish(overall, cb);
+                        } else {
+                            log("BLE MMA 也未拿到，继续 BLE 扫描 / GATT 诊断");
+                            scanThenConnectInner(address, device, overall, cb);
+                        }
+                    });
                 }
             });
             return;
