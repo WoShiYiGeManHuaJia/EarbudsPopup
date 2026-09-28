@@ -125,9 +125,19 @@ public final class PopupRenderer {
             tvBatteryRight.setText(batteryTextRight(levels));
             tvBatteryRight.setTextColor(sub);
         }
-        // 充电盒槽位已从布局里【整个移除】：
-        // 系统蓝牙栈 untethered_case_battery=null，该值根本取不到，
-        // 留着只会一直显示 --% 很难看。
+        // 充电盒：槽位已恢复。MMA 通道能给出真实值，取不到就显示占位横线。
+        TextView tvCase = root.findViewById(R.id.tvBatteryCase);
+        ImageView icCase = root.findViewById(R.id.icCase);
+        boolean showCase = prefs.showCaseBattery();
+        if (tvCase != null) {
+            tvCase.setText(batteryTextCase(levels));
+            tvCase.setTextColor(sub);
+            tvCase.setVisibility(showCase ? View.VISIBLE : View.GONE);
+        }
+        if (icCase != null) {
+            icCase.setColorFilter(sub);
+            icCase.setVisibility(showCase ? View.VISIBLE : View.GONE);
+        }
         ImageView icEarbuds = root.findViewById(R.id.icEarbuds);
         if (icEarbuds != null) icEarbuds.setColorFilter(sub);
         ImageView icEarbudsRight = root.findViewById(R.id.icEarbudsRight);
@@ -158,7 +168,9 @@ public final class PopupRenderer {
                                                 Drawable> transition) {
                                     img.setImageDrawable(resource);
                                     applyImageMatrix(img);
-                                    restartGif(resource);
+                                    // 不再对 GifDrawable 调 stop()/start()：
+                                    // 那会重置解码器，导致 GIF 明显掉帧。
+                                    // Glide 已经在驱动 GifDrawable 的动画，这里不要插手。
                                 }
 
                                 @Override
@@ -343,6 +355,12 @@ public final class PopupRenderer {
         return BatteryLevels.valid(b.right) ? b.right + "%" : "--%";
     }
 
+    /** 充电盒电量文本 */
+    private static String batteryTextCase(BatteryLevels b) {
+        if (b == null) return "--%";
+        return BatteryLevels.valid(b.caseBox) ? b.caseBox + "%" : "--%";
+    }
+
     public static void applyImageMatrix(ImageView img) {
         if (img == null) return;
         Drawable dr = img.getDrawable();
@@ -463,6 +481,8 @@ public final class PopupRenderer {
         levels.sanitize();
         if (tvBattery != null) tvBattery.setText(batteryText(levels));
         if (tvBatteryRight != null) tvBatteryRight.setText(batteryTextRight(levels));
+        TextView tvCaseU = root.findViewById(R.id.tvBatteryCase);
+        if (tvCaseU != null) tvCaseU.setText(batteryTextCase(levels));
     }
 
     /** 分档色没设过（空串/解析失败）时退回通用文字色 */
