@@ -111,6 +111,9 @@ public class PopupService extends Service {
     private View currentRoot;
     private String currentName;
     private volatile String currentAddress;
+    /** 每台设备独立的刷新序号：切换耳机后旧的探测结果绝不会覆盖新耳机的弹窗。 */
+    private final java.util.concurrent.ConcurrentHashMap<String, Long> batteryJobs =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override
@@ -128,6 +131,7 @@ public class PopupService extends Service {
         PopupRenderer.PrefsHolder.init(this);
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         startForeground(NOTI_ID, buildNotification());
+        KeepAliveController.arm(this);
         refreshNotificationVisibility();
         syncScreenState();
         registerReceivers();
@@ -206,6 +210,7 @@ public class PopupService extends Service {
             lv.timestamp = System.currentTimeMillis();
             show(name == null ? "耳机" : name, addr, lv, null);
         }
+        KeepAliveController.arm(this);
         return START_STICKY;
     }
 
@@ -432,7 +437,9 @@ public class PopupService extends Service {
      * 下次连接就能立刻显示。
      */
     private void startProbe(String name, String address, BluetoothDevice dev) {
-        if (!prefs.showBattery() || address == null) return;
+        if (!prefs.showBattery() || address == null || address.isEmpty()) return;
+        final long job = System.nanoTime();
+        batteryJobs.put(addr, job);
         new BatteryProbe(this).probe(address, dev, (levels, diagnostic) -> {
             lastDiagnostic = diagnostic;
             if (levels != null) levels.sanitize();
@@ -573,12 +580,22 @@ public class PopupService extends Service {
         // 换耳机时慢路径来不及返回，弹窗就只能显示旧值或空 ——
         // 这就是「换个耳机，电量直接不显示」的原因。
         //
-        if (dev != null) {
-            int fast = readBattery(dev);
-            if (BatteryLevels.valid(fast)) {
-                h.post(() -> applyMeasured(addr, fast, "sys-fast"));
-                return;
-            }
+        //
+        // 第一层：直接读 Android 蓝牙栈里的 TWS metadata（左 10 / 右 11 / 盒 12）。
+        // 这是 AOSP 为 TWS 定义的专用字段，能读到就最可信。
+        // 不再用「私有特征里随便找一个 1~100 的数」去猜充电盒。
+        //
+        BatteryLevels authority = BatteryAuthority.read(dev);
+        if (authority.anyKnown()) {
+            authority.source = authority.source + ":fast";
+            final BatteryLevels fin = authority;
+            h.post(() -> applyMeasuredLevels(addr, fin, job));
+        }
+        // metadata 拿全就不用深度探测了
+        if (BatteryLevels.valid(authority.left)
+                && BatteryLevels.valid(authority.right)
+                && BatteryLevels.valid(authority.caseBox)) {
+            return;
         }
 
         // 后台线程：先试系统栈（dumpsys 较慢，不能占主线程）
@@ -609,7 +626,7 @@ public class PopupService extends Service {
                     int v = readBattery(target);
                     if (BatteryLevels.valid(v)) {
                         final int fv = v;
-                        h.post(() -> applyMeasured(addr, fv, "sys-retry" + tag));
+                        h.post(() -> applyMeasured(addr, fv, "sys-retry" + tag, job));
                         return;
                     }
                     try {
@@ -628,14 +645,14 @@ public class PopupService extends Service {
 
             if (BatteryLevels.valid(v)) {
                 // 拿到权威值：写缓存 + 刷新弹窗
-                h.post(() -> applyMeasured(addr, v, "sys-dumpsys"));
+                h.post(() -> applyMeasured(addr, v, "sys-dumpsys", job));
                 return;
             }
             // 系统栈没拿到，退回 BLE GATT
             h.post(() -> new BatteryProbe(PopupService.this)
                     .quickRead(addr, dev, gattVal -> {
                         if (BatteryLevels.valid(gattVal)) {
-                            applyMeasured(addr, gattVal, "gatt-auto");
+                            applyMeasured(addr, gattVal, "gatt-auto", job);
                         } else {
                             // 两条路都没取到真值：把陈旧缓存作废，显示 --%
                             BatteryStore st = new BatteryStore(PopupService.this);
@@ -653,9 +670,35 @@ public class PopupService extends Service {
         }).start();
     }
 
+    /** 带 job 校验写入：切了耳机，旧回调直接丢弃 */
+    private void applyMeasuredLevels(String addr, BatteryLevels levels, long job) {
+        if (levels == null) return;
+        Long cur = batteryJobs.get(addr);
+        if (cur == null || cur != job) return;   // 已切换到别的耳机/新任务
+        BatteryStore st = new BatteryStore(this);
+        BatteryLevels b = st.load(addr);
+        if (BatteryLevels.valid(levels.left)) b.left = levels.left;
+        if (BatteryLevels.valid(levels.right)) b.right = levels.right;
+        if (BatteryLevels.valid(levels.caseBox)) b.caseBox = levels.caseBox;
+        if (BatteryLevels.valid(levels.overall)) b.overall = levels.overall;
+        b.leftCharging = levels.leftCharging;
+        b.rightCharging = levels.rightCharging;
+        b.caseCharging = levels.caseCharging;
+        b.fillFromOverall();
+        b.sanitize();
+        b.timestamp = System.currentTimeMillis();
+        b.source = levels.source;
+        st.save(addr, b);
+        if (currentRoot != null && addr.equals(currentAddress)) {
+            PopupRenderer.updateInfo(currentRoot, currentName, b, prefs);
+        }
+    }
+
     /** 写入实测值并刷新当前弹窗 */
-    private void applyMeasured(String addr, int value, String source) {
+    private void applyMeasured(String addr, int value, String source, long job) {
         if (!BatteryLevels.valid(value)) return;
+        Long jb = batteryJobs.get(addr);
+        if (jb != null && jb != job) return;   // 已切到别的耳机，丢弃旧结果
         BatteryStore st = new BatteryStore(this);
         BatteryLevels b = st.load(addr);
         b.overall = value;
@@ -740,6 +783,13 @@ public class PopupService extends Service {
         }
     }
 
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        // 用户从最近任务划掉 UI 不等于关闭后台服务；安排一次低频自恢复。
+        KeepAliveController.arm(this);
+        super.onTaskRemoved(rootIntent);
+    }
+
     private float dp(float v) {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v,
                 getResources().getDisplayMetrics());
@@ -747,6 +797,7 @@ public class PopupService extends Service {
 
     @Override
     public void onDestroy() {
+        KeepAliveController.arm(this);
         dismiss();
         try {
             unregisterReceiver(receiver);
