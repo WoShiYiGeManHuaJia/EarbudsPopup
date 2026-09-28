@@ -80,7 +80,9 @@ public final class XiaomiMmaBatteryReader {
      * 之前这里写 2500ms，于是每次都在耳机应答前就放弃 —— 日志里
      * 「FD2D-insecure 超时 / FD2D-secure 超时」全是这个原因，不是耳机不支持。
      */
-    private static final int CONNECT_TIMEOUT_MS = 10000;
+    // RFCOMM 单通道超时。之前 FD2D 给 10 秒，8 个通道加起来要 35 秒，
+    // 远超探测总超时，BLE 通道永远排不到执行。现在整段压到 15 秒以内。
+    private static final int CONNECT_TIMEOUT_MS = 4000;
     private static final int READ_TIMEOUT_MS = 4000;
     private static final int HANDSHAKE_ROUNDS = 12;
 
@@ -403,7 +405,7 @@ public final class XiaomiMmaBatteryReader {
         UUID[] uuids = {UUID_FAST_CONNECT, UUID_XIAOAI, UUID_SPP_STD};
         String[] names = {"FD2D(FastConnect)", "XiaoAI(自定义)", "SPP(标准)"};
         // FD2D 给足时间（GB 无超时），其余快速试过即可
-        int[] timeouts = {CONNECT_TIMEOUT_MS, 2500, 2500};
+        int[] timeouts = {CONNECT_TIMEOUT_MS, 1500, 1500};
 
         for (int i = 0; i < uuids.length; i++) {
             for (int pass = 0; pass < 2; pass++) {
