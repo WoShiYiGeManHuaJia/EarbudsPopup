@@ -5,10 +5,10 @@
     android:layout_height="match_parent"
     android:clipToPadding="false"
     android:overScrollMode="never"
-    android:paddingStart="16dp"
-    android:paddingTop="8dp"
-    android:paddingEnd="16dp"
-    android:paddingBottom="96dp">
+    android:paddingStart="18dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="18dp"
+    android:paddingBottom="112dp">
 
     <!-- paddingBottom 96dp：底部导航栏悬浮在内容之上（CoordinatorLayout
          里 bottom gravity 不参与滚动），24dp 会被导航条压住，

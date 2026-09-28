@@ -17,7 +17,9 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">?attr/isLightTheme</item>
-        <item name="android:windowBackground">@color/md_background</item>
+        <item name="android:windowBackground">@drawable/bg_app</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">@color/md_primary</item>
         <item name="android:enforceStatusBarContrast">false</item>
         <item name="android:enforceNavigationBarContrast">false</item>
     </style>
@@ -26,6 +28,8 @@
     <style name="AppToolbar" parent="Widget.Material3.Toolbar">
         <item name="titleCentered">false</item>
         <item name="android:elevation">0dp</item>
+        <item name="android:background">@android:color/transparent</item>
+        <item name="android:minHeight">68dp</item>
     </style>
 
     <!-- ===== 分组容器：M3 的 grouped list，圆角 16dp（large） ===== -->
@@ -40,7 +44,7 @@
     <style name="TextSectionTitle">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:textSize">13sp</item>
+        <item name="android:textSize">13.5sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:letterSpacing">0.02</item>
         <item name="android:textColor">@color/md_primary</item>
@@ -51,11 +55,11 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:minHeight">64dp</item>
-        <item name="android:paddingStart">16dp</item>
-        <item name="android:paddingEnd">20dp</item>
+        <item name="android:paddingStart">18dp</item>
+        <item name="android:paddingEnd">18dp</item>
         <item name="android:paddingTop">8dp</item>
         <item name="android:paddingBottom">8dp</item>
-        <item name="android:drawablePadding">20dp</item>
+        <item name="android:drawablePadding">18dp</item>
         <item name="android:textSize">15.5sp</item>
         <item name="android:textColor">@color/ui_text_primary</item>
     </style>
@@ -64,11 +68,11 @@
     <style name="AppRow">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:minHeight">60dp</item>
+        <item name="android:minHeight">66dp</item>
         <item name="android:gravity">center_vertical</item>
         <item name="android:orientation">horizontal</item>
-        <item name="android:paddingStart">16dp</item>
-        <item name="android:paddingEnd">20dp</item>
+        <item name="android:paddingStart">18dp</item>
+        <item name="android:paddingEnd">18dp</item>
         <item name="android:background">?attr/selectableItemBackground</item>
     </style>
 
@@ -84,7 +88,7 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_weight">1</item>
         <item name="android:layout_gravity">center_vertical</item>
-        <item name="android:layout_marginStart">20dp</item>
+        <item name="android:layout_marginStart">16dp</item>
         <item name="android:orientation">vertical</item>
     </style>
 
@@ -121,6 +125,9 @@
         <item name="android:paddingTop">0dp</item>
         <item name="android:paddingBottom">0dp</item>
         <item name="android:minHeight">56dp</item>
+        <item name="android:background">@drawable/bg_button_primary</item>
+        <item name="android:textColor">#FFFFFFFF</item>
+        <item name="cornerRadius">20dp</item>
         <item name="android:textSize">15sp</item>
         <item name="android:textStyle">bold</item>
     </style>
@@ -130,6 +137,7 @@
         <item name="android:insetTop">0dp</item>
         <item name="android:insetBottom">0dp</item>
         <item name="android:minHeight">52dp</item>
+        <item name="cornerRadius">18dp</item>
         <item name="android:textSize">14sp</item>
     </style>
 
