@@ -86,6 +86,20 @@ public class LiveBlurView extends View {
     /** 压暗画笔，保证文字可读 */
     private final Paint dimPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
+    /**
+     * 冻结标记 + 最后一帧模糊位图。
+     * 弹窗淡出时调用 stop()：不再逐帧重算模糊，直接复用最后一次结果。
+     * 只影响“是否重算”，绘制路径与正常时完全一致，模糊样式不变。
+     */
+    private boolean frozen = false;
+    private Bitmap frozenBmp;
+
+    /** 停止逐帧重算（淡出期间调用，避免模糊重算与 alpha 动画叠加导致闪烁）。 */
+    public void stop() {
+        frozen = true;
+        detachCallback();
+    }
+
     public LiveBlurView(Context c) {
         super(c);
     }
@@ -400,10 +414,16 @@ public class LiveBlurView extends View {
         }
 
         Bitmap blurred = null;
-        try {
-            blurred = renderBlurredBitmap(dr, sw, sh, vw, vh);
-        } catch (Throwable t) {
-            blurred = null;
+        if (frozen) {
+            // 冻结：不再重算，直接用最后一帧结果，后续绘制逻辑完全一致
+            if (frozenBmp != null && !frozenBmp.isRecycled()) blurred = frozenBmp;
+        } else {
+            try {
+                blurred = renderBlurredBitmap(dr, sw, sh, vw, vh);
+                if (blurred != null) frozenBmp = blurred;
+            } catch (Throwable t) {
+                blurred = null;
+            }
         }
 
         //
