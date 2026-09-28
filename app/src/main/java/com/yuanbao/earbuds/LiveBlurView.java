@@ -278,7 +278,15 @@ public class LiveBlurView extends View {
             setRenderEffect(null);
         } catch (Throwable ignored) {
         }
-        setClipToOutline(false);
+        // 不要再 setClipToOutline(false)。
+        //
+        // 这里曾经把裁剪关掉，而 setSource() 会调用本方法 ——
+        // PopupRenderer.setupLiveBlur 的调用顺序是：
+        //   setBlurRadius → setDim → setBottomCornerRadius(打开裁剪) → setSource(本方法)
+        // 于是最后一步又把刚打开的圆角裁剪关掉了，dimPaint 那层半透明黑
+        // 直接铺成直角矩形 —— 就是弹窗左下/右下两个黑色直角边。
+        // 软件渲染下裁剪依然生效，这里改成重新套用圆角裁剪。
+        applyOutlineClip();
         // 强制软件渲染：本 View 只是一条约 52dp 高的窄条，开销可忽略。
         // 软件层下 saveLayer / PorterDuff / BitmapShader 行为确定，
         // 不会受硬件 RenderNode、alpha layer 干扰（之前圆角时有时无、
