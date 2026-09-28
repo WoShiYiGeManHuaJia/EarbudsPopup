@@ -357,13 +357,22 @@ public final class PopupRenderer {
         ImageView icC = root.findViewById(R.id.icCase);
         if (levels != null) levels.sanitize();
 
-        boolean pair = levels != null
-                && (BatteryLevels.valid(levels.left) || BatteryLevels.valid(levels.right));
-        boolean single = !pair && levels != null && BatteryLevels.valid(levels.overall);
+        boolean hasLeft = levels != null && BatteryLevels.valid(levels.left);
+        boolean hasRight = levels != null && BatteryLevels.valid(levels.right);
+        // 两侧都有真值才显示「一对」。只有一侧时不能让另一侧显示 --%，
+        // 那会让人以为「另一只耳机没电了」，实际只是没读到。
+        boolean pair = hasLeft && hasRight;
+        int singleVal = -1;
+        if (!pair && levels != null) {
+            if (hasLeft) singleVal = levels.left;
+            else if (hasRight) singleVal = levels.right;
+            else if (BatteryLevels.valid(levels.overall)) singleVal = levels.overall;
+        }
+        boolean single = singleVal >= 0;
         boolean hasCase = levels != null && BatteryLevels.valid(levels.caseBox);
 
         if (tvL != null) {
-            tvL.setText(pair ? batteryText(levels) : (single ? levels.overall + "%" : "--%"));
+            tvL.setText(pair ? batteryText(levels) : (single ? singleVal + "%" : "--%"));
             tvL.setTextColor(sub);
             tvL.setVisibility(View.VISIBLE);
         }
