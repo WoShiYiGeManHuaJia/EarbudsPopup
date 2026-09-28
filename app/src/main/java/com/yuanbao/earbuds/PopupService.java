@@ -540,6 +540,26 @@ public class PopupService extends Service {
         final String addr = address;
         final Handler h = main;
 
+        //
+        // 【新增】第 0 步：系统隐藏 API getBatteryLevel()
+        //
+        // 这是毫秒级的同步调用，系统蓝牙栈已经缓存了耳机电量（耳机通过
+        // 标准 Battery Service 上报，栈里就有）。市面上的第三方弹窗 App
+        // 基本都走这条路 —— 所以它们能"一连接就显示"，不需要用户手动抓。
+        //
+        // 之前这里一上来就跑 dumpsys（要 fork 进程、解析文本，几百毫秒
+        // 甚至数秒），拿不到再退 GATT（又要走一遍连接+发现服务，1~5 秒）。
+        // 换耳机时慢路径来不及返回，弹窗就只能显示旧值或空 ——
+        // 这就是「换个耳机，电量直接不显示」的原因。
+        //
+        if (dev != null) {
+            int fast = readBattery(dev);
+            if (BatteryLevels.valid(fast)) {
+                h.post(() -> applyMeasured(addr, fast, "sys-fast"));
+                return;
+            }
+        }
+
         // 后台线程：先试系统栈（dumpsys 较慢，不能占主线程）
         new Thread(() -> {
             int sysLvl = -1;
