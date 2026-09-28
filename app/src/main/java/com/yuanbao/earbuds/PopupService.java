@@ -366,10 +366,12 @@ public class PopupService extends Service {
         cached.sanitize();
         // 小米 TWS：只要不是 MMA 真实三元组，就不把聚合值当左右耳显示。
         if (xiaomiTws && !"xiaomi-mma-rfcomm".equals(cached.source)) {
+            // 只清掉「分项」，保留整机值。
+            // 之前连 overall 一起清了，于是整机 100% 明明在手里，
+            // 弹窗却什么都不显示 —— 这是「换什么耳机都不显示」的一个放大器。
             cached.left = -1;
             cached.right = -1;
             cached.caseBox = -1;
-            cached.overall = -1;
             cached.source = "xiaomi-awaiting-mma";
         }
         // 关键：缓存必须「够新鲜」才敢显示。
