@@ -206,7 +206,7 @@ public class PopupService extends Service {
             lv.caseBox = intent.getIntExtra(EXTRA_CASE, -1);
             lv.overall = intent.getIntExtra(EXTRA_OVERALL, lv.right);
             lv.sanitize();
-            lv.fillFromOverall();
+            lv.keepOverallOnly();
             lv.timestamp = System.currentTimeMillis();
             show(name == null ? "耳机" : name, addr, lv, null);
         }
@@ -299,7 +299,7 @@ public class PopupService extends Service {
             demo.caseBox = i.getIntExtra(EXTRA_CASE, -1);
             demo.overall = i.getIntExtra(EXTRA_OVERALL, demo.right);
             demo.sanitize();
-            demo.fillFromOverall();
+            demo.keepOverallOnly();
             demo.timestamp = System.currentTimeMillis();
             show(i.getStringExtra(EXTRA_NAME), i.getStringExtra(EXTRA_ADDRESS), demo, null);
             return;
@@ -313,7 +313,7 @@ public class PopupService extends Service {
                 String a2 = bd.getAddress();
                 BatteryLevels bl = new BatteryStore(this).load(a2);
                 bl.overall = lvl;
-                bl.fillFromOverall();
+                bl.keepOverallOnly();
                 bl.sanitize();
                 bl.timestamp = System.currentTimeMillis();
                 bl.source = "sys-broadcast";
@@ -361,7 +361,7 @@ public class PopupService extends Service {
         // 只有有效值才采用；0 是「未上报」，不能当 0% 显示
         if (BatteryLevels.valid(sys)) {
             cached.overall = sys;
-            if (!xiaomiTws) cached.fillFromOverall();
+            if (!xiaomiTws) cached.keepOverallOnly();
         }
         cached.sanitize();
         // 小米 TWS：只要不是 MMA 真实三元组，就不把聚合值当左右耳显示。
@@ -781,7 +781,7 @@ public class PopupService extends Service {
         b.leftCharging = levels.leftCharging;
         b.rightCharging = levels.rightCharging;
         b.caseCharging = levels.caseCharging;
-        b.fillFromOverall();
+        b.keepOverallOnly();
         b.sanitize();
         b.timestamp = System.currentTimeMillis();
         b.source = levels.source;
@@ -799,7 +799,7 @@ public class PopupService extends Service {
         BatteryStore st = new BatteryStore(this);
         BatteryLevels b = st.load(addr);
         b.overall = value;
-        b.fillFromOverall();
+        b.keepOverallOnly();
         b.sanitize();
         b.timestamp = System.currentTimeMillis();
         b.source = source;
