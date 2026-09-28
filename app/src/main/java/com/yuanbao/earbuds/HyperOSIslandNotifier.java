@@ -243,6 +243,18 @@ public final class HyperOSIslandNotifier {
 
     private static String fmt(int v) { return BatteryLevels.valid(v) ? String.valueOf(v) : "--"; }
 
+    /**
+     * 通知的正文文案。
+     *
+     * 整合包里 post() 调用了 buildContent(levels, prefs)，但文件本身没有
+     * 定义这个方法 —— 编译直接报 cannot find symbol。这里补上。
+     * 内容与 batteryContent 一致（左/右/盒三段电量）。
+     */
+    private static String buildContent(BatteryLevels levels, Prefs prefs) {
+        if (levels == null) return "耳机已连接";
+        return batteryContent(levels, prefs);
+    }
+
     private static Bitmap loadStaticBitmap(Context context, String uriString) {
         if (uriString == null || uriString.trim().isEmpty()) return null;
         if (looksLikeGif(context, uriString)) return null;
