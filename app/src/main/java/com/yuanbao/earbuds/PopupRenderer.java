@@ -116,32 +116,7 @@ public final class PopupRenderer {
         // ---------- 电量（带图标） ----------
         if (levels != null) levels.sanitize();
         int sub = applyAlpha(battC, 0.95f);
-        if (tvBattery != null) {
-            tvBattery.setText(batteryText(levels));
-            tvBattery.setTextColor(sub);
-        }
-        TextView tvBatteryRight = root.findViewById(R.id.tvBatteryRight);
-        if (tvBatteryRight != null) {
-            tvBatteryRight.setText(batteryTextRight(levels));
-            tvBatteryRight.setTextColor(sub);
-        }
-        // 充电盒：槽位已恢复。MMA 通道能给出真实值，取不到就显示占位横线。
-        TextView tvCase = root.findViewById(R.id.tvBatteryCase);
-        ImageView icCase = root.findViewById(R.id.icCase);
-        boolean showCase = prefs.showCaseBattery();
-        if (tvCase != null) {
-            tvCase.setText(batteryTextCase(levels));
-            tvCase.setTextColor(sub);
-            tvCase.setVisibility(showCase ? View.VISIBLE : View.GONE);
-        }
-        if (icCase != null) {
-            icCase.setColorFilter(sub);
-            icCase.setVisibility(showCase ? View.VISIBLE : View.GONE);
-        }
-        ImageView icEarbuds = root.findViewById(R.id.icEarbuds);
-        if (icEarbuds != null) icEarbuds.setColorFilter(sub);
-        ImageView icEarbudsRight = root.findViewById(R.id.icEarbudsRight);
-        if (icEarbudsRight != null) icEarbudsRight.setColorFilter(sub);
+        applyBattery(root, levels, prefs, sub);
         // 左右耳塞图标：右耳镜像翻转，形成「一对」
         // 左右图标是从系统状态栏截图里分别提取的，本身形态就不同，
         // 不需要再镜像翻转（之前的 vector 是同一个图翻转的假「一对」）
@@ -168,9 +143,18 @@ public final class PopupRenderer {
                                                 Drawable> transition) {
                                     img.setImageDrawable(resource);
                                     applyImageMatrix(img);
-                                    // 不再对 GifDrawable 调 stop()/start()：
-                                    // 那会重置解码器，导致 GIF 明显掉帧。
-                                    // Glide 已经在驱动 GifDrawable 的动画，这里不要插手。
+                                    // 必须手动启动：CustomViewTarget 不像 ImageViewTarget
+                                    // 会自动开动画，GifDrawable 拿到后默认是停止的。
+                                    // 但只在未运行时才 start()，绝不调 stop()，
+                                    // 否则会重置解码器导致掉帧。
+                                    if (resource instanceof android.graphics.drawable.Animatable) {
+                                        try {
+                                            android.graphics.drawable.Animatable an =
+                                                    (android.graphics.drawable.Animatable) resource;
+                                            if (!an.isRunning()) an.start();
+                                        } catch (Throwable ignored) {
+                                        }
+                                    }
                                 }
 
                                 @Override
@@ -355,6 +339,57 @@ public final class PopupRenderer {
         return BatteryLevels.valid(b.right) ? b.right + "%" : "--%";
     }
 
+    /**
+     * 电量渲染：有真实分项（左/右）就显示一对；
+     * 拿不到分项但拿到整机值时，显示单个耳机图标 + 整机百分比。
+     *
+     * 之前只渲染 left/right/caseBox，从不渲染 overall，
+     * 而这台机器上分项永远取不到 —— 于是明明知道整机 100%，
+     * 弹窗却一直显示 --%。这就是「换什么耳机都不显示」的直接原因。
+     */
+    private static void applyBattery(View root, BatteryLevels levels, Prefs prefs, int sub) {
+        if (root == null) return;
+        TextView tvL = root.findViewById(R.id.tvBattery);
+        TextView tvR = root.findViewById(R.id.tvBatteryRight);
+        TextView tvC = root.findViewById(R.id.tvBatteryCase);
+        View icL = root.findViewById(R.id.icEarbuds);
+        View icR = root.findViewById(R.id.icEarbudsRight);
+        View icC = root.findViewById(R.id.icCase);
+        if (levels != null) levels.sanitize();
+
+        boolean pair = levels != null
+                && (BatteryLevels.valid(levels.left) || BatteryLevels.valid(levels.right));
+        boolean single = !pair && levels != null && BatteryLevels.valid(levels.overall);
+        boolean hasCase = levels != null && BatteryLevels.valid(levels.caseBox);
+
+        if (tvL != null) {
+            tvL.setText(pair ? batteryText(levels) : (single ? levels.overall + "%" : "--%"));
+            tvL.setTextColor(sub);
+            tvL.setVisibility(View.VISIBLE);
+        }
+        // 只有真实分项才显示「一对」；单值模式下隐藏右耳，不伪造两只耳朵
+        if (tvR != null) tvR.setVisibility(pair ? View.VISIBLE : View.GONE);
+        if (icR != null) icR.setVisibility(pair ? View.VISIBLE : View.GONE);
+        if (icL != null) {
+            icL.setVisibility(View.VISIBLE);
+            icL.setAlpha(1f);
+        }
+        if (pair && tvR != null) tvR.setText(batteryTextRight(levels));
+        if (pair && tvR != null) tvR.setTextColor(sub);
+
+        // 充电盒：拿到真实值才显示，绝不显示占位（之前一直是 --%，很难看）
+        boolean showCase = hasCase && prefs.showCaseBattery();
+        if (tvC != null) {
+            tvC.setText(hasCase ? batteryTextCase(levels) : "");
+            tvC.setTextColor(sub);
+            tvC.setVisibility(showCase ? View.VISIBLE : View.GONE);
+        }
+        if (icC != null) {
+            icC.setColorFilter(sub);
+            icC.setVisibility(showCase ? View.VISIBLE : View.GONE);
+        }
+    }
+
     /** 充电盒电量文本 */
     private static String batteryTextCase(BatteryLevels b) {
         if (b == null) return "--%";
@@ -479,10 +514,8 @@ public final class PopupRenderer {
         TextView tvBattery = root.findViewById(R.id.tvBattery);
         TextView tvBatteryRight = root.findViewById(R.id.tvBatteryRight);
         levels.sanitize();
-        if (tvBattery != null) tvBattery.setText(batteryText(levels));
-        if (tvBatteryRight != null) tvBatteryRight.setText(batteryTextRight(levels));
-        TextView tvCaseU = root.findViewById(R.id.tvBatteryCase);
-        if (tvCaseU != null) tvCaseU.setText(batteryTextCase(levels));
+        int subU = applyAlpha(resolveColor(prefs.batteryColor(), Color.WHITE), 0.95f);
+        applyBattery(root, levels, prefs, subU);
     }
 
     /** 分档色没设过（空串/解析失败）时退回通用文字色 */
