@@ -28,12 +28,14 @@ public final class EarPopupWindow {
    int r=dp(AppPrefs.radiusDp(c));
    FrameLayout card=new FrameLayout(c);
    card.setBackground(round(cardColor(),r));
-   card.setElevation(dp(22));
+   card.setElevation(dp(14));
    card.setClipToOutline(true);
    card.setOutlineProvider(new ROutline(r));
    LinearLayout content=new LinearLayout(c);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(16),dp(14),dp(16),dp(14));
    int mr=Math.max(dp(18),r-dp(8));
-   FrameLayout mf=new FrameLayout(c);mf.setBackground(round(Color.argb(70,255,255,255),mr));mf.setClipToOutline(true);mf.setOutlineProvider(new ROutline(mr));media=new ImageView(c);media.setScaleType(ImageView.ScaleType.CENTER_CROP);loadMedia();mf.addView(media,new FrameLayout.LayoutParams(-1,dp(250)));content.addView(mf,new LinearLayout.LayoutParams(-1,dp(250)));
+   // 图片容器只负责把素材裁成圆角，不再铺一层半透明白底。
+   // 那层白底会在卡片上再画一个矩形，是"弹窗里有三层"的来源。
+   FrameLayout mf=new FrameLayout(c);mf.setClipToOutline(true);mf.setOutlineProvider(new ROutline(mr));media=new ImageView(c);media.setScaleType(ImageView.ScaleType.CENTER_CROP);loadMedia();mf.addView(media,new FrameLayout.LayoutParams(-1,dp(250)));content.addView(mf,new LinearLayout.LayoutParams(-1,dp(250)));
    FrameLayout row=new FrameLayout(c);title=txt(n,22,true);title.setTextColor(Color.rgb(18,20,24));title.setMaxLines(2);title.setGravity(Gravity.CENTER_VERTICAL);FrameLayout.LayoutParams t=new FrameLayout.LayoutParams(-1,dp(58));t.leftMargin=dp(6);t.rightMargin=dp(52);row.addView(title,t);
    TextView close=txt("×",30,false);close.setTextColor(Color.rgb(35,36,40));close.setGravity(Gravity.CENTER);close.setBackground(round(Color.argb(55,0,0,0),dp(22)));close.setContentDescription("关闭");close.setOnClickListener(v->dismiss());FrameLayout.LayoutParams cp=new FrameLayout.LayoutParams(dp(44),dp(44),Gravity.RIGHT|Gravity.CENTER_VERTICAL);cp.rightMargin=dp(2);row.addView(close,cp);content.addView(row,new LinearLayout.LayoutParams(-1,dp(60)));
    battery=txt(format(s),18,true);battery.setTextColor(Color.rgb(28,30,34));battery.setGravity(Gravity.CENTER);content.addView(battery,new LinearLayout.LayoutParams(-1,dp(62)));
@@ -63,7 +65,26 @@ public final class EarPopupWindow {
    return Color.argb(218,v,Math.min(250,v+2),Math.min(252,v+4));
  }
 
- private void applyBlur(){if(Build.VERSION.SDK_INT>=31){try{if(wm!=null&&wm.isCrossWindowBlurEnabled()&&AppPrefs.blurDp(c)>0){lp.setBlurBehindRadius(dp(AppPrefs.blurDp(c)));lp.flags|=WindowManager.LayoutParams.FLAG_BLUR_BEHIND;}}catch(Throwable ignored){}}}
+ /**
+  * 窗口级模糊（FLAG_BLUR_BEHIND）是在整个窗口矩形上渲染的，
+  * 卡片圆角之外也会出现一层矩形磨砂 —— 这就是"弹窗外面还有个矩形"。
+  * 所以默认关闭：blur=0 时彻底清掉这个 flag，窗口区域完全透明，
+  * 只有卡片本身的圆角形状会画出来。想用真模糊就把滑块拖上去。
+  */
+ private void applyBlur(){
+  if(lp==null)return;
+  if(Build.VERSION.SDK_INT>=31){
+   try{
+    if(wm!=null&&wm.isCrossWindowBlurEnabled()&&AppPrefs.blurDp(c)>0){
+     lp.setBlurBehindRadius(dp(AppPrefs.blurDp(c)));
+     lp.flags|=WindowManager.LayoutParams.FLAG_BLUR_BEHIND;
+    }else{
+     lp.setBlurBehindRadius(0);
+     lp.flags&=~WindowManager.LayoutParams.FLAG_BLUR_BEHIND;
+    }
+   }catch(Throwable ignored){}
+  }
+ }
 
  private void syncDrag(){
    if(root==null||lp==null)return;

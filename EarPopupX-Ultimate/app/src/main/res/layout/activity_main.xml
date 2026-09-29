@@ -14,10 +14,8 @@
 
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:background="@drawable/card" android:elevation="4dp" android:orientation="vertical">
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="权限与后台" android:textColor="@color/ink" android:textSize="17sp" android:textStyle="bold"/>
-        <Button android:id="@+id/overlay" android:layout_width="match_parent" android:layout_height="46dp" android:layout_marginTop="10dp" android:background="@drawable/button" android:text="悬浮窗权限" android:textColor="@color/ink"/>
-        <Button android:id="@+id/bluetooth" android:layout_width="match_parent" android:layout_height="46dp" android:layout_marginTop="8dp" android:background="@drawable/button" android:text="蓝牙权限" android:textColor="@color/ink"/>
-        <Button android:id="@+id/notifications" android:layout_width="match_parent" android:layout_height="46dp" android:layout_marginTop="8dp" android:background="@drawable/button" android:text="通知权限" android:textColor="@color/ink"/>
-        <Button android:id="@+id/battery" android:layout_width="match_parent" android:layout_height="46dp" android:layout_marginTop="8dp" android:background="@drawable/button" android:text="关闭电池优化" android:textColor="@color/ink"/>
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:text="下面这一个按钮会用 ADB 一次性完成：悬浮窗、蓝牙、通知、后台运行、电池优化白名单、解除隐藏 API 限制。" android:textColor="@color/muted" android:textSize="12.5sp" android:lineSpacingExtra="2dp"/>
+        <Button android:id="@+id/adbOneClick" android:layout_width="match_parent" android:layout_height="50dp" android:layout_marginTop="10dp" android:background="@drawable/accent_button" android:text="一键 ADB 授权" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold"/>
     </LinearLayout>
 
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:background="@drawable/card" android:elevation="4dp" android:orientation="vertical">
@@ -42,7 +40,7 @@
         <SeekBar android:id="@+id/heightBar" android:layout_width="match_parent" android:layout_height="38dp"/>
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="圆角" android:textColor="@color/ink" android:textSize="13.5sp"/>
         <SeekBar android:id="@+id/radiusBar" android:layout_width="match_parent" android:layout_height="38dp"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="动态模糊" android:textColor="@color/ink" android:textSize="13.5sp"/>
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="动态模糊（0=关闭，拖上去会是矩形磨砂）" android:textColor="@color/ink" android:textSize="13.5sp"/>
         <SeekBar android:id="@+id/blurBar" android:layout_width="match_parent" android:layout_height="38dp"/>
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="背景压暗" android:textColor="@color/ink" android:textSize="13.5sp"/>
         <SeekBar android:id="@+id/dimBar" android:layout_width="match_parent" android:layout_height="38dp"/>

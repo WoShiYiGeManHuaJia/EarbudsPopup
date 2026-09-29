@@ -7,10 +7,7 @@ public final class MainActivity extends Activity{
  @Override public void onCreate(Bundle b0){super.onCreate(b0);setContentView(R.layout.activity_main);bind();}
  private void bind(){
   status=findViewById(R.id.status);pos=findViewById(R.id.posLabel);
-  findViewById(R.id.overlay).setOnClickListener(v->overlay());
-  findViewById(R.id.bluetooth).setOnClickListener(v->bt());
-  findViewById(R.id.notifications).setOnClickListener(v->notifyPerm());
-  findViewById(R.id.battery).setOnClickListener(v->batteryOpt());
+  findViewById(R.id.adbOneClick).setOnClickListener(v->runAdbOneClick());
   findViewById(R.id.start).setOnClickListener(v->startMonitor());
   findViewById(R.id.stop).setOnClickListener(v->stopMonitor());
   findViewById(R.id.test).setOnClickListener(v->{test();});
@@ -75,22 +72,17 @@ public final class MainActivity extends Activity{
    if(host==null)return;
    int pad=(int)(8*getResources().getDisplayMetrics().density+.5f);
 
-   Button one=new Button(this);one.setText("① 一键执行（Stellar / Shizuku）");
-   one.setBackgroundResource(R.drawable.accent_button);one.setTextColor(Color.WHITE);one.setTextSize(15);one.setTypeface(null,1);
-   one.setOnClickListener(v->runAdbOneClick());
-   host.addView(one,lpBtnBig());
-
-   Button sh=new Button(this);sh.setText("② 复制命令到 Stellar");
+   Button sh=new Button(this);sh.setText("① 复制命令到 Stellar 终端");
    sh.setBackgroundResource(R.drawable.button);sh.setTextColor(Color.parseColor("#17181C"));
    sh.setOnClickListener(v->{ClipboardManager cm=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText("sh",shellScript()));Toast.makeText(this,"已复制，粘贴到 Stellar 执行",Toast.LENGTH_LONG).show();});
    host.addView(sh,lpBtn());
 
-   Button pc=new Button(this);pc.setText("③ 复制电脑版 ADB 命令");
+   Button pc=new Button(this);pc.setText("② 复制电脑版 ADB 命令");
    pc.setBackgroundResource(R.drawable.button);pc.setTextColor(Color.parseColor("#17181C"));
    pc.setOnClickListener(v->{ClipboardManager cm=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText("adb",adbScript()));Toast.makeText(this,"已复制，粘贴到电脑终端执行",Toast.LENGTH_LONG).show();});
    host.addView(pc,lpBtn());
 
-   Button scan=new Button(this);scan.setText("④ 查看当前已连接耳机");
+   Button scan=new Button(this);scan.setText("③ 查看当前已连接耳机");
    scan.setBackgroundResource(R.drawable.button);scan.setTextColor(Color.parseColor("#17181C"));
    scan.setOnClickListener(v->showConnected());
    host.addView(scan,lpBtn());
@@ -140,19 +132,34 @@ public final class MainActivity extends Activity{
   new AlertDialog.Builder(this).setTitle("当前已配对设备").setMessage(sb.toString()).setPositiveButton("关闭",null).show();
  }
 
+ /** 尝试拉起 Shizuku / Stellar；返回是否成功打开 */
+ private boolean openStellar(){
+  String[] pkgs={"moe.shizuku.stellar","moe.shizuku.privileged.api","rikka.shizuku.stellar","com.stellar.shizuku"};
+  for(String p:pkgs){
+   try{
+    Intent i=getPackageManager().getLaunchIntentForPackage(p);
+    if(i!=null){i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);startActivity(i);return true;}
+   }catch(Throwable ignored){}
+  }
+  return false;
+ }
+
  private void runAdbOneClick(){
   if(!ShizukuHelper.isServiceRunning()){
-   new AlertDialog.Builder(this)
+   AlertDialog.Builder b=new AlertDialog.Builder(this)
     .setTitle("未检测到 Shizuku / Stellar 服务")
-    .setMessage("内置运行库已在，但需要服务端把权限通道交给本应用：\n\n"
-      +"1. 打开 Stellar，启动服务（无线调试 或 Root）\n"
-      +"2. Stellar → 设置 → 打开「允许 Shizuku」\n"
-      +"3. Stellar → 授权应用 → 找到 EarPopup X → 允许\n"
-      +"4. 回到本页再点一次这个按钮\n\n"
-      +"不想折腾就用按钮②复制命令，在 Stellar 的「命令」里执行一次。")
-    .setPositiveButton("知道了",null)
-    .setNeutralButton("复制命令",(d,w)->{ClipboardManager cm=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText("sh",shellScript()));Toast.makeText(this,"已复制",Toast.LENGTH_SHORT).show();})
-    .show();
+    .setMessage("本应用内部已内置运行库，但权限通道必须由服务端交给它：\n\n"
+      +"1. 打开 Stellar（或 Shizuku），把服务跑起来（无线调试 / Root）\n"
+      +"2. 服务端里 → 设置 → 打开「允许 Shizuku」（Stellar 需要这一步）\n"
+      +"3. 服务端 → 授权应用 → 找到 EarPopup X → 允许\n"
+      +"4. 回到本页再点一次「一键 ADB 授权」\n\n"
+      +"也可以直接复制命令，在 Stellar 的终端里粘贴执行一次。")
+    .setPositiveButton("打开 Stellar / Shizuku",(d,w)->{
+      if(!openStellar())Toast.makeText(this,"没找到 Stellar / Shizuku，请先安装",Toast.LENGTH_LONG).show();
+    })
+    .setNeutralButton("复制命令",(d,w)->{ClipboardManager cm=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText("sh",shellScript()));Toast.makeText(this,"已复制，粘贴到 Stellar 终端执行",Toast.LENGTH_LONG).show();})
+    .setNegativeButton("关闭",null);
+   b.show();
    return;
   }
   if(!ShizukuHelper.hasPermission()){
