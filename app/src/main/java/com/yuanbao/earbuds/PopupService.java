@@ -636,53 +636,32 @@ public class PopupService extends Service {
         }
     }
 
-    /** 迷你窗文本绑定：读不到真实电量就显示 --%，绝不编造数字 */
-    private void bindMini(View v, String name, BatteryLevels levels) {
-        if (v == null) return;
-        TextView mn = v.findViewById(R.id.miniName);
-        TextView mb = v.findViewById(R.id.miniBattery);
-        if (mn != null) {
-            mn.setText((name == null || name.isEmpty()) ? "耳机已连接" : name);
-        }
-        if (mb != null) {
-            int val = -1;
-            if (levels != null) {
-                if (BatteryLevels.valid(levels.left)) val = levels.left;
-                else if (BatteryLevels.valid(levels.right)) val = levels.right;
-                else if (BatteryLevels.valid(levels.overall)) val = levels.overall;
-            }
-            mb.setText(BatteryLevels.valid(val) ? (val + "%") : "--%");
-        }
-        v.setAlpha(0f);
-        v.animate().alpha(1f).setDuration(180).start();
-    }
-
     private void showOverlay(String name, String address, BatteryLevels levels) {
         dismiss();
         lastOverlayShownAt = System.currentTimeMillis();
         if (!android.provider.Settings.canDrawOverlays(this)) return;
 
-        // 横屏迷你窗：大图在横屏下会挡住游戏 / 视频画面，
-        // 这里改用只含「设备名 + 一个真实电量」的小条。
-        final boolean mini = (prefs.landscapeMode() == 2) && isLandscape(this);
-        View v;
-        int widthPx;
-        int heightPx;
+        // 横屏与竖屏共用 popup_card，不做单独的迷你窗：
+        // 横屏时把卡片整体等比缩小（宽度乘系数，高度随宽度按同一公式变小），
+        // 图片、设备名、左右耳电量全都保留。
+        final boolean scaled = (prefs.landscapeMode() == 2) && isLandscape(this);
+        View v = LayoutInflater.from(this).inflate(R.layout.popup_card, null);
+        PopupRenderer.bind(this, v, name, levels, prefs, this::dismiss);
         float dens = getResources().getDisplayMetrics().density;
-        if (mini) {
-            v = LayoutInflater.from(this).inflate(R.layout.popup_mini, null);
-            bindMini(v, name, levels);
-            widthPx = ViewGroup.LayoutParams.WRAP_CONTENT;
-            heightPx = ViewGroup.LayoutParams.WRAP_CONTENT;
-        } else {
-            v = LayoutInflater.from(this).inflate(R.layout.popup_card, null);
-            PopupRenderer.bind(this, v, name, levels, prefs, this::dismiss);
-            // 高度必须写死：媒体区子 View 是 match_parent，
-            // 用 WRAP_CONTENT 会让卡片高度失控（表现为比例奇怪）。
-            // 算法与 PopupRenderer / PopupActivity 保持一致。
-            float r = Math.max(0.40f, Math.min(0.94f, prefs.imageRatio()));
-            widthPx = (int) dp(prefs.widthDp());
-            heightPx = (int) (widthPx * (0.45f + r * 0.33f));
+        // 高度必须写死：媒体区子 View 是 match_parent，
+        // 用 WRAP_CONTENT 会让卡片高度失控（表现为比例奇怪）。
+        // 算法与 PopupRenderer / PopupActivity 保持一致。
+        float scale = scaled ? prefs.landscapeScale() : 1f;
+        float r = Math.max(0.40f, Math.min(0.94f, prefs.imageRatio()));
+        int widthPx = (int) (dp(prefs.widthDp()) * scale);
+        int heightPx = (int) (widthPx * (0.45f + r * 0.33f));
+        // 兜底：横屏屏幕高度小，卡片不能超过可视高度 80%，否则顶出屏幕
+        int screenH0 = getResources().getDisplayMetrics().heightPixels;
+        int maxH = (int) (screenH0 * 0.80f);
+        if (heightPx > maxH && heightPx > 0) {
+            float k = maxH / (float) heightPx;
+            widthPx = (int) (widthPx * k);
+            heightPx = maxH;
         }
         currentRoot = v;
         currentName = name;
@@ -705,9 +684,7 @@ public class PopupService extends Service {
         int vpos = prefs.verticalPos();
         p.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
         int screenH = getResources().getDisplayMetrics().heightPixels;
-        // 迷你窗是 WRAP_CONTENT，拿不到真实高度，用 40dp 估算参与定位
-        int hForCalc = mini ? (int) (40 * dens) : heightPx;
-        p.y = topOffsetForVPos(vpos, hForCalc, screenH, dens, prefs.bottomPadDp());
+        p.y = topOffsetForVPos(vpos, heightPx, screenH, dens, prefs.bottomPadDp());
 
         try {
             wm.addView(v, p);

@@ -538,6 +538,21 @@ public class Prefs {
         sp.edit().putInt("landscape_mode", Math.max(0, Math.min(2, v))).apply();
     }
 
+    /**
+     * 横屏时弹窗的整体缩放系数。
+     *
+     * 卡片高度是按宽度算出来的（h = w * (0.45 + 图片比例 * 0.33)），
+     * 所以只要缩放宽度，高度会按同一比例跟着变 —— 就是「等比例缩小版」，
+     * 图片、设备名、左右耳电量一应俱全，只是整体变小，不为横屏单独做一套布局。
+     */
+    public float landscapeScale() {
+        return sp.getFloat("landscape_scale", 0.68f);
+    }
+
+    public void setLandscapeScale(float v) {
+        sp.edit().putFloat("landscape_scale", Math.max(0.40f, Math.min(1.0f, v))).apply();
+    }
+
     /** 横屏时是否完全不弹（landscapeMode==1 的快捷读写） */
     public boolean landscapeSkip() {
         return landscapeMode() == 1;

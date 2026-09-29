@@ -74,6 +74,7 @@ public class MainActivity extends AppCompatActivity {
     private View swatchBg, swatchText, swatchAccent;
     private TextView tvBg, tvTextColor, tvAccent;
     private TextView tvWidth, tvRadius, tvImgH, tvDuration, tvPos, tvAnim;
+    private TextView tvLandscapeScale;
     private SwitchMaterial swAutoColor;
 
     // 设置
@@ -224,6 +225,7 @@ public class MainActivity extends AppCompatActivity {
         setupColorPickers();
         tvWidth = findViewById(R.id.tvWidth);
         tvRadius = findViewById(R.id.tvRadius);
+        tvLandscapeScale = findViewById(R.id.tvLandscapeScale);
         tvImgH = findViewById(R.id.tvImgH);
         tvDuration = findViewById(R.id.tvDuration);
         tvPos = findViewById(R.id.tvPos);
@@ -306,6 +308,9 @@ public class MainActivity extends AppCompatActivity {
         tvEngine.setText(new String[]{"系统级", "悬浮窗", "智能"}[prefs.engine()]);
         tvDim.setText(Math.round(prefs.dimAmount() * 100) + "%");
         tvBlur.setText(prefs.blurRadius() + " dp");
+        if (tvLandscapeScale != null) {
+            tvLandscapeScale.setText(Math.round(prefs.landscapeScale() * 100) + "%");
+        }
     }
 
     // ---------------- 事件 ----------------
@@ -376,6 +381,12 @@ public class MainActivity extends AppCompatActivity {
                 val -> prefs.setDimAmount(val / 100f)));
         findViewById(R.id.rowBlur).setOnClickListener(v -> showSlider("背景模糊半径", "dp",
                 0, 40, prefs.blurRadius(), val -> prefs.setBlurRadius(val)));
+        View rowScale = findViewById(R.id.rowLandscapeScale);
+        if (rowScale != null) {
+            rowScale.setOnClickListener(v -> showSlider("横屏缩放比例", "%",
+                    40, 100, Math.round(prefs.landscapeScale() * 100),
+                    val -> prefs.setLandscapeScale(val / 100f)));
+        }
 
         // 单选项
         findViewById(R.id.rowPos).setOnClickListener(v -> showPositionSlider());

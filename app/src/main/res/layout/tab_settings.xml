@@ -365,8 +365,39 @@
                 android:id="@+id/swLandscapeMini"
                 style="@style/AppItem"
                 android:drawableStart="@drawable/ic_size"
-                android:text="横屏时显示迷你小窗"
+                android:text="横屏时缩小弹窗"
                 android:textSize="15.5sp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="@color/ui_divider" />
+
+            <LinearLayout
+                android:id="@+id/rowLandscapeScale"
+                style="@style/AppRow">
+
+                <ImageView
+                    style="@style/AppRowIcon"
+                    android:contentDescription="缩放"
+                    android:src="@drawable/ic_size" />
+
+                <LinearLayout style="@style/AppRowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="横屏缩放比例" />
+
+                    <TextView
+                        style="@style/TextRowSub"
+                        android:text="相对竖屏弹窗大小整体等比缩小" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvLandscapeScale"
+                    style="@style/TextRowValue"
+                    android:text="68%" />
+            </LinearLayout>
 
             <View
                 android:layout_width="match_parent"
@@ -389,7 +420,7 @@
                 android:paddingTop="10dp"
                 android:paddingBottom="14dp"
                 android:lineSpacingExtra="3dp"
-                android:text="迷你小窗只显示「设备名 + 一个真实电量」，不铺大图。两个开关都关时，横屏照常弹大窗；都开时以「完全不弹」优先。"
+                android:text="缩小的是整张卡：图片、设备名、左右耳电量全都保留，只是整体变小，不是只留一行文字的小条。两个开关都关时，横屏按原尺寸弹；都开时以「完全不弹」优先。"
                 android:textColor="@color/ui_text_secondary"
                 android:textSize="11.5sp" />
         </LinearLayout>

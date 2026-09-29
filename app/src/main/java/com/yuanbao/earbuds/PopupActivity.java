@@ -56,20 +56,19 @@ public class PopupActivity extends AppCompatActivity {
         lastShownAt = System.currentTimeMillis();
 
         setupWindow();
-        if (useMini()) {
-            setContentView(R.layout.popup_mini);
-            applyMini(getIntent());
-        } else {
-            setContentView(R.layout.activity_popup);
-            applyIntent(getIntent());
-        }
+        // 横屏与竖屏共用同一套布局（popup_card），不做单独的迷你窗：
+        // 用户要的是「正常弹窗的等比例缩小版」，图片、设备名、左右耳电量
+        // 都得在，只是整体变小。缩放体现在卡片宽度上，高度由宽度推算，
+        // 于是整张卡等比缩小。
+        setContentView(R.layout.activity_popup);
+        applyIntent(getIntent());
         // setContentView 才触发 PhoneWindow.generateLayout()，
         // 会在那里按主题重新加回 FLAG_DIM_BEHIND，所以必须在之后再清一次。
         clearDimBehind();
     }
 
-    /** 横屏 + 用户选了迷你模式 */
-    private boolean useMini() {
+    /** 横屏且用户选了「缩放小窗」 */
+    private boolean useLandscapeScale() {
         return prefs != null && prefs.landscapeMode() == 2 && isLandscape();
     }
 
@@ -94,45 +93,6 @@ public class PopupActivity extends AppCompatActivity {
         if (decor != null) decor.setBackgroundColor(Color.TRANSPARENT);
     }
 
-    /** 迷你窗渲染：只有设备名 + 一个真实电量，读不到就 --% */
-    private void applyMini(Intent it) {
-        if (it == null) return;
-        String name = it.getStringExtra(PopupService.EXTRA_NAME);
-        int overall = it.getIntExtra(PopupService.EXTRA_OVERALL, -1);
-        int left = it.getIntExtra(PopupService.EXTRA_LEFT, -1);
-        int right = it.getIntExtra(PopupService.EXTRA_BATTERY, -1);
-
-        TextView tvName = findViewById(R.id.miniName);
-        TextView tvBat = findViewById(R.id.miniBattery);
-        if (tvName != null) {
-            tvName.setText((name == null || name.isEmpty()) ? "耳机已连接" : name);
-        }
-        if (tvBat != null) {
-            int v = BatteryLevels.valid(left) ? left
-                    : (BatteryLevels.valid(right) ? right : overall);
-            tvBat.setText(BatteryLevels.valid(v) ? (v + "%") : "--%");
-        }
-
-        View mini = findViewById(R.id.miniCard);
-        if (mini != null) {
-            float dens = getResources().getDisplayMetrics().density;
-            int h = (int) (40 * dens);
-            int screenH = getResources().getDisplayMetrics().heightPixels;
-            android.widget.FrameLayout.LayoutParams lp =
-                    new android.widget.FrameLayout.LayoutParams(
-                            ViewGroup.LayoutParams.WRAP_CONTENT,
-                            ViewGroup.LayoutParams.WRAP_CONTENT);
-            lp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-            lp.topMargin = PopupService.topOffsetForVPos(
-                    prefs.verticalPos(), h, screenH, dens, prefs.bottomPadDp());
-            mini.setLayoutParams(lp);
-            mini.setAlpha(0f);
-            mini.animate().alpha(1f).setDuration(180).start();
-        }
-
-        main.postDelayed(this::close, prefs.durationMs());
-    }
-
     /**
      * 点击弹窗外部立即关闭。
      *
@@ -151,7 +111,6 @@ public class PopupActivity extends AppCompatActivity {
             }
             if (action == MotionEvent.ACTION_DOWN) {
                 View target = findViewById(R.id.card);
-                if (target == null) target = findViewById(R.id.miniCard);
                 if (target != null && target.getWidth() > 0) {
                     int[] loc = new int[2];
                     target.getLocationOnScreen(loc);
@@ -194,13 +153,7 @@ public class PopupActivity extends AppCompatActivity {
         lastShownAt = System.currentTimeMillis();
         // 先取消上一次的自动关闭计时，再重新走一遍绑定
         main.removeCallbacksAndMessages(null);
-        boolean wantMini = useMini();
-        boolean miniNow = findViewById(R.id.miniCard) != null;
-        if (wantMini != miniNow) {
-            setContentView(wantMini ? R.layout.popup_mini : R.layout.activity_popup);
-        }
-        if (wantMini) applyMini(intent);
-        else applyIntent(intent);
+        applyIntent(intent);
         clearDimBehind();
     }
 
@@ -223,12 +176,24 @@ public class PopupActivity extends AppCompatActivity {
         View card = findViewById(R.id.card);
         if (card != null) {
             float dens = getResources().getDisplayMetrics().density;
-            int w = (int) (prefs.widthDp() * dens);
+            // 横屏缩放：宽度乘系数，高度由宽度按同一公式推出，
+            // 于是整张卡等比缩小（图片、设备名、左右耳电量全保留）。
+            float scale = useLandscapeScale() ? prefs.landscapeScale() : 1f;
+            int w = (int) (prefs.widthDp() * dens * scale);
             // 必须用固定高度：媒体区子 View 是 match_parent，
             // 若这里给 WRAP_CONTENT，卡片高度会失控（表现为比例奇怪）。
             // 高度算法与 PopupRenderer 保持一致。
             float r = Math.max(0.40f, Math.min(0.94f, prefs.imageRatio()));
             int h = (int) (w * (0.45f + r * 0.33f));
+            // 兜底：横屏时屏幕高度小，卡片再怎么缩也不能超过可视高度的 80%，
+            // 否则会顶出屏幕外。按高度反推宽度，保持宽高比不变。
+            int screenH0 = getResources().getDisplayMetrics().heightPixels;
+            int maxH = (int) (screenH0 * 0.80f);
+            if (h > maxH && h > 0) {
+                float k = maxH / (float) h;
+                w = (int) (w * k);
+                h = maxH;
+            }
             android.widget.FrameLayout.LayoutParams lp =
                     new android.widget.FrameLayout.LayoutParams(w, h);
             // 与悬浮窗引擎一致：连续垂直位置（0=贴顶 100=贴底）
