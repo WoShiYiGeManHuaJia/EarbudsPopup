@@ -19,6 +19,9 @@ public final class AppPrefs {
     public static int blurDp(Context c){return p(c).getInt("blur",0);} public static void setBlurDp(Context c,int v){p(c).edit().putInt("blur",clamp(v,0,80)).apply();}
     public static int dimPercent(Context c){return p(c).getInt("dim",10);} public static void setDimPercent(Context c,int v){p(c).edit().putInt("dim",clamp(v,0,40)).apply();}
     public static int durationSec(Context c){return p(c).getInt("duration",7);} public static void setDurationSec(Context c,int v){p(c).edit().putInt("duration",clamp(v,2,30)).apply();}
+    /** 横屏时的行为：0=不弹窗，1=小弹窗（只显示耳机名 + 电量） */
+    public static int landscapeMode(Context c){return p(c).getInt("landscape",1);}
+    public static void setLandscapeMode(Context c,int v){p(c).edit().putInt("landscape",(v==0?0:1)).apply();}
     public static String media(Context c){return p(c).getString("media",null);} public static void setMedia(Context c,Uri u){SharedPreferences.Editor e=p(c).edit(); if(u==null)e.remove("media");else e.putString("media",u.toString());e.apply();}
     public static void resetPopup(Context c){p(c).edit().putInt("x",0).putInt("y",-120).putInt("width",94).putInt("height",430).putInt("radius",34).putInt("blur",0).putInt("dim",10).putInt("duration",7).apply();}
     private static int clamp(int v,int a,int b){return Math.max(a,Math.min(b,v));}

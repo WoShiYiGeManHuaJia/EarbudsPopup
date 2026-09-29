@@ -233,5 +233,17 @@ public final class BluetoothMonitorService extends Service {
         super.onDestroy();
     }
 
+    /** 用户从最近任务划掉本应用时，系统会连带清掉任务栈。这里立刻重新拉起服务，
+     *  避免"一离开软件就没有弹窗"。Manifest 里同时声明了 stopWithTask=false。 */
+    @Override public void onTaskRemoved(Intent rootIntent){
+        try{
+            if(AppPrefs.enabled(this)&&promisesMet()){
+                Intent i=new Intent(this,BluetoothMonitorService.class);
+                if(Build.VERSION.SDK_INT>=26) startForegroundService(i); else startService(i);
+            }
+        }catch(Throwable ignored){}
+        super.onTaskRemoved(rootIntent);
+    }
+
     @Override public IBinder onBind(Intent i){ return null; }
 }

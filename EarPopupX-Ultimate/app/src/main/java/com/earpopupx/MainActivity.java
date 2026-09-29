@@ -72,6 +72,17 @@ public final class MainActivity extends Activity{
    if(host==null)return;
    int pad=(int)(8*getResources().getDisplayMetrics().density+.5f);
 
+   android.widget.RadioGroup lg=new android.widget.RadioGroup(this);lg.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+   android.widget.RadioButton o0=new android.widget.RadioButton(this);o0.setText("横屏不弹窗");
+   android.widget.RadioButton o1=new android.widget.RadioButton(this);o1.setText("横屏小弹窗（名 + 电量）");
+   lg.addView(o0);lg.addView(o1);lg.check(AppPrefs.landscapeMode(this)==0?o0.getId():o1.getId());
+   lg.setOnCheckedChangeListener((g,id)->{AppPrefs.setLandscapeMode(this,id==o0.getId()?0:1);Toast.makeText(this,id==o0.getId()?"横屏将不弹窗":"横屏将显示小弹窗",Toast.LENGTH_SHORT).show();});
+   TextView lh=new TextView(this);lh.setText("横屏行为");lh.setTextSize(15);lh.setTypeface(null,1);
+   lh.setTextColor(Color.parseColor("#17181C"));lh.setPadding(pad,pad,pad,pad);host.addView(lh);
+   host.addView(lg);
+   TextView ln=new TextView(this);ln.setText("小弹窗只在横屏出现：显示耳机名 + 真实电量，带背景模糊，尺寸固定。");
+   ln.setTextSize(11);ln.setTextColor(Color.parseColor("#74767D"));ln.setPadding(pad,0,pad,0);host.addView(ln);
+
    Button sh=new Button(this);sh.setText("① 复制命令到 Stellar 终端");
    sh.setBackgroundResource(R.drawable.button);sh.setTextColor(Color.parseColor("#17181C"));
    sh.setOnClickListener(v->{ClipboardManager cm=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText("sh",shellScript()));Toast.makeText(this,"已复制，粘贴到 Stellar 执行",Toast.LENGTH_LONG).show();});
@@ -201,7 +212,7 @@ public final class MainActivity extends Activity{
  @Override protected void onActivityResult(int r0,int c,Intent d){super.onActivityResult(r0,c,d);if(r0==REQ_MEDIA&&c==RESULT_OK&&d!=null&&d.getData()!=null){try{getContentResolver().takePersistableUriPermission(d.getData(),Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Throwable ignored){}AppPrefs.setMedia(this,d.getData());refreshPopup();Toast.makeText(this,"素材已保存",Toast.LENGTH_SHORT).show();}}
  void startMonitor(){if(!Settings.canDrawOverlays(this)){overlay();Toast.makeText(this,"开启悬浮窗后再回来启动",Toast.LENGTH_LONG).show();return;}if(Build.VERSION.SDK_INT>=31&&checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED){bt();return;}AppPrefs.setEnabled(this,true);auto.setChecked(true);try{Intent i=new Intent(this,BluetoothMonitorService.class);if(Build.VERSION.SDK_INT>=26)startForegroundService(i);else startService(i);Toast.makeText(this,"耳机监听已启动",Toast.LENGTH_SHORT).show();}catch(Throwable t){Toast.makeText(this,"启动失败：请先在本页面保持可见并完成权限授权",Toast.LENGTH_LONG).show();}}
  void stopMonitor(){AppPrefs.setEnabled(this,false);auto.setChecked(false);try{stopService(new Intent(this,BluetoothMonitorService.class));}catch(Throwable ignored){}EarPopupWindow.shared(this).dismiss();}
- void test(){if(!Settings.canDrawOverlays(this)){overlay();return;}EarPopupWindow.shared(this).show("测试耳机 · EarPopup X",BatteryState.unknown("测试模式"));}
+ void test(){if(!Settings.canDrawOverlays(this)){overlay();return;}EarPopupWindow.shared(this).show("测试耳机 · EarPopup X",BatteryState.unknown("测试模式"),true);}
  void refreshPopup(){EarPopupWindow.shared(this).refreshLayout();}
  void status(){StringBuilder s=new StringBuilder();s.append(Settings.canDrawOverlays(this)?"● 悬浮窗已开启\n":"○ 悬浮窗未开启\n");if(Build.VERSION.SDK_INT>=31)s.append(checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED?"● 蓝牙权限已开启\n":"○ 蓝牙权限未开启\n");if(Build.VERSION.SDK_INT>=33)s.append(checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED?"● 通知权限已开启\n":"○ 通知权限未开启\n");s.append(AppPrefs.enabled(this)?"● 自动弹窗已启用\n":"○ 自动弹窗未启用\n");
   if(ShizukuHelper.isServiceRunning())s.append(ShizukuHelper.hasPermission()?"● Shizuku/Stellar 已授权（"+ShizukuHelper.serverInfo()+"）":"○ Shizuku/Stellar 已运行，但未授权本应用");
