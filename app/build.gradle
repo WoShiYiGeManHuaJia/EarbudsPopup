@@ -10,8 +10,8 @@ android {
         applicationId "com.yuanbao.earbuds"
         minSdk 29
         targetSdk 34
-        versionCode 150
-        versionName "1.5"
+        versionCode 160
+        versionName "1.6"
     }
 
     signingConfigs {
@@ -28,8 +28,14 @@ android {
 
     buildTypes {
         release {
-            minifyEnabled false
-            shrinkResources false
+            // 开启 R8 代码压缩：第三方库（Material / Glide / AppCompat / Shizuku）
+            // 全量打包会让 dex 膨胀到 8.8MB，方法数逼近 65536 上限。
+            // proguard-rules.pro 里已 keep 住本 App 的全部代码，
+            // 所以这里只缩减用不到的第三方代码，自身行为完全不变。
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
+                    'proguard-rules.pro'
             if (System.getenv("KEYSTORE_FILE")) {
                 signingConfig signingConfigs.release
             }

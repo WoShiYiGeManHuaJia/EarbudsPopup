@@ -204,6 +204,7 @@ public class PopupService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        CrashGuard.install(this);
         prefs = new Prefs(this);
         // 弹窗渲染用静态 PrefsHolder 取配置，必须在服务里也初始化，
         // 否则开机自启时用户设的图片缩放会丢失（拿到 null 回退成默认值）

@@ -131,6 +131,9 @@ public class MainActivity extends AppCompatActivity {
         // 这里固定用高对比度配色，保证任何壁纸下都看得清。
         setTheme(R.style.AppTheme);
         super.onCreate(savedInstanceState);
+        // 崩溃捕获挂在组件里，不用自定义 Application：
+        // 启动路径上多一个类就多一个崩溃点，这里保持启动链最短。
+        CrashGuard.install(this);
         setContentView(R.layout.activity_main);
         prefs = new Prefs(this);
         PopupRenderer.PrefsHolder.init(this);
