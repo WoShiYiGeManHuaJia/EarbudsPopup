@@ -4,50 +4,12 @@ plugins {
 
 android {
     namespace 'com.earpopupx'
-    compileSdk 34
-
+    compileSdk 35
     defaultConfig {
         applicationId 'com.earpopupx'
         minSdk 29
-        targetSdk 34
+        targetSdk 35
         versionCode 200
         versionName '2.0.0'
-    }
-
-    signingConfigs {
-        release {
-            def ksPath = System.getenv("KEYSTORE_FILE")
-            if (ksPath && file(ksPath).exists()) {
-                storeFile file(ksPath)
-                storePassword System.getenv("KEYSTORE_PASSWORD")
-                keyAlias System.getenv("KEY_ALIAS")
-                keyPassword System.getenv("KEY_PASSWORD")
-            }
-        }
-    }
-
-    buildTypes {
-        release {
-            minifyEnabled false
-            shrinkResources false
-            if (System.getenv("KEYSTORE_FILE")) {
-                signingConfig signingConfigs.release
-            }
-        }
-        debug {
-            if (System.getenv("KEYSTORE_FILE")) {
-                signingConfig signingConfigs.release
-            }
-        }
-    }
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
-    }
-
-    lint {
-        abortOnError false
-        checkReleaseBuilds false
     }
 }
