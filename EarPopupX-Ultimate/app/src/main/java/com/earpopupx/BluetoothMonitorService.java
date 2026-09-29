@@ -12,9 +12,19 @@ import java.util.*;
 public final class BluetoothMonitorService extends Service {
     public static final String ACTION_STOP="com.earpopupx.STOP";
     private static final String CHANNEL="earpopupx_monitor";
+    private static final int RAW_MAX = 60;
+
+    /** Raw protocol lines from the last connection, shown in diagnostics. */
+    private static final List<String> RAW_LOG = Collections.synchronizedList(new ArrayList<String>());
+    public static List<String> rawLog(){ return new ArrayList<String>(RAW_LOG); }
+    public static void record(String line){ synchronized(RAW_LOG){ if(RAW_LOG.size()>=RAW_MAX) RAW_LOG.remove(0); RAW_LOG.add(line);} }
+
     private final Handler main=new Handler(Looper.getMainLooper());
-    private BroadcastReceiver receiver; private BluetoothBatteryReader reader; private EarPopupWindow popup; private String currentAddress; private boolean started;
-    @Override public void onCreate(){super.onCreate(); createChannel(); reader=new BluetoothBatteryReader(this); popup=EarPopupWindow.shared(this); registerBluetoothReceiver();}
+    private BroadcastReceiver receiver; private BluetoothBatteryReader reader;
+    private VendorBatterySniffer sniffer; private EarPopupWindow popup;
+    private String currentAddress; private boolean started; private boolean gotValue;
+
+    @Override public void onCreate(){super.onCreate(); createChannel(); reader=new BluetoothBatteryReader(this); sniffer=new VendorBatterySniffer(this); popup=EarPopupWindow.shared(this); registerBluetoothReceiver();}
     @Override public int onStartCommand(Intent intent,int flags,int id){
         if(ACTION_STOP.equals(intent==null?null:intent.getAction())){stopSelf();return START_NOT_STICKY;}
         if(!promisesMet()) { stopSelf(); return START_NOT_STICKY; }
@@ -33,20 +43,54 @@ public final class BluetoothMonitorService extends Service {
         receiver=new BroadcastReceiver(){@Override public void onReceive(Context c,Intent i){BluetoothDevice d=getDevice(i); if(d==null)return; String a=i.getAction();
             if(BluetoothDevice.ACTION_ACL_CONNECTED.equals(a)){main.post(()->handleConnected(d));}
             else if(BluetoothDevice.ACTION_ACL_DISCONNECTED.equals(a)){main.post(()->{if(same(d)){currentAddress=null;popup.dismiss();}});}
-            else if("android.bluetooth.device.action.BATTERY_LEVEL_CHANGED".equals(a)){int v=i.getIntExtra("android.bluetooth.device.extra.BATTERY_LEVEL",-1);if(valid(v)&&same(d))main.post(()->popup.update(safeName(d),new BatteryState(v,-1,-1,-1,false,false,false,"系统蓝牙")));}
+            else if("android.bluetooth.device.action.BATTERY_LEVEL_CHANGED".equals(a)){
+                int v=i.getIntExtra("android.bluetooth.device.extra.BATTERY_LEVEL",-1);
+                if(valid(v)&&same(d)) main.post(()->{ if(!gotValue){ gotValue=true; } popup.update(safeName(d),new BatteryState(v,-1,-1,-1,false,false,false,"系统蓝牙广播")); });
+            }
         }};
         IntentFilter f=new IntentFilter();f.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);f.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);f.addAction("android.bluetooth.device.action.BATTERY_LEVEL_CHANGED");
         if(Build.VERSION.SDK_INT>=33)registerReceiver(receiver,f,Context.RECEIVER_EXPORTED);else registerReceiver(receiver,f);
     }
-    private void handleConnected(BluetoothDevice d){if(!AppPrefs.enabled(this))return;if(Build.VERSION.SDK_INT>=31&&checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED)return;String addr;try{addr=d.getAddress();}catch(Throwable t){return;}if(addr==null)return;currentAddress=addr;popup.show(safeName(d),BatteryState.unknown("正在读取真实电量…"));reader.read(d,s->{main.post(()->{if(same(d)&&AppPrefs.enabled(this))popup.update(safeName(d),s);});});}
-    private void detectAlreadyConnected(){if(!AppPrefs.enabled(this))return;try{BluetoothAdapter a=BluetoothAdapter.getDefaultAdapter();if(a==null||!a.isEnabled())return;for(BluetoothDevice d:a.getBondedDevices()){try{if(isConnected(d)){handleConnected(d);return;}}catch(Throwable ignored){}}}catch(Throwable ignored){}}
-    /** BluetoothDevice.getConnectionState() 是隐藏 API，只能反射调用。 */
-    private boolean isConnected(BluetoothDevice d){try{java.lang.reflect.Method m=BluetoothDevice.class.getMethod("getConnectionState");Object r=m.invoke(d);if(r instanceof Integer)return ((Integer)r)==BluetoothProfile.STATE_CONNECTED;}catch(Throwable ignored){}return false;}
+
+    /** One snapshot per connection: show the frame immediately, fill in the real
+     *  level as soon as a channel actually delivers one, then stop chasing it. */
+    private void handleConnected(BluetoothDevice d){
+        if(!AppPrefs.enabled(this))return;
+        if(Build.VERSION.SDK_INT>=31&&checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED)return;
+        String addr; try{addr=d.getAddress();}catch(Throwable t){return;}
+        if(addr==null)return;
+        currentAddress=addr; gotValue=false;
+        synchronized(RAW_LOG){ RAW_LOG.clear(); }
+        record("连接 "+safeName(d));
+        popup.show(safeName(d),BatteryState.unknown("正在读取真实电量…"));
+
+        // Channel 1+2: vendor AT commands and BLE advertisements. These arrive
+        // on their own, pushed by the headset at connect time.
+        sniffer.setSink(new VendorBatterySniffer.Sink(){
+            public void onBattery(BatteryState s){ main.post(()->{ if(same(d)&&!gotValue&&AppPrefs.enabled(BluetoothMonitorService.this)){ gotValue=true; popup.update(safeName(d),s);} }); }
+            public void onRaw(String line){ record(line); }
+        });
+        sniffer.start(addr);
+
+        // Channel 3: standard battery service.
+        reader.read(d,s->{ main.post(()->{ record("标准通道 "+s.source); if(same(d)&&!gotValue&&AppPrefs.enabled(BluetoothMonitorService.this)&&s.aggregate>=0){ gotValue=true; popup.update(safeName(d),s);} }); });
+    }
+    private void detectAlreadyConnected(){if(!AppPrefs.enabled(this))return;try{BluetoothAdapter a=BluetoothAdapter.getDefaultAdapter();if(a==null||!a.isEnabled())return;Set<BluetoothDevice> bonded=a.getBondedDevices();if(bonded==null)return;for(BluetoothDevice d:bonded){try{if(isConnected(d)){handleConnected(d);return;}}}catch(Throwable ignored){}}catch(Throwable ignored){}}
+    private boolean isConnected(BluetoothDevice d){
+        // getConnectionState is not part of the public SDK on all versions; the
+        // profile proxy state is used instead.
+        try{
+            java.lang.reflect.Method m=BluetoothDevice.class.getMethod("isConnected");
+            Object r=m.invoke(d);
+            if(r instanceof Boolean) return (Boolean)r;
+        }catch(Throwable ignored){}
+        return false;
+    }
     private BluetoothDevice getDevice(Intent i){try{if(Build.VERSION.SDK_INT>=33)return i.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE,BluetoothDevice.class);return (BluetoothDevice)i.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);}catch(Throwable t){return null;}}
     private boolean same(BluetoothDevice d){try{return currentAddress!=null&&currentAddress.equals(d.getAddress());}catch(Throwable t){return false;}}
     private String safeName(BluetoothDevice d){try{String n=d.getName();return n==null||n.trim().isEmpty()?"蓝牙耳机":n;}catch(Throwable t){return "蓝牙耳机";}}
     private boolean valid(int v){return v>=0&&v<=100;}
     private void createChannel(){if(Build.VERSION.SDK_INT>=26){NotificationManager n=getSystemService(NotificationManager.class);n.createNotificationChannel(new NotificationChannel(CHANNEL,"耳机监听",NotificationManager.IMPORTANCE_LOW));}}
-    @Override public void onDestroy(){started=false;try{unregisterReceiver(receiver);}catch(Throwable ignored){}if(reader!=null)reader.close();if(popup!=null)popup.dismiss();super.onDestroy();}
+    @Override public void onDestroy(){started=false;try{unregisterReceiver(receiver);}catch(Throwable ignored){}if(reader!=null)reader.close();if(sniffer!=null)sniffer.stop();if(popup!=null)popup.dismiss();super.onDestroy();}
     @Override public IBinder onBind(Intent i){return null;}
 }
