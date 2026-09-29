@@ -10,8 +10,8 @@ android {
         applicationId 'com.earpopupx'
         minSdk 29
         targetSdk 35
-        versionCode 207
-        versionName '2.7.0'
+        versionCode 208
+        versionName '2.8.0'
     }
 
     // Shizuku 的 AIDL 已内置在 src/main/aidl，CI 不需要联网拉任何远程库
