@@ -2010,12 +2010,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        refreshCaptorState();
-    }
-
     private void copyAdbCommands() {
         copy("appops set com.yuanbao.earbuds SYSTEM_ALERT_WINDOW allow\n"
                 + "pm grant com.yuanbao.earbuds android.permission.BLUETOOTH_CONNECT\n"
@@ -2044,6 +2038,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         refreshPermStatus();
+        refreshCaptorState();
     }
     /**
      * 补丁状态诊断 —— Patch1/Patch2 都是底层改动，界面上看不到，
