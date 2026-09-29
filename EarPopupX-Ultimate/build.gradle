@@ -1,16 +1,3 @@
-plugins { id 'com.android.application' version '8.13.0' apply false }
-
-// bcprov-jdk18on 1.79 bundles classes compiled for Java 21 (class file major
-// version 65). Gradle's jar rewriting step cannot read them and aborts during
-// configuration ("Failed to create Jar file ... Unsupported class file major
-// version 65"), before any source is compiled. Pinning to 1.78.1 keeps the
-// build on classes Gradle understands.
-allprojects {
-    configurations.all {
-        resolutionStrategy {
-            force 'org.bouncycastle:bcprov-jdk18on:1.78.1'
-            force 'org.bouncycastle:bcutil-jdk18on:1.78.1'
-            force 'org.bouncycastle:bcpkix-jdk18on:1.78.1'
-        }
-    }
+plugins {
+    id 'com.android.application' version '8.1.4' apply false
 }

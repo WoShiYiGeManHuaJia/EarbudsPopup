@@ -8,5 +8,6 @@ public final class BatteryState {
         this.aggregate=aggregate; this.left=left; this.right=right; this.caseLevel=caseLevel;
         this.leftCharging=lc; this.rightCharging=rc; this.caseCharging=cc; this.source=source;
     }
+    public boolean hasDetail(){ return left>=0||right>=0||caseLevel>=0; }
     public static BatteryState unknown(String source) { return new BatteryState(-1,-1,-1,-1,false,false,false,source); }
 }

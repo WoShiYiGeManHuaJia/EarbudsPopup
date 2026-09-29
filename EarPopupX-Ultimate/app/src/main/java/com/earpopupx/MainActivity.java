@@ -3,7 +3,7 @@ package com.earpopupx;
 import android.Manifest;import android.app.*;import android.content.*;import android.content.pm.PackageManager;import android.graphics.Color;import android.net.Uri;import android.os.*;import android.provider.Settings;import android.view.*;import android.widget.*;import java.util.List;import java.util.Set;
 
 public final class MainActivity extends Activity{
- static final int REQ_BT=10,REQ_NOTIFY=11,REQ_MEDIA=12;TextView status,pos,diag;SeekBar x,y,w,h,r,b,dim,dur;Switch auto,drag;
+ static final int REQ_BT=10,REQ_NOTIFY=11,REQ_MEDIA=12;TextView status,pos,diag;SeekBar x,y,w,h,r,b,dim,dur;Switch auto,drag;int yHalf=500;
  @Override public void onCreate(Bundle b0){super.onCreate(b0);setContentView(R.layout.activity_main);bind();}
  private void bind(){
   status=findViewById(R.id.status);pos=findViewById(R.id.posLabel);
@@ -18,8 +18,9 @@ public final class MainActivity extends Activity{
   auto.setOnCheckedChangeListener((b0,c)->{AppPrefs.setEnabled(this,c);if(c)startMonitor();else stopMonitor();});
   drag.setOnCheckedChangeListener((b0,c)->{AppPrefs.setDragMode(this,c);refreshPopup();});
   x=findViewById(R.id.xBar);y=findViewById(R.id.yBar);w=findViewById(R.id.widthBar);h=findViewById(R.id.heightBar);r=findViewById(R.id.radiusBar);b=findViewById(R.id.blurBar);dim=findViewById(R.id.dimBar);dur=findViewById(R.id.durationBar);
-  x.setMax(600);y.setMax(1000);w.setMax(26);h.setMax(400);r.setMax(64);b.setMax(80);dim.setMax(40);dur.setMax(28);sync();
-  x.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setX(this,p-300)));y.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setY(this,p-500)));w.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setWidthPercent(this,p+72)));h.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setHeightDp(this,p+280)));r.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setRadiusDp(this,p)));b.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setBlurDp(this,p)));dim.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setDimPercent(this,p)));dur.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setDurationSec(this,p+2)));
+  yHalf=getResources().getDisplayMetrics().heightPixels/2;
+  x.setMax(600);y.setMax(Math.max(1000,yHalf*2));w.setMax(26);h.setMax(400);r.setMax(64);b.setMax(80);dim.setMax(40);dur.setMax(28);sync();
+  x.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setX(this,p-300)));y.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setY(this,p-yHalf)));w.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setWidthPercent(this,p+72)));h.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setHeightDp(this,p+280)));r.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setRadiusDp(this,p)));b.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setBlurDp(this,p)));dim.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setDimPercent(this,p)));dur.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setDurationSec(this,p+2)));
   addAdbAndDiagnostics();
  }
 
@@ -72,17 +73,6 @@ public final class MainActivity extends Activity{
    if(host==null)return;
    int pad=(int)(8*getResources().getDisplayMetrics().density+.5f);
 
-   android.widget.RadioGroup lg=new android.widget.RadioGroup(this);lg.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-   android.widget.RadioButton o0=new android.widget.RadioButton(this);o0.setText("横屏不弹窗");
-   android.widget.RadioButton o1=new android.widget.RadioButton(this);o1.setText("横屏小弹窗（名 + 电量）");
-   lg.addView(o0);lg.addView(o1);lg.check(AppPrefs.landscapeMode(this)==0?o0.getId():o1.getId());
-   lg.setOnCheckedChangeListener((g,id)->{AppPrefs.setLandscapeMode(this,id==o0.getId()?0:1);Toast.makeText(this,id==o0.getId()?"横屏将不弹窗":"横屏将显示小弹窗",Toast.LENGTH_SHORT).show();});
-   TextView lh=new TextView(this);lh.setText("横屏行为");lh.setTextSize(15);lh.setTypeface(null,1);
-   lh.setTextColor(Color.parseColor("#17181C"));lh.setPadding(pad,pad,pad,pad);host.addView(lh);
-   host.addView(lg);
-   TextView ln=new TextView(this);ln.setText("小弹窗只在横屏出现：显示耳机名 + 真实电量，带背景模糊，尺寸固定。");
-   ln.setTextSize(11);ln.setTextColor(Color.parseColor("#74767D"));ln.setPadding(pad,0,pad,0);host.addView(ln);
-
    Button sh=new Button(this);sh.setText("① 复制命令到 Stellar 终端");
    sh.setBackgroundResource(R.drawable.button);sh.setTextColor(Color.parseColor("#17181C"));
    sh.setOnClickListener(v->{ClipboardManager cm=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText("sh",shellScript()));Toast.makeText(this,"已复制，粘贴到 Stellar 执行",Toast.LENGTH_LONG).show();});
@@ -108,6 +98,27 @@ public final class MainActivity extends Activity{
    diag.setTextColor(Color.parseColor("#74767D"));
    diag.setTextIsSelectable(true);
    host.addView(diag);
+
+   Button land=new Button(this);land.setText(landText());
+   land.setBackgroundResource(R.drawable.button);land.setTextColor(Color.parseColor("#17181C"));
+   land.setOnClickListener(v->{
+     int n=AppPrefs.landscapeMode(this);
+     n=(n+1)%3;
+     AppPrefs.setLandscapeMode(this,n);
+     land.setText(landText());
+     Toast.makeText(this,landText(),Toast.LENGTH_SHORT).show();
+   });
+   host.addView(land,lpBtn());
+
+   Button sup=new Button(this);sup.setText("屏蔽系统耳机弹窗（ADB）");
+   sup.setBackgroundResource(R.drawable.button);sup.setTextColor(Color.parseColor("#17181C"));
+   sup.setOnClickListener(v->runSuppress(false));
+   host.addView(sup,lpBtn());
+
+   Button unsup=new Button(this);unsup.setText("恢复系统耳机弹窗（ADB）");
+   unsup.setBackgroundResource(R.drawable.button);unsup.setTextColor(Color.parseColor("#17181C"));
+   unsup.setOnClickListener(v->runSuppress(true));
+   host.addView(unsup,lpBtn());
 
    Button rd=new Button(this);rd.setText("刷新协议抓取");
    rd.setBackgroundResource(R.drawable.button);rd.setTextColor(Color.parseColor("#17181C"));
@@ -145,7 +156,7 @@ public final class MainActivity extends Activity{
 
  /** 尝试拉起 Shizuku / Stellar；返回是否成功打开 */
  private boolean openStellar(){
-  String[] pkgs={"roro.stellar.manager","moe.shizuku.privileged.api","moe.shizuku.stellar","rikka.shizuku.stellar","com.stellar.shizuku","moe.shizuku.stellar.manager"};
+  String[] pkgs={"moe.shizuku.stellar","moe.shizuku.privileged.api","rikka.shizuku.stellar","com.stellar.shizuku"};
   for(String p:pkgs){
    try{
     Intent i=getPackageManager().getLaunchIntentForPackage(p);
@@ -192,6 +203,53 @@ public final class MainActivity extends Activity{
   }).start();
  }
 
+ private String landText(){
+  int n=AppPrefs.landscapeMode(this);
+  if(n==0) return "横屏时：正常弹窗";
+  if(n==1) return "横屏时：小弹窗（无耳机图标）";
+  return "横屏时：不弹窗";
+ }
+
+ /** 小米的官方耳机弹窗由"小米快连/蓝牙"组件负责，用 shell 关掉它的悬浮窗。
+  *  两条都试：先温和地撤掉悬浮窗权限，不行再把组件停掉。可一键恢复。 */
+ private void runSuppress(boolean restore){
+  if(!ShizukuHelper.isServiceRunning()){
+   AlertDialog.Builder b=new AlertDialog.Builder(this)
+    .setTitle("未检测到 Shizuku / Stellar 服务")
+    .setMessage("屏蔽系统弹窗需要 shell 权限。先启动 Stellar 服务并授权本应用，再点一次。")
+    .setPositiveButton("打开 Stellar / Shizuku",(d,w)->{ if(!openStellar())Toast.makeText(this,"没找到 Stellar / Shizuku，请先安装",Toast.LENGTH_LONG).show(); })
+    .setNegativeButton("关闭",null);
+   b.show();
+   return;
+  }
+  if(!ShizukuHelper.hasPermission()){ ShizukuHelper.requestPermission(); return; }
+  final String script=suppressScript(restore);
+  new Thread(()->{
+   final String out=ShizukuHelper.run(script);
+   runOnUiThread(()->{
+    String msg=(out==null)?null:out.trim();
+    if(msg==null||msg.isEmpty())msg="执行完成";
+    new AlertDialog.Builder(this).setTitle(restore?"恢复系统弹窗":"屏蔽系统弹窗").setMessage(msg).setPositiveButton("关闭",null).show();
+    status();
+   });
+  }).start();
+ }
+
+ private String suppressScript(boolean restore){
+  String[] pkgs={"com.xiaomi.bluetooth","com.milink.service","com.xiaomi.wearable"};
+  StringBuilder sb=new StringBuilder();
+  for(String p:pkgs){
+   if(restore){
+    sb.append("pm enable ").append(p).append("\n");
+    sb.append("appops set ").append(p).append(" SYSTEM_ALERT_WINDOW allow\n");
+   }else{
+    sb.append("appops set ").append(p).append(" SYSTEM_ALERT_WINDOW deny\n");
+    sb.append("pm disable-user --user 0 ").append(p).append("\n");
+   }
+  }
+  return sb.toString();
+ }
+
  private void refreshDiag(){
   if(diag==null)return;
   List<String> lines=BluetoothMonitorService.rawLog();
@@ -202,7 +260,7 @@ public final class MainActivity extends Activity{
  }
 
  interface S{void set(int p,boolean fromUser);}SeekBar.OnSeekBarChangeListener sl(S s){return new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar v,int p,boolean f){s.set(p,f);pos();if(f)refreshPopup();}public void onStartTrackingTouch(SeekBar v){}public void onStopTrackingTouch(SeekBar v){}};}
- void sync(){x.setProgress(AppPrefs.x(this)+300);y.setProgress(AppPrefs.y(this)+500);w.setProgress(AppPrefs.widthPercent(this)-72);h.setProgress(AppPrefs.heightDp(this)-280);r.setProgress(AppPrefs.radiusDp(this));b.setProgress(AppPrefs.blurDp(this));dim.setProgress(AppPrefs.dimPercent(this));dur.setProgress(AppPrefs.durationSec(this)-2);pos();}
+ void sync(){x.setProgress(AppPrefs.x(this)+300);y.setProgress(Math.min(y.getMax(),Math.max(0,AppPrefs.y(this)+yHalf)));w.setProgress(AppPrefs.widthPercent(this)-72);h.setProgress(AppPrefs.heightDp(this)-280);r.setProgress(AppPrefs.radiusDp(this));b.setProgress(AppPrefs.blurDp(this));dim.setProgress(AppPrefs.dimPercent(this));dur.setProgress(AppPrefs.durationSec(this)-2);pos();}
  void pos(){pos.setText("X "+AppPrefs.x(this)+" · Y "+AppPrefs.y(this)+" · "+AppPrefs.widthPercent(this)+"% · "+AppPrefs.heightDp(this)+"dp · 圆角 "+AppPrefs.radiusDp(this)+"dp");}
  void overlay(){startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:"+getPackageName())));}
  void bt(){if(Build.VERSION.SDK_INT>=31)requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN},REQ_BT);}

@@ -31,13 +31,17 @@ import java.util.UUID;
  */
 public final class BluetoothBatteryReader {
 
-    public interface Callback { void onState(BatteryState state); }
+    public interface Callback {
+        void onState(BatteryState state);
+        default void onRaw(String line) { }
+    }
 
     private static final UUID BATTERY_SERVICE = UUID.fromString("0000180F-0000-1000-8000-00805F9B34FB");
     private static final UUID BATTERY_LEVEL   = UUID.fromString("00002A19-0000-1000-8000-00805F9B34FB");
 
     private static final int T_SYS  = 1;
     private static final int T_GATT = 2;
+    private static final int T_DUMP = 3;
 
     private final Context context;
     private volatile BluetoothGatt lastGatt;
@@ -52,8 +56,26 @@ public final class BluetoothBatteryReader {
             hub.emit(new BatteryState(sys0, -1, -1, -1, false, false, false, "系统蓝牙缓存"), T_SYS);
         }
 
+        startDumpsys(d, hub);
         startGatt(d, hub);
         pollSystem(d, hub);
+    }
+
+    /** Left/right/case live in the bluetooth stack's own dump. Shell can read
+     *  it, so this outranks every other channel. Runs on a worker thread
+     *  because `dumpsys` blocks for a while. */
+    private void startDumpsys(BluetoothDevice d, final Hub hub) {
+        String addr;
+        try { addr = d.getAddress(); } catch (Throwable t) { return; }
+        if (addr == null) return;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                DumpsysBattery.Result r = DumpsysBattery.read(context, addr, hub.log());
+                if (r != null && (r.hasAny() || r.main >= 0)) {
+                    hub.emit(r.toState("系统蓝牙栈"), T_DUMP);
+                }
+            }
+        }, "dumpsys-battery").start();
     }
 
     private void startGatt(BluetoothDevice d, Hub hub) {
@@ -176,6 +198,12 @@ public final class BluetoothBatteryReader {
         private int trust = -1;
 
         Hub(Callback cb) { this.cb = cb; }
+
+        DumpsysBattery.Log log() {
+            return new DumpsysBattery.Log() {
+                public void onLine(String s) { h.post(() -> cb.onRaw(s)); }
+            };
+        }
 
         synchronized void emit(BatteryState s, int t) {
             if (t < trust) return;

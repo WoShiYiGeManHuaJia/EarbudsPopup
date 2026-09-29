@@ -1,14 +1,4 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
-    <!-- 包可见性：Android 11+ 必须声明，否则 queryIntentActivities / getLaunchIntentForPackage
-         拿不到 Stellar / Shizuku，一键授权会一直提示"未检测到服务"。 -->
-    <queries>
-        <package android:name="roro.stellar.manager" />
-        <package android:name="moe.shizuku.privileged.api" />
-        <package android:name="moe.shizuku.stellar" />
-        <package android:name="rikka.shizuku.stellar" />
-    </queries>
-
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
@@ -18,42 +8,29 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application android:theme="@style/AppTheme" android:label="@string/app_name" android:icon="@drawable/ic_launcher" android:roundIcon="@drawable/ic_launcher_round" android:allowBackup="false" android:supportsRtl="true">
-
-        <!-- 关键：Shizuku / Stellar 通过这个 ContentProvider 把 binder 交给本应用。
-             少了这一段，Shizuku.pingBinder() 永远是 false —— 这就是"检测不到"。 -->
+        <activity android:name=".MainActivity" android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="false"
+            android:launchMode="standard"
+            android:clearTaskOnLaunch="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
             android:authorities="${applicationId}.shizuku"
             android:multiprocess="false"
             android:enabled="true"
             android:exported="true"
-            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+            android:grantUriPermissions="true" />
 
-        <!-- excludeFromRecents：不在最近任务里显示，也就不会被划掉杀进程。
-             这样后台监听不会被"上滑清理"带走。 -->
-        <activity android:name=".MainActivity" android:exported="true" android:excludeFromRecents="true" android:noHistory="false" android:launchMode="singleTop">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-
-        <!-- stopWithTask=false：即便进程被清掉任务栈，服务也不会被连带停止。 -->
         <service android:name=".BluetoothMonitorService"
             android:exported="false"
             android:stopWithTask="false"
             android:foregroundServiceType="connectedDevice" />
-
-        <receiver android:name=".BootReceiver" android:exported="true" android:directBootAware="false">
-            <intent-filter android:priority="1000">
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-                <action android:name="com.earpopupx.RESTART" />
-            </intent-filter>
-        </receiver>
     </application>
 </manifest>

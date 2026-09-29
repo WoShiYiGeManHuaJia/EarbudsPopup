@@ -37,6 +37,11 @@ public final class BluetoothMonitorService extends Service {
     private boolean started;
     private boolean gotValue;
     private long lastDisconnectAt;
+    /** 开盖那一瞬间就要有真电量，所以最多等这么久就必须把弹窗放出来。 */
+    private static final long PRE_READ_MS = 1200L;
+    private final java.util.Map<String,BatteryState> prefetched = new java.util.concurrent.ConcurrentHashMap<String,BatteryState>();
+    private boolean prefetching;
+    private android.bluetooth.le.ScanCallback prefetchCb;
 
     private final Runnable pollTask = new Runnable() {
         @Override public void run() {
@@ -63,6 +68,7 @@ public final class BluetoothMonitorService extends Service {
         main.post(this::detectAlreadyConnected);
         main.removeCallbacks(pollTask);
         main.postDelayed(pollTask, 2500L);
+        main.post(this::startPrefetchScan);
         return START_STICKY;
     }
 
@@ -123,8 +129,8 @@ public final class BluetoothMonitorService extends Service {
         else registerReceiver(receiver,f);
     }
 
-    /** One snapshot per connection: the frame appears immediately, the real level
-     *  is filled in as soon as any channel actually delivers one, then we stop. */
+    /** 开盖就要有真电量：连接后先并发抓取，拿到值（或超时）才弹窗。
+     *  不再"先弹一个占位、再慢慢抓"。 */
     private void handleConnected(BluetoothDevice d){
         if(!AppPrefs.enabled(this)) return;
         if(Build.VERSION.SDK_INT>=31&&checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED) return;
@@ -139,15 +145,34 @@ public final class BluetoothMonitorService extends Service {
         currentAddress=addr;
         gotValue=false;
         synchronized(RAW_LOG){ RAW_LOG.clear(); }
-        record("连接 "+safeName(d)+" ("+addr+")");
-        popup.show(safeName(d),BatteryState.unknown("正在读取真实电量…"));
+        final String name=safeName(d);
+        record("连接 "+name+" ("+addr+")");
+
+        // 开盖预读：如果在 ACL 之前 BLE 广播阶段已经抓到过，直接用
+        BatteryState pre=prefetched.get(addr);
+        final BatteryState[] best=new BatteryState[]{ pre!=null?pre:BatteryState.unknown("") };
+        final boolean[] shown=new boolean[]{false};
+
+        final Runnable showNow=new Runnable(){
+            @Override public void run(){
+                if(shown[0])return;
+                shown[0]=true;
+                popup.show(name,best[0]);
+            }
+        };
+
+        // 已经拿到真值就立刻弹，否则最多等 PRE_READ_MS
+        if(best[0].hasDetail()||best[0].aggregate>=0){ main.post(showNow); }
+        else { main.postDelayed(showNow,PRE_READ_MS); }
 
         sniffer.setSink(new VendorBatterySniffer.Sink(){
             public void onBattery(BatteryState s){
                 main.post(()->{
                     if(same(d)&&AppPrefs.enabled(BluetoothMonitorService.this)){
                         gotValue=true;
-                        popup.update(safeName(d),s);
+                        best[0]=s;
+                        prefetched.put(addr,s);
+                        if(shown[0]) popup.update(name,s); else main.post(showNow);
                     }
                 });
             }
@@ -155,29 +180,76 @@ public final class BluetoothMonitorService extends Service {
         });
         sniffer.start(addr);
 
-        // dumpsys 是唯一能看到 untethered_left/right/case_battery 的通道。
-        // shell 执行慢，放后台线程；拿到就升级成三元组。
-        new Thread(()->{
-            StringBuilder lg=new StringBuilder();
-            BatteryState ds=VendorBatterySniffer.fromDumpsys(addr,lg);
-            main.post(()->{
-                record("[dumpsys] "+lg.toString().trim());
-                if(ds!=null&&same(d)&&AppPrefs.enabled(BluetoothMonitorService.this)){
-                    gotValue=true;
-                    popup.update(safeName(d),ds);
-                }
-            });
-        }).start();
-
-        reader.read(d,s->{
-            main.post(()->{
-                record("标准通道 "+s.source+(s.aggregate>=0?(" = "+s.aggregate+"%"):""));
-                if(same(d)&&AppPrefs.enabled(BluetoothMonitorService.this)&&s.aggregate>=0){
-                    gotValue=true;
-                    popup.update(safeName(d),s);
-                }
-            });
+        reader.read(d,new BluetoothBatteryReader.Callback(){
+            public void onState(BatteryState s){
+                main.post(()->{
+                    record("读取 "+s.source+(s.hasDetail()?(" L="+s.left+" R="+s.right+" C="+s.caseLevel):(s.aggregate>=0?(" = "+s.aggregate+"%"):"")));
+                    if(same(d)&&AppPrefs.enabled(BluetoothMonitorService.this)){
+                        if(s.hasDetail()||s.aggregate>=0){
+                            gotValue=true;
+                            best[0]=s;
+                            prefetched.put(addr,s);
+                            if(shown[0]) popup.update(name,s); else main.post(showNow);
+                        }
+                    }
+                });
+            }
+            public void onRaw(String line){ record(line); }
         });
+    }
+
+    /** 开盖广播阶段就提前读一次：耳机开盖会先发 BLE 广播，比 ACL 更早。 */
+    private void startPrefetchScan(){
+        if(prefetching) return;
+        try{
+            BluetoothAdapter a=BluetoothAdapter.getDefaultAdapter();
+            if(a==null) return;
+            if(Build.VERSION.SDK_INT>=31&&checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)!=PackageManager.PERMISSION_GRANTED) return;
+            final android.bluetooth.le.BluetoothLeScanner sc=a.getBluetoothLeScanner();
+            if(sc==null) return;
+            prefetching=true;
+            android.bluetooth.le.ScanSettings st=new android.bluetooth.le.ScanSettings.Builder()
+                .setScanMode(android.bluetooth.le.ScanSettings.SCAN_MODE_LOW_POWER).build();
+            prefetchCb=new android.bluetooth.le.ScanCallback(){
+                @Override public void onScanResult(int cbType,android.bluetooth.le.ScanResult r){
+                    try{
+                        BluetoothDevice dev=r.getDevice();
+                        String ad=dev.getAddress();
+                        if(ad==null||prefetched.containsKey(ad)) return;
+                        if(!isBonded(ad)) return;
+                        record("开盖广播 "+ad);
+                        reader.read(dev,new BluetoothBatteryReader.Callback(){
+                            public void onState(BatteryState s){
+                                if(s.hasDetail()||s.aggregate>=0) prefetched.put(ad,s);
+                            }
+                            public void onRaw(String line){ record(line); }
+                        });
+                    }catch(Throwable ignored){}
+                }
+            };
+            sc.startScan(null,st,prefetchCb);
+        }catch(Throwable t){ prefetching=false; }
+    }
+
+    private boolean isBonded(String addr){
+        try{
+            BluetoothAdapter a=BluetoothAdapter.getDefaultAdapter();
+            if(a==null) return false;
+            Set<BluetoothDevice> bs=a.getBondedDevices();
+            if(bs==null) return false;
+            for(BluetoothDevice d:bs){ if(addr.equals(d.getAddress())) return true; }
+        }catch(Throwable ignored){}
+        return false;
+    }
+
+    private void stopPrefetchScan(){
+        try{
+            if(prefetchCb!=null){
+                BluetoothAdapter a=BluetoothAdapter.getDefaultAdapter();
+                if(a!=null){ android.bluetooth.le.BluetoothLeScanner sc=a.getBluetoothLeScanner(); if(sc!=null) sc.stopScan(prefetchCb); }
+            }
+        }catch(Throwable ignored){}
+        prefetchCb=null;prefetching=false;
     }
 
     /** Poll is the reliable path on HyperOS: ACL broadcasts get throttled, but
@@ -241,20 +313,36 @@ public final class BluetoothMonitorService extends Service {
         started=false;
         main.removeCallbacks(pollTask);
         try{ unregisterReceiver(receiver); }catch(Throwable ignored){}
+        stopPrefetchScan();
         if(reader!=null) reader.close();
         if(sniffer!=null) sniffer.stop();
         if(popup!=null) popup.dismiss();
         super.onDestroy();
     }
 
-    /** 用户从最近任务划掉本应用时，系统会连带清掉任务栈。这里立刻重新拉起服务，
-     *  避免"一离开软件就没有弹窗"。Manifest 里同时声明了 stopWithTask=false。 */
     @Override public void onTaskRemoved(Intent rootIntent){
+        // 任务被划掉（或 App 退到后台被系统回收）时立刻自我重启，
+        // 否则「不在 App 界面里就没有弹窗」
         try{
-            if(AppPrefs.enabled(this)&&promisesMet()){
-                Intent i=new Intent(this,BluetoothMonitorService.class);
-                if(Build.VERSION.SDK_INT>=26) startForegroundService(i); else startService(i);
-            }
+            Intent i=new Intent(this,BluetoothMonitorService.class);
+            if(Build.VERSION.SDK_INT>=26){ startForegroundService(i); }
+            else { startService(i); }
+        }catch(Throwable e){
+            try{ startService(new Intent(this,BluetoothMonitorService.class)); }catch(Throwable ignored){}
+        }
+        // 兜底：3 秒后再确认一次，防止上面的调用被后台启动限制拦掉
+        try{
+            main.postDelayed(new Runnable(){
+                @Override public void run(){
+                    if(!started){
+                        try{
+                            Intent i=new Intent(BluetoothMonitorService.this,BluetoothMonitorService.class);
+                            if(Build.VERSION.SDK_INT>=26){ startForegroundService(i); }
+                            else { startService(i); }
+                        }catch(Throwable ignored){}
+                    }
+                }
+            },3000);
         }catch(Throwable ignored){}
         super.onTaskRemoved(rootIntent);
     }

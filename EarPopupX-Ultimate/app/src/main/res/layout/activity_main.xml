@@ -1,57 +1,202 @@
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/surface" android:fillViewport="true" android:clipToPadding="false" android:paddingBottom="28dp">
-<LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F4F5F7">
 
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="EarPopup X" android:textColor="@color/ink" android:textSize="32sp" android:textStyle="bold"/>
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="无 Root · 耳机连接动态弹窗" android:textColor="@color/muted" android:textSize="13sp"/>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="14dp">
 
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:background="@drawable/card" android:elevation="4dp" android:orientation="vertical">
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="运行状态" android:textColor="@color/ink" android:textSize="17sp" android:textStyle="bold"/>
-        <TextView android:id="@+id/status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textColor="@color/muted" android:textSize="13.5sp" android:lineSpacingExtra="3dp"/>
-        <Button android:id="@+id/start" android:layout_width="match_parent" android:layout_height="50dp" android:layout_marginTop="12dp" android:background="@drawable/accent_button" android:text="启动 / 恢复监听" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold"/>
-        <Button android:id="@+id/test" android:layout_width="match_parent" android:layout_height="46dp" android:layout_marginTop="8dp" android:background="@drawable/button" android:text="立即测试弹窗" android:textColor="@color/ink"/>
-        <Button android:id="@+id/stop" android:layout_width="match_parent" android:layout_height="46dp" android:layout_marginTop="8dp" android:background="@drawable/button" android:text="停止监听" android:textColor="@color/ink"/>
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:textColor="#17181C"
+            android:lineSpacingExtra="3dp" />
+
+        <Button
+            android:id="@+id/adbOneClick"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:layout_marginTop="10dp"
+            android:text="一键 ADB 授权（点一下全部打开）"
+            android:textColor="#17181C"
+            android:background="@drawable/button" />
+
+        <Button
+            android:id="@+id/start"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:text="启动/恢复监听"
+            android:textColor="#17181C"
+            android:background="@drawable/button" />
+
+        <Button
+            android:id="@+id/stop"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:text="停止监听"
+            android:textColor="#17181C"
+            android:background="@drawable/button" />
+
+        <Button
+            android:id="@+id/test"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:text="立即测试弹窗"
+            android:textColor="#17181C"
+            android:background="@drawable/button" />
+
+        <Switch
+            android:id="@+id/autoSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="蓝牙耳机连接自动弹窗"
+            android:textColor="#17181C" />
+
+        <Switch
+            android:id="@+id/dragSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="测试弹窗拖动定位"
+            android:textColor="#17181C" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="弹窗位置与尺寸"
+            android:textColor="#17181C"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/posLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="11sp"
+            android:textColor="#74767D" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="左右 (X)"
+            android:textSize="11sp"
+            android:textColor="#74767D" />
+
+        <SeekBar android:id="@+id/xBar" android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="上下 (Y)"
+            android:textSize="11sp"
+            android:textColor="#74767D" />
+
+        <SeekBar android:id="@+id/yBar" android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="宽度"
+            android:textSize="11sp"
+            android:textColor="#74767D" />
+
+        <SeekBar android:id="@+id/widthBar" android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="高度"
+            android:textSize="11sp"
+            android:textColor="#74767D" />
+
+        <SeekBar android:id="@+id/heightBar" android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="圆角"
+            android:textSize="11sp"
+            android:textColor="#74767D" />
+
+        <SeekBar android:id="@+id/radiusBar" android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="玻璃质感"
+            android:textSize="11sp"
+            android:textColor="#74767D" />
+
+        <SeekBar android:id="@+id/blurBar" android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="卡片压暗"
+            android:textSize="11sp"
+            android:textColor="#74767D" />
+
+        <SeekBar android:id="@+id/dimBar" android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="显示时长（秒）"
+            android:textSize="11sp"
+            android:textColor="#74767D" />
+
+        <SeekBar android:id="@+id/durationBar" android:layout_width="match_parent" android:layout_height="wrap_content" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="10dp">
+
+            <Button
+                android:id="@+id/pick"
+                android:layout_width="0dp"
+                android:layout_height="46dp"
+                android:layout_weight="1"
+                android:text="选择图片/GIF"
+                android:textColor="#17181C"
+                android:background="@drawable/button" />
+
+            <Button
+                android:id="@+id/resetMedia"
+                android:layout_width="0dp"
+                android:layout_height="46dp"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="恢复默认素材"
+                android:textColor="#17181C"
+                android:background="@drawable/button" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/resetPopup"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="8dp"
+            android:text="恢复弹窗默认设置"
+            android:textColor="#17181C"
+            android:background="@drawable/button" />
+
+        <LinearLayout
+            android:id="@+id/advHost"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
     </LinearLayout>
-
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:background="@drawable/card" android:elevation="4dp" android:orientation="vertical">
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="权限与后台" android:textColor="@color/ink" android:textSize="17sp" android:textStyle="bold"/>
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:text="下面这一个按钮会用 ADB 一次性完成：悬浮窗、蓝牙、通知、后台运行、电池优化白名单、解除隐藏 API 限制。" android:textColor="@color/muted" android:textSize="12.5sp" android:lineSpacingExtra="2dp"/>
-        <Button android:id="@+id/adbOneClick" android:layout_width="match_parent" android:layout_height="50dp" android:layout_marginTop="10dp" android:background="@drawable/accent_button" android:text="一键 ADB 授权" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold"/>
-    </LinearLayout>
-
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:background="@drawable/card" android:elevation="4dp" android:orientation="vertical">
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="弹窗素材" android:textColor="@color/ink" android:textSize="17sp" android:textStyle="bold"/>
-        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="5dp" android:text="PNG / JPG / WebP / GIF；素材会被裁成圆角并保持动画。" android:textColor="@color/muted" android:textSize="12.5sp"/>
-        <Button android:id="@+id/pick" android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="10dp" android:background="@drawable/accent_button" android:text="选择图片 / GIF" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold"/>
-        <Button android:id="@+id/resetMedia" android:layout_width="match_parent" android:layout_height="46dp" android:layout_marginTop="8dp" android:background="@drawable/button" android:text="恢复默认素材" android:textColor="@color/ink"/>
-    </LinearLayout>
-
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:background="@drawable/card" android:elevation="4dp" android:orientation="vertical">
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="弹窗控制" android:textColor="@color/ink" android:textSize="17sp" android:textStyle="bold"/>
-        <Switch android:id="@+id/autoSwitch" android:layout_width="match_parent" android:layout_height="48dp" android:text="连接耳机自动弹窗" android:textColor="@color/ink" android:textSize="14sp"/>
-        <Switch android:id="@+id/dragSwitch" android:layout_width="match_parent" android:layout_height="48dp" android:text="测试弹窗拖动定位" android:textColor="@color/ink" android:textSize="14sp"/>
-        <TextView android:id="@+id/posLabel" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:textColor="@color/muted" android:textSize="12.5sp"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="水平位置" android:textColor="@color/ink" android:textSize="13.5sp"/>
-        <SeekBar android:id="@+id/xBar" android:layout_width="match_parent" android:layout_height="38dp"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="垂直位置" android:textColor="@color/ink" android:textSize="13.5sp"/>
-        <SeekBar android:id="@+id/yBar" android:layout_width="match_parent" android:layout_height="38dp"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="宽度" android:textColor="@color/ink" android:textSize="13.5sp"/>
-        <SeekBar android:id="@+id/widthBar" android:layout_width="match_parent" android:layout_height="38dp"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="高度" android:textColor="@color/ink" android:textSize="13.5sp"/>
-        <SeekBar android:id="@+id/heightBar" android:layout_width="match_parent" android:layout_height="38dp"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="圆角" android:textColor="@color/ink" android:textSize="13.5sp"/>
-        <SeekBar android:id="@+id/radiusBar" android:layout_width="match_parent" android:layout_height="38dp"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="动态模糊（0=关闭，拖上去会是矩形磨砂）" android:textColor="@color/ink" android:textSize="13.5sp"/>
-        <SeekBar android:id="@+id/blurBar" android:layout_width="match_parent" android:layout_height="38dp"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="背景压暗" android:textColor="@color/ink" android:textSize="13.5sp"/>
-        <SeekBar android:id="@+id/dimBar" android:layout_width="match_parent" android:layout_height="38dp"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="显示时长" android:textColor="@color/ink" android:textSize="13.5sp"/>
-        <SeekBar android:id="@+id/durationBar" android:layout_width="match_parent" android:layout_height="38dp"/>
-        <Button android:id="@+id/resetPopup" android:layout_width="match_parent" android:layout_height="46dp" android:layout_marginTop="10dp" android:background="@drawable/button" android:text="恢复默认弹窗参数" android:textColor="@color/ink"/>
-    </LinearLayout>
-
-    <LinearLayout android:id="@+id/advHost" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:background="@drawable/card" android:elevation="4dp" android:orientation="vertical">
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="ADB 授权与协议抓取" android:textColor="@color/ink" android:textSize="17sp" android:textStyle="bold"/>
-    </LinearLayout>
-
-</LinearLayout>
 </ScrollView>
