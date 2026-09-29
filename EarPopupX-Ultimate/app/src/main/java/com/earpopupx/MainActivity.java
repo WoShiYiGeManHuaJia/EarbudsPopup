@@ -102,7 +102,7 @@ public final class MainActivity extends Activity{
   diag.setText(sb.toString().trim());
  }
 
- interface S{void set(int p);}SeekBar.OnSeekBarChangeListener sl(S s){return new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar v,int p,boolean f){s.set(p);pos();if(f)refreshPopup();}public void onStartTrackingTouch(SeekBar v){}public void onStopTrackingTouch(SeekBar v){}};}
+ interface S{void set(int p,boolean fromUser);}SeekBar.OnSeekBarChangeListener sl(S s){return new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar v,int p,boolean f){s.set(p,f);pos();if(f)refreshPopup();}public void onStartTrackingTouch(SeekBar v){}public void onStopTrackingTouch(SeekBar v){}};}
  void sync(){x.setProgress(AppPrefs.x(this)+300);y.setProgress(AppPrefs.y(this)+500);w.setProgress(AppPrefs.widthPercent(this)-72);h.setProgress(AppPrefs.heightDp(this)-280);r.setProgress(AppPrefs.radiusDp(this));b.setProgress(AppPrefs.blurDp(this));dim.setProgress(AppPrefs.dimPercent(this));dur.setProgress(AppPrefs.durationSec(this)-2);pos();}
  void pos(){pos.setText("X "+AppPrefs.x(this)+" · Y "+AppPrefs.y(this)+" · "+AppPrefs.widthPercent(this)+"% · "+AppPrefs.heightDp(this)+"dp · 圆角 "+AppPrefs.radiusDp(this)+"dp");}
  void overlay(){startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:"+getPackageName())));}
