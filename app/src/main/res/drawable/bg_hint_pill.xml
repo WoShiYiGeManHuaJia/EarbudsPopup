@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- 提示文字浮在用户选的图上，图可能很亮也可能很暗，
-     加一层半透明白底保证任何图上都能读清 -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="#D9FFFFFF" />
-    <corners android:radius="12dp" />
-</shape>

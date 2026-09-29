@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">EarPopup X</string>
-    <string name="notification_channel">耳机连接监控</string>
-</resources>

@@ -110,13 +110,21 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -B apk
           mkdir -p apk
+          RUN="${{ github.run_number }}"
+          SRC=""
           if [ -f EarPopupX-Ultimate/app/build/outputs/apk/release/app-release.apk ]; then
-            cp EarPopupX-Ultimate/app/build/outputs/apk/release/app-release.apk apk/EarPopupX-Ultimate-2.0.apk
-            git add -f apk/EarPopupX-Ultimate-2.0.apk
+            SRC="EarPopupX-Ultimate/app/build/outputs/apk/release/app-release.apk"
+          elif [ -f EarPopupX-Ultimate/app/build/outputs/apk/debug/app-debug.apk ]; then
+            SRC="EarPopupX-Ultimate/app/build/outputs/apk/debug/app-debug.apk"
           fi
-          if [ -f EarPopupX-Ultimate/app/build/outputs/apk/debug/app-debug.apk ]; then
-            cp EarPopupX-Ultimate/app/build/outputs/apk/debug/app-debug.apk apk/EarPopupX-Ultimate-2.0-debug.apk
-            git add -f apk/EarPopupX-Ultimate-2.0-debug.apk
+          if [ -n "$SRC" ]; then
+            cp "$SRC" apk/EarPopupX.apk
+            cp "$SRC" "apk/EarPopupX-r$RUN.apk"
+            git add -f apk/EarPopupX.apk
+            git add -f "apk/EarPopupX-r$RUN.apk"
+            ls -l apk/ >> ../v20-log.txt 2>&1 || true
+          else
+            echo "NO APK FOUND" >> ../v20-log.txt
           fi
-          git commit -m "EarPopupX Ultimate 2.0 APK run ${{ github.run_number }}"
+          git commit -m "EarPopupX APK run $RUN" || echo "nothing to commit"
           git push -f origin apk
