@@ -74,6 +74,23 @@ public class BatteryCaptorService extends AccessibilityService {
         running = true;
     }
 
+    /**
+     * 扫描节流（v1.4.1）。
+     *
+     * 无障碍回调是在【主线程】触发的，而 TYPE_WINDOW_CONTENT_CHANGED
+     * 在滚动、动画、打字时会以每秒几十次的频率刷屏。
+     * 每次都遍历全部窗口 + 递归整个控件树，会直接把主线程拖死，
+     * 表现为卡住不动、ANR，甚至进程被系统杀掉（用户看到的就是「闪退」）。
+     *
+     * 这里做三重限制：最小间隔、单次耗时上限、抓到后长时间不再扫。
+     */
+    private static final long MIN_SCAN_INTERVAL_MS = 400L;
+    private static final long SCAN_BUDGET_MS = 40L;
+    /** 抓到之后 20 秒内不再扫描：一次连接只需要抓一次 */
+    private static final long COOLDOWN_AFTER_HIT_MS = 20000L;
+
+    private volatile long lastScanAt = 0L;
+
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
         int type = event.getEventType();
@@ -81,11 +98,19 @@ public class BatteryCaptorService extends AccessibilityService {
                 && type != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
             return;
         }
-        scan();
+        // 已经抓到且还很新鲜：不再重复扫
+        if (hasFresh() && (System.currentTimeMillis() - lastCaptureAt)
+                < COOLDOWN_AFTER_HIT_MS) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (now - lastScanAt < MIN_SCAN_INTERVAL_MS) return;
+        lastScanAt = now;
+        scan(now);
     }
 
     /** 扫描所有窗口，尝试抓出左 / 右 / 盒三个真实百分比 */
-    private void scan() {
+    private void scan(long startAt) {
         List<AccessibilityWindowInfo> wins;
         try {
             wins = getWindows();
@@ -95,6 +120,8 @@ public class BatteryCaptorService extends AccessibilityService {
         if (wins == null || wins.isEmpty()) return;
 
         for (AccessibilityWindowInfo w : wins) {
+            // 单次总耗时超预算立刻收手，绝不拖累主线程
+            if (System.currentTimeMillis() - startAt > SCAN_BUDGET_MS) return;
             AccessibilityNodeInfo root;
             try {
                 root = w.getRoot();
@@ -186,7 +213,7 @@ public class BatteryCaptorService extends AccessibilityService {
 
     /** 递归收集窗口内所有可见文本 */
     private void collectText(AccessibilityNodeInfo node, List<String> out, int depth) {
-        if (node == null || depth > 24 || out.size() > 120) return;
+        if (node == null || depth > 12 || out.size() > 60) return;
         try {
             CharSequence cs = node.getText();
             if (cs != null) {

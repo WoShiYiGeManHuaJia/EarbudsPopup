@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.4.1：崩溃日志分享路径。只允许分享本 App 外部私有目录下的文件。 -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-files-path name="logs" path="." />
+    <files-path name="internal" path="." />
+</paths>

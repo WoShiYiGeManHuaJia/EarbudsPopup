@@ -130,6 +130,14 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <TextView style="@style/TextSectionTitle" android:layout_marginTop="30dp" android:text="崩溃诊断（v1.4.1）" />
+        <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" app:cardBackgroundColor="#FFFFF3E0" app:cardCornerRadius="26dp" app:cardElevation="3dp" app:strokeColor="#40000000" app:strokeWidth="1dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                <LinearLayout android:id="@+id/rowCrashLog" style="@style/AppRow"><ImageView style="@style/AppRowIcon" android:src="@drawable/ic_info" android:contentDescription="崩溃"/><LinearLayout style="@style/AppRowText"><TextView style="@style/TextRowTitle" android:text="查看 / 导出崩溃日志"/><TextView android:id="@+id/tvCrashState" style="@style/TextRowSub" android:text="暂无崩溃记录"/></LinearLayout><ImageView style="@style/AppRowIcon" android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chevron" android:contentDescription="前往"/></LinearLayout>
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:lineSpacingExtra="3dp" android:padding="16dp" android:text="闪退时系统不留任何痕迹，排查无从下手。本功能会在崩溃瞬间把完整堆栈写进本机文件，你可以直接查看或分享出来。日志只存在本机，不联网、不上传。" android:textColor="@color/ui_text_secondary" android:textSize="11sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <TextView style="@style/TextSectionTitle" android:layout_marginTop="30dp" android:text="关于与权限" />
         <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" app:cardBackgroundColor="#F5FFFFFF" app:cardCornerRadius="26dp" app:cardElevation="3dp" app:strokeColor="#30000000" app:strokeWidth="1dp">
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">

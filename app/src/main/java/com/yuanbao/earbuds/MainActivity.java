@@ -431,6 +431,13 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.rowBlockMi).setOnClickListener(v -> showMiPopupGuide());
         findViewById(R.id.rowAdb).setOnClickListener(v -> copyAdbCommands());
 
+        // v1.4.1：崩溃日志查看 / 导出
+        View rowCrash = findViewById(R.id.rowCrashLog);
+        if (rowCrash != null) {
+            rowCrash.setOnClickListener(v -> showCrashLog());
+        }
+        refreshCrashState();
+
         // v1.4：三项真实电量抓取（读系统弹窗上已有的那三个数字）
         View rowCaptor = findViewById(R.id.rowCaptorEnable);
         if (rowCaptor != null) {
@@ -1951,6 +1958,88 @@ public class MainActivity extends AppCompatActivity {
         if (requestCode == HciLogHelper.REQ_PICK_LOG && resultCode == RESULT_OK
                 && data != null && data.getData() != null) {
             HciLogHelper.shareLogFile(this, data.getData());
+        }
+    }
+
+    /** v1.4.1：刷新崩溃日志状态 */
+    private void refreshCrashState() {
+        TextView tv = findViewById(R.id.tvCrashState);
+        if (tv == null) return;
+        try {
+            java.io.File f = CrashGuard.logFile(this);
+            if (f.exists() && f.length() > 0) {
+                tv.setText("已记录 " + (f.length() / 1024 + 1) + " KB，点此查看或导出");
+            } else {
+                tv.setText("暂无崩溃记录");
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** v1.4.1：显示崩溃日志，并提供导出 */
+    private void showCrashLog() {
+        String text;
+        try {
+            java.io.File f = CrashGuard.logFile(this);
+            if (!f.exists() || f.length() == 0) {
+                Toast.makeText(this, "还没有崩溃记录，说明最近没发生过闪退",
+                        Toast.LENGTH_SHORT).show();
+                return;
+            }
+            byte[] b = new byte[(int) Math.min(f.length(), 60000L)];
+            java.io.FileInputStream in = new java.io.FileInputStream(f);
+            int read = 0;
+            while (read < b.length) {
+                int n = in.read(b, read, b.length - read);
+                if (n < 0) break;
+                read += n;
+            }
+            in.close();
+            text = new String(b, 0, read, "UTF-8");
+        } catch (Throwable e) {
+            Toast.makeText(this, "读取日志失败：" + e.getMessage(), Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        final android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        final android.widget.TextView tv = new android.widget.TextView(this);
+        tv.setText(text);
+        tv.setTextIsSelectable(true);
+        tv.setTextSize(10f);
+        tv.setTypeface(android.graphics.Typeface.MONOSPACE);
+        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        tv.setPadding(pad, pad, pad, pad);
+        sv.addView(tv);
+
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle("崩溃日志（可长按选择复制）")
+                .setView(sv)
+                .setNeutralButton("清空", (d, w) -> {
+                    try {
+                        CrashGuard.logFile(this).delete();
+                        refreshCrashState();
+                    } catch (Throwable ignored) {
+                    }
+                })
+                .setPositiveButton("导出", (d, w) -> shareCrashLog())
+                .setNegativeButton("关闭", null)
+                .show();
+    }
+
+    /** v1.4.1：把崩溃日志分享出去 */
+    private void shareCrashLog() {
+        try {
+            java.io.File f = CrashGuard.logFile(this);
+            if (!f.exists() || f.length() == 0) return;
+            android.net.Uri uri = androidx.core.content.FileProvider
+                    .getUriForFile(this, getPackageName() + ".files", f);
+            Intent i = new Intent(Intent.ACTION_SEND);
+            i.setType("text/plain");
+            i.putExtra(Intent.EXTRA_STREAM, uri);
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(i, "导出崩溃日志"));
+        } catch (Throwable e) {
+            Toast.makeText(this, "导出失败：" + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
 
