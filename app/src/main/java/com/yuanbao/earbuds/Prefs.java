@@ -430,6 +430,62 @@ public class Prefs {
         sp.edit().putBoolean("hide_recents", v).apply();
     }
 
+    // ---------- v1.2 新增 ----------
+
+    /**
+     * 窗口级背景模糊（Android 12+ setBackgroundBlurRadius）。
+     * 默认关闭：它会把整个窗口渲染成一层半透明磨砂，
+     * 在 HyperOS 上会吞掉弹窗外部的点击，且圆角外可能显出暗块。
+     * 需要柔化效果请用卡片自身的 LiveBlurView，那个不影响触摸。
+     */
+    public boolean windowBlur() {
+        return sp.getBoolean("win_blur", false);
+    }
+
+    public void setWindowBlur(boolean v) {
+        sp.edit().putBoolean("win_blur", v).apply();
+    }
+
+    /** 点击弹窗外部区域时立即关闭弹窗，而不是干等自动消失 */
+    public boolean touchOutsideClose() {
+        return sp.getBoolean("touch_outside_close", true);
+    }
+
+    public void setTouchOutsideClose(boolean v) {
+        sp.edit().putBoolean("touch_outside_close", v).apply();
+    }
+
+    /** 横屏模式：0=照常弹大窗 1=横屏完全不弹 2=横屏显示迷你小窗 */
+    public int landscapeMode() {
+        return sp.getInt("landscape_mode", 2);
+    }
+
+    public void setLandscapeMode(int v) {
+        sp.edit().putInt("landscape_mode", Math.max(0, Math.min(2, v))).apply();
+    }
+
+    /** 横屏时是否完全不弹（landscapeMode==1 的快捷读写） */
+    public boolean landscapeSkip() {
+        return landscapeMode() == 1;
+    }
+
+    public void setLandscapeSkip(boolean v) {
+        if (v) setLandscapeMode(1);
+        else if (landscapeMode() == 1) setLandscapeMode(2);
+    }
+
+    /**
+     * 贴底时卡片距屏幕底部的距离（dp）。
+     * 旧版写死 24dp，在手势导航的全面屏上看起来「离底边还很远」。
+     */
+    public int bottomPadDp() {
+        return sp.getInt("bottom_pad_dp", 8);
+    }
+
+    public void setBottomPadDp(int v) {
+        sp.edit().putInt("bottom_pad_dp", Math.max(0, Math.min(80, v))).apply();
+    }
+
     // ---------- 设备显示名 ----------
 
     /** 用户为该设备指定的弹窗显示名；为空表示用系统蓝牙名 */

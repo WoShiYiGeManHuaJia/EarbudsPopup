@@ -72,6 +72,20 @@
                 <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/swLock" style="@style/AppItem" android:drawableStart="@drawable/ic_lock" android:text="锁屏 / 熄屏时也弹" />
                 <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="57dp" android:background="@color/ui_divider" />
                 <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/swNoFocus" style="@style/AppItem" android:drawableStart="@drawable/ic_bolt" android:text="不夺取焦点（游戏时不打断）" />
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="57dp" android:background="@color/ui_divider" />
+                <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/swWindowBlur" style="@style/AppItem" android:drawableStart="@drawable/ic_layers" android:text="窗口级背景模糊（v1.2）" />
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="57dp" android:background="@color/ui_divider" />
+                <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/swTouchClose" style="@style/AppItem" android:drawableStart="@drawable/ic_preview" android:text="点击弹窗外部立即关闭" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <TextView style="@style/TextSectionTitle" android:layout_marginTop="30dp" android:text="横屏与小窗（v1.2）" />
+        <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" app:cardBackgroundColor="#F5FFFFFF" app:cardCornerRadius="26dp" app:cardElevation="3dp" app:strokeColor="#30000000" app:strokeWidth="1dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/swLandscapeMini" style="@style/AppItem" android:drawableStart="@drawable/ic_size" android:text="横屏时显示迷你小窗" />
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="57dp" android:background="@color/ui_divider" />
+                <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/swLandscapeSkip" style="@style/AppItem" android:drawableStart="@drawable/ic_lock" android:text="横屏时完全不弹窗" />
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:lineSpacingExtra="3dp" android:padding="16dp" android:text="迷你小窗只显示「设备名 + 一个真实电量」，不铺大图。两个开关都关时，横屏照常弹大窗；都开时以「完全不弹」优先。" android:textColor="@color/ui_text_secondary" android:textSize="11sp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

@@ -10,8 +10,8 @@ android {
         applicationId "com.yuanbao.earbuds"
         minSdk 29
         targetSdk 34
-        versionCode 100
-        versionName "1.0-legacy"
+        versionCode 120
+        versionName "1.2"
     }
 
     signingConfigs {

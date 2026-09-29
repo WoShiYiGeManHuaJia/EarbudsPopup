@@ -390,23 +390,35 @@ public final class PopupRenderer {
         if (hasRight) textR = batteryTextRight(levels);
         else textR = "--%";
 
+        // v1.2：读不到真实电量的一侧，不再摆一个「--%」占位文字，
+        // 改成让对应耳塞图标轻微上下浮动，表示「还在等真实读数」。
+        // 原则不变：绝不拿猜出来的数字冒充真实电量。
+        boolean waitL = "--%".equals(textL);
+        boolean waitR = "--%".equals(textR);
+
         if (icL != null) {
             icL.setVisibility(View.VISIBLE);
-            icL.setAlpha(1f);
+            if (waitL) startFloat(icL);
+            else stopFloat(icL);
         }
         if (icR != null) {
             icR.setVisibility(View.VISIBLE);
-            icR.setAlpha(1f);
+            if (waitR) startFloat(icR);
+            else stopFloat(icR);
         }
         if (tvL != null) {
-            tvL.setVisibility(View.VISIBLE);
-            tvL.setText(textL);
-            tvL.setTextColor(sub);
+            tvL.setVisibility(waitL ? View.GONE : View.VISIBLE);
+            if (!waitL) {
+                tvL.setText(textL);
+                tvL.setTextColor(sub);
+            }
         }
         if (tvR != null) {
-            tvR.setVisibility(View.VISIBLE);
-            tvR.setText(textR);
-            tvR.setTextColor(sub);
+            tvR.setVisibility(waitR ? View.GONE : View.VISIBLE);
+            if (!waitR) {
+                tvR.setText(textR);
+                tvR.setTextColor(sub);
+            }
         }
 
         // 充电盒：拿到真实值才显示，绝不显示占位
@@ -420,6 +432,47 @@ public final class PopupRenderer {
             icC.setColorFilter(sub);
             icC.setVisibility(showCase ? View.VISIBLE : View.GONE);
         }
+    }
+
+    /**
+     * 耳塞图标浮动：表示「这一侧还没拿到真实电量」。
+     * 用 tag 去重，避免多次刷新把动画叠成一团。
+     */
+    private static void startFloat(final View v) {
+        if (v == null) return;
+        if (v.getTag(R.id.tag_float_anim) != null) return;   // 已经在浮动
+        v.setTag(R.id.tag_float_anim, Boolean.TRUE);
+        v.animate().cancel();
+        v.setAlpha(1f);
+        v.setTranslationY(0f);
+        final float dy = -4f * v.getResources().getDisplayMetrics().density;
+        final android.view.animation.AccelerateDecelerateInterpolator interp =
+                new android.view.animation.AccelerateDecelerateInterpolator();
+        v.animate().translationY(dy).alpha(0.62f).setDuration(720).setInterpolator(interp)
+                .withEndAction(new Runnable() {
+                    @Override
+                    public void run() {
+                        v.animate().translationY(0f).alpha(1f).setDuration(720)
+                                .setInterpolator(interp)
+                                .withEndAction(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        // 仍然处于等待态就继续下一轮
+                                        if (v.getTag(R.id.tag_float_anim) != null) startFloat(v);
+                                        else stopFloat(v);
+                                    }
+                                }).start();
+                    }
+                }).start();
+    }
+
+    /** 停止浮动并把图标复位（拿到真实电量时调用） */
+    private static void stopFloat(View v) {
+        if (v == null) return;
+        v.setTag(R.id.tag_float_anim, null);
+        v.animate().cancel();
+        v.setTranslationY(0f);
+        v.setAlpha(1f);
     }
 
     /** 充电盒电量文本 */

@@ -79,6 +79,8 @@ public class MainActivity extends AppCompatActivity {
     // 设置
     private SwitchMaterial swMaster, swWired, swAutoStart, swBattery, swCase;
     private SwitchMaterial swLock, swNoFocus, swPowerSave, swHideNoti;
+    // v1.2 新增：窗口模糊 / 点外部关闭 / 横屏小窗
+    private SwitchMaterial swWindowBlur, swTouchClose, swLandscapeMini, swLandscapeSkip;
     private TextView tvEngine, tvDim, tvBlur;
     private LinearLayout deviceList;
     private TextView tvProbeHint;
@@ -237,6 +239,10 @@ public class MainActivity extends AppCompatActivity {
         swNoFocus = findViewById(R.id.swNoFocus);
         swPowerSave = findViewById(R.id.swPowerSave);
         swHideNoti = findViewById(R.id.swHideNoti);
+        swWindowBlur = findViewById(R.id.swWindowBlur);
+        swTouchClose = findViewById(R.id.swTouchClose);
+        swLandscapeMini = findViewById(R.id.swLandscapeMini);
+        swLandscapeSkip = findViewById(R.id.swLandscapeSkip);
         tvEngine = findViewById(R.id.tvEngine);
         tvDim = findViewById(R.id.tvDim);
         tvBlur = findViewById(R.id.tvBlur);
@@ -292,6 +298,10 @@ public class MainActivity extends AppCompatActivity {
         swNoFocus.setChecked(prefs.notFocusable());
         swPowerSave.setChecked(prefs.powerSave());
         swHideNoti.setChecked(prefs.hideNotification());
+        if (swWindowBlur != null) swWindowBlur.setChecked(prefs.windowBlur());
+        if (swTouchClose != null) swTouchClose.setChecked(prefs.touchOutsideClose());
+        if (swLandscapeMini != null) swLandscapeMini.setChecked(prefs.landscapeMode() == 2);
+        if (swLandscapeSkip != null) swLandscapeSkip.setChecked(prefs.landscapeMode() == 1);
         if (swHideRecents != null) swHideRecents.setChecked(prefs.hideFromRecents());
         swAutoColor.setChecked(prefs.autoColor());
 
@@ -400,6 +410,13 @@ public class MainActivity extends AppCompatActivity {
         bindSwitch(swNoFocus, prefs::setNotFocusable, null);
         bindSwitch(swPowerSave, prefs::setPowerSave, this::restartService);
         bindSwitch(swHideNoti, prefs::setHideNotification, this::restartService);
+        bindSwitch(swWindowBlur, prefs::setWindowBlur, null);
+        bindSwitch(swTouchClose, prefs::setTouchOutsideClose, null);
+        bindSwitch(swLandscapeMini, v -> {
+            if (v) prefs.setLandscapeMode(2);
+            else prefs.setLandscapeMode(prefs.landscapeSkip() ? 1 : 0);
+        }, null);
+        bindSwitch(swLandscapeSkip, prefs::setLandscapeSkip, null);
         bindSwitch(swHideRecents, v -> {
             prefs.setHideFromRecents(v);
             applyRecentsHidden(v);

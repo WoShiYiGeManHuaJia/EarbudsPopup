@@ -4,16 +4,19 @@ import android.app.KeyguardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
+import android.content.res.Configuration;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -53,8 +56,81 @@ public class PopupActivity extends AppCompatActivity {
         lastShownAt = System.currentTimeMillis();
 
         setupWindow();
-        setContentView(R.layout.activity_popup);
-        applyIntent(getIntent());
+        if (useMini()) {
+            setContentView(R.layout.popup_mini);
+            applyMini(getIntent());
+        } else {
+            setContentView(R.layout.activity_popup);
+            applyIntent(getIntent());
+        }
+        // setContentView 才触发 PhoneWindow.generateLayout()，
+        // 会在那里按主题重新加回 FLAG_DIM_BEHIND，所以必须在之后再清一次。
+        clearDimBehind();
+    }
+
+    /** 横屏 + 用户选了迷你模式 */
+    private boolean useMini() {
+        return prefs != null && prefs.landscapeMode() == 2 && isLandscape();
+    }
+
+    private boolean isLandscape() {
+        return getResources().getConfiguration().orientation
+                == Configuration.ORIENTATION_LANDSCAPE;
+    }
+
+    /**
+     * 彻底清掉窗口压暗。
+     * 用户反复反馈的「四角黑色直角边」有两条来源：
+     *   ① 主题 backgroundDimEnabled（v1.2 已改为 false）
+     *   ② generateLayout() 在 setContentView 时重新加回的 FLAG_DIM_BEHIND
+     * 这里两道都堵住，并把 decorView 背景显式设为透明。
+     */
+    private void clearDimBehind() {
+        Window w = getWindow();
+        if (w == null) return;
+        w.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        w.setDimAmount(0f);
+        View decor = w.getDecorView();
+        if (decor != null) decor.setBackgroundColor(Color.TRANSPARENT);
+    }
+
+    /** 迷你窗渲染：只有设备名 + 一个真实电量，读不到就 --% */
+    private void applyMini(Intent it) {
+        if (it == null) return;
+        String name = it.getStringExtra(PopupService.EXTRA_NAME);
+        int overall = it.getIntExtra(PopupService.EXTRA_OVERALL, -1);
+        int left = it.getIntExtra(PopupService.EXTRA_LEFT, -1);
+        int right = it.getIntExtra(PopupService.EXTRA_BATTERY, -1);
+
+        TextView tvName = findViewById(R.id.miniName);
+        TextView tvBat = findViewById(R.id.miniBattery);
+        if (tvName != null) {
+            tvName.setText((name == null || name.isEmpty()) ? "耳机已连接" : name);
+        }
+        if (tvBat != null) {
+            int v = BatteryLevels.valid(left) ? left
+                    : (BatteryLevels.valid(right) ? right : overall);
+            tvBat.setText(BatteryLevels.valid(v) ? (v + "%") : "--%");
+        }
+
+        View mini = findViewById(R.id.miniCard);
+        if (mini != null) {
+            float dens = getResources().getDisplayMetrics().density;
+            int h = (int) (40 * dens);
+            int screenH = getResources().getDisplayMetrics().heightPixels;
+            android.widget.FrameLayout.LayoutParams lp =
+                    new android.widget.FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.WRAP_CONTENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+            lp.topMargin = PopupService.topOffsetForVPos(
+                    prefs.verticalPos(), h, screenH, dens, prefs.bottomPadDp());
+            mini.setLayoutParams(lp);
+            mini.setAlpha(0f);
+            mini.animate().alpha(1f).setDuration(180).start();
+        }
+
+        main.postDelayed(this::close, prefs.durationMs());
     }
 
     /**
@@ -72,7 +148,60 @@ public class PopupActivity extends AppCompatActivity {
         lastShownAt = System.currentTimeMillis();
         // 先取消上一次的自动关闭计时，再重新走一遍绑定
         main.removeCallbacksAndMessages(null);
-        applyIntent(intent);
+        boolean wantMini = useMini();
+        boolean miniNow = findViewById(R.id.miniCard) != null;
+        if (wantMini != miniNow) {
+            setContentView(wantMini ? R.layout.popup_mini : R.layout.activity_popup);
+        }
+        if (wantMini) applyMini(intent);
+        else applyIntent(intent);
+        clearDimBehind();
+    }
+
+    /**
+     * 某些 ROM 会在 onResume 之后再次按主题刷新窗口属性，
+     * 这里兜底再清一次压暗，确保任何时刻都不会出现四角暗块。
+     */
+    @Override
+    protected void onResume() {
+        super.onResume();
+        clearDimBehind();
+    }
+
+    /**
+     * 点击弹窗外部立即关闭。
+     *
+     * 之前「弹出后点外面没反应，只能等它自己消失」：
+     * 窗口是全屏 + FLAG_NOT_TOUCH_MODAL，外部触摸被直接派发给下层应用，
+     * 本窗口根本收不到事件。必须加 FLAG_WATCH_OUTSIDE_TOUCH，
+     * 系统才会额外补发一个 ACTION_OUTSIDE 给本窗口。
+     */
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (prefs != null && prefs.touchOutsideClose() && ev != null) {
+            int action = ev.getActionMasked();
+            if (action == MotionEvent.ACTION_OUTSIDE) {
+                close();
+                return true;
+            }
+            if (action == MotionEvent.ACTION_DOWN) {
+                View target = findViewById(R.id.card);
+                if (target == null) target = findViewById(R.id.miniCard);
+                if (target != null && target.getWidth() > 0) {
+                    int[] loc = new int[2];
+                    target.getLocationOnScreen(loc);
+                    float x = ev.getRawX();
+                    float y = ev.getRawY();
+                    boolean outside = x < loc[0] || x > loc[0] + target.getWidth()
+                            || y < loc[1] || y > loc[1] + target.getHeight();
+                    if (outside) {
+                        close();
+                        return true;
+                    }
+                }
+            }
+        }
+        return super.dispatchTouchEvent(ev);
     }
 
     private void applyIntent(Intent it) {
@@ -106,7 +235,7 @@ public class PopupActivity extends AppCompatActivity {
             lp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
             int screenH = getResources().getDisplayMetrics().heightPixels;
             lp.topMargin = PopupService.topOffsetForVPos(
-                    prefs.verticalPos(), h, screenH, dens);
+                    prefs.verticalPos(), h, screenH, dens, prefs.bottomPadDp());
             lp.bottomMargin = 0;
             card.setLayoutParams(lp);
             // 复用时残留的位移/透明度/缩放要清掉，否则第二次弹窗位置会飘
@@ -155,14 +284,21 @@ public class PopupActivity extends AppCompatActivity {
         if (prefs.notFocusable()) {
             w.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE); // 打游戏/输入时不夺取焦点
         }
+        // v1.2：窗口级背景模糊改为【默认关闭】。
+        // 它会在整个窗口后面渲染一层磨砂，在 HyperOS 上会吞掉弹窗外部的点击，
+        // 也是「全局变模糊、点外面没反应」的直接来源。
+        // 想要柔化请用卡片自身的 LiveBlurView（只糊卡片底部，不影响触摸）。
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            int r = prefs.blurRadius();
-            if (r > 0) {
-                try {
-                    w.setBackgroundBlurRadius(r);  // Android 12+ 窗口背景模糊
-                } catch (Throwable ignored) {
-                }
+            int r = prefs.windowBlur() ? prefs.blurRadius() : 0;
+            try {
+                w.setBackgroundBlurRadius(r);
+            } catch (Throwable ignored) {
             }
+        }
+        // 点了弹窗外面要能立刻关掉：不加这个 flag，外部触摸会被直接
+        // 派发给下层应用，本窗口收不到任何事件（见 dispatchTouchEvent）。
+        if (prefs.touchOutsideClose()) {
+            w.addFlags(WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
         }
         // 状态栏/导航栏透明
         w.setStatusBarColor(Color.TRANSPARENT);

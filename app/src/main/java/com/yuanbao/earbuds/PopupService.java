@@ -71,12 +71,31 @@ public class PopupService extends Service {
      */
     public static int topOffsetForVPos(int vpos, int cardHeightPx,
                                        int screenHeightPx, float density) {
+        return topOffsetForVPos(vpos, cardHeightPx, screenHeightPx, density, 24);
+    }
+
+    /**
+     * 带自定义底部边距的版本（v1.2）。
+     *
+     * 旧版底部安全边距写死 24dp，用户把 Y 轴滑块拉到底后卡片仍离屏幕底边
+     * 很远（「滑块到底了但没贴底」）。现在底部边距可配置，默认 8dp。
+     */
+    public static int topOffsetForVPos(int vpos, int cardHeightPx,
+                                       int screenHeightPx, float density,
+                                       int bottomPadDp) {
         int topPad = (int) (24 * density);
-        int botPad = (int) (24 * density);
+        int botPad = (int) (bottomPadDp * density);
         int usable = screenHeightPx - cardHeightPx - topPad - botPad;
         if (usable <= 0) return topPad;
         int v = Math.max(0, Math.min(100, vpos));
         return topPad + Math.round(usable * v / 100f);
+    }
+
+    /** 当前是否为横屏（v1.2） */
+    public static boolean isLandscape(Context c) {
+        if (c == null) return false;
+        return c.getResources().getConfiguration().orientation
+                == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
     }
 
     public static final String ACTION_SHOW = "com.yuanbao.earbuds.ACTION_SHOW";
@@ -594,6 +613,12 @@ public class PopupService extends Service {
         lastLaunchAt = now;
         int engine = prefs.engine();
 
+        // v1.2：横屏时完全不弹（设置项「横屏时不弹窗」）。
+        // 打游戏 / 看视频时大弹窗挡视野，用户明确要求能关掉。
+        if (prefs.landscapeMode() == 1 && isLandscape(this)) {
+            return;
+        }
+
         boolean canOverlay = android.provider.Settings.canDrawOverlays(this);
 
         // 无论走哪个引擎，都必须启动自动电量探测。
@@ -955,26 +980,60 @@ public class PopupService extends Service {
         }
     }
 
+    /** 迷你窗文本绑定：读不到真实电量就显示 --%，绝不编造数字 */
+    private void bindMini(View v, String name, BatteryLevels levels) {
+        if (v == null) return;
+        TextView mn = v.findViewById(R.id.miniName);
+        TextView mb = v.findViewById(R.id.miniBattery);
+        if (mn != null) {
+            mn.setText((name == null || name.isEmpty()) ? "耳机已连接" : name);
+        }
+        if (mb != null) {
+            int val = -1;
+            if (levels != null) {
+                if (BatteryLevels.valid(levels.left)) val = levels.left;
+                else if (BatteryLevels.valid(levels.right)) val = levels.right;
+                else if (BatteryLevels.valid(levels.overall)) val = levels.overall;
+            }
+            mb.setText(BatteryLevels.valid(val) ? (val + "%") : "--%");
+        }
+        v.setAlpha(0f);
+        v.animate().alpha(1f).setDuration(180).start();
+    }
+
     private void showOverlay(String name, String address, BatteryLevels levels) {
         dismiss();
         lastOverlayShownAt = System.currentTimeMillis();
         if (!android.provider.Settings.canDrawOverlays(this)) return;
 
-        View v = LayoutInflater.from(this).inflate(R.layout.popup_card, null);
-        PopupRenderer.bind(this, v, name, levels, prefs, this::dismiss);
+        // v1.2：横屏迷你窗。大图在横屏下会挡住游戏/视频画面，
+        // 这里改用只含「设备名 + 一个真实电量」的小条。
+        final boolean mini = (prefs.landscapeMode() == 2) && isLandscape(this);
+        View v;
+        int widthPx;
+        int heightPx;
+        float dens = getResources().getDisplayMetrics().density;
+        if (mini) {
+            v = LayoutInflater.from(this).inflate(R.layout.popup_mini, null);
+            bindMini(v, name, levels);
+            widthPx = ViewGroup.LayoutParams.WRAP_CONTENT;
+            heightPx = ViewGroup.LayoutParams.WRAP_CONTENT;
+        } else {
+            v = LayoutInflater.from(this).inflate(R.layout.popup_card, null);
+            PopupRenderer.bind(this, v, name, levels, prefs, this::dismiss);
+            // 高度必须写死：媒体区子 View 是 match_parent，
+            // 用 WRAP_CONTENT 会让卡片高度失控（表现为比例奇怪）。
+            // 算法与 PopupRenderer / PopupActivity 保持一致。
+            float r = Math.max(0.40f, Math.min(0.94f, prefs.imageRatio()));
+            widthPx = (int) dp(prefs.widthDp());
+            heightPx = (int) (widthPx * (0.45f + r * 0.33f));
+        }
         currentRoot = v;
         currentName = name;
 
         int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                 : WindowManager.LayoutParams.TYPE_PHONE;
-
-        // 高度必须写死：媒体区子 View 是 match_parent，
-        // 用 WRAP_CONTENT 会让卡片高度失控（表现为比例奇怪）。
-        // 算法与 PopupRenderer / PopupActivity 保持一致。
-        float r = Math.max(0.40f, Math.min(0.94f, prefs.imageRatio()));
-        int widthPx = (int) dp(prefs.widthDp());
-        int heightPx = (int) (widthPx * (0.45f + r * 0.33f));
 
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(
                 widthPx,
@@ -990,8 +1049,9 @@ public class PopupService extends Service {
         int vpos = prefs.verticalPos();
         p.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
         int screenH = getResources().getDisplayMetrics().heightPixels;
-        float dens = getResources().getDisplayMetrics().density;
-        p.y = topOffsetForVPos(vpos, heightPx, screenH, dens);
+        // 迷你窗是 WRAP_CONTENT，拿不到真实高度，用 40dp 估算参与定位
+        int hForCalc = mini ? (int) (40 * dens) : heightPx;
+        p.y = topOffsetForVPos(vpos, hForCalc, screenH, dens, prefs.bottomPadDp());
 
         try {
             wm.addView(v, p);
