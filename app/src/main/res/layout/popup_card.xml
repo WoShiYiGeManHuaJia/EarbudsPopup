@@ -121,9 +121,10 @@
                     android:textColor="#E6FFFFFF"
                     android:textSize="12.5sp" />
 
-                <!-- 右耳：图标加纯数字，不带字母。
-                     顺序为 左耳 → 右耳 → 充电盒（用户明确要求），
-                     之前充电盒夹在中间，读数不便。 -->
+                <!-- 充电盒槽位已移除：系统蓝牙栈 untethered_case_battery 为 null，
+                     该值取不到，留着只会一直显示占位符 -->
+
+                <!-- 右耳：图标加纯数字，不带字母 -->
                 <ImageView
                     android:id="@+id/icEarbudsRight"
                     android:layout_width="15dp"
@@ -134,27 +135,6 @@
 
                 <TextView
                     android:id="@+id/tvBatteryRight"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="5dp"
-                    android:includeFontPadding="false"
-                    android:lines="1"
-                    android:singleLine="true"
-                    android:text="--%"
-                    android:textColor="#E6FFFFFF"
-                    android:textSize="12.5sp" />
-
-                <!-- 充电盒：排在最后。拿到真实值才显示，绝不显示占位。 -->
-                <ImageView
-                    android:id="@+id/icCase"
-                    android:layout_width="15dp"
-                    android:layout_height="15dp"
-                    android:layout_marginStart="14dp"
-                    android:contentDescription="充电盒电量"
-                    android:src="@drawable/ic_case" />
-
-                <TextView
-                    android:id="@+id/tvBatteryCase"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="5dp"

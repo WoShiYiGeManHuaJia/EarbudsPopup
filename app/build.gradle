@@ -8,12 +8,13 @@ android {
 
     defaultConfig {
         applicationId "com.yuanbao.earbuds"
-        minSdk 29
-        targetSdk 34
-        versionCode 160
-        versionName "1.6"
+        minSdk 26
+        targetSdk 33
+        versionCode 200
+        versionName "2.0"
     }
 
+    // 发布签名：密钥库由 CI 注入，本地没有时自动退回未签名配置
     signingConfigs {
         release {
             def ksPath = System.getenv("KEYSTORE_FILE")
@@ -29,7 +30,7 @@ android {
     buildTypes {
         release {
             // 开启 R8 代码压缩：第三方库（Material / Glide / AppCompat / Shizuku）
-            // 全量打包会让 dex 膨胀到 8.8MB，方法数逼近 65536 上限。
+            // 全量打包会让 dex 膨胀到 8.8MB，安装与启动都受影响。
             // proguard-rules.pro 里已 keep 住本 App 的全部代码，
             // 所以这里只缩减用不到的第三方代码，自身行为完全不变。
             minifyEnabled true
@@ -41,6 +42,7 @@ android {
             }
         }
         debug {
+            // debug 也用同一把密钥，保证 debug 与 release 可以互相覆盖安装
             if (System.getenv("KEYSTORE_FILE")) {
                 signingConfig signingConfigs.release
             }
@@ -60,12 +62,12 @@ android {
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'androidx.core:core:1.12.0'
-    implementation 'androidx.activity:activity:1.8.0'
-    implementation 'androidx.palette:palette:1.0.0'
-    implementation 'androidx.coordinatorlayout:coordinatorlayout:1.2.0'
     implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.core:core:1.12.0'
+    implementation 'androidx.palette:palette:1.0.0'
     implementation 'com.github.bumptech.glide:glide:4.16.0'
+
+    // Shizuku / Stellar：用于 App 内直接执行 shell 命令（免 Root 授权自身）
     implementation 'dev.rikka.shizuku:api:13.1.5'
     implementation 'dev.rikka.shizuku:provider:13.1.5'
 }

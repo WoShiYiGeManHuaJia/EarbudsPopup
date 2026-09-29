@@ -79,7 +79,7 @@ public class MainActivity extends AppCompatActivity {
     // 设置
     private SwitchMaterial swMaster, swWired, swAutoStart, swBattery, swCase;
     private SwitchMaterial swLock, swNoFocus, swPowerSave, swHideNoti;
-    // v1.2 新增：窗口模糊 / 点外部关闭 / 横屏小窗
+    // 新增：窗口模糊 / 点外部关闭 / 横屏小窗
     private SwitchMaterial swWindowBlur, swTouchClose, swLandscapeMini, swLandscapeSkip;
     private TextView tvEngine, tvDim, tvBlur;
     private LinearLayout deviceList;
@@ -90,7 +90,7 @@ public class MainActivity extends AppCompatActivity {
 
     private View tabHome, tabLook, tabSet;
 
-    private final Set<String> denySet = new LinkedHashSet<>();
+    private final Set<String> allowSet = new LinkedHashSet<>();
     private boolean bindingUi = false;
     private boolean saving = false;
     private String lastProbeLog = "";
@@ -131,9 +131,6 @@ public class MainActivity extends AppCompatActivity {
         // 这里固定用高对比度配色，保证任何壁纸下都看得清。
         setTheme(R.style.AppTheme);
         super.onCreate(savedInstanceState);
-        // 崩溃捕获挂在组件里，不用自定义 Application：
-        // 启动路径上多一个类就多一个崩溃点，这里保持启动链最短。
-        CrashGuard.install(this);
         setContentView(R.layout.activity_main);
         prefs = new Prefs(this);
         PopupRenderer.PrefsHolder.init(this);
@@ -251,32 +248,6 @@ public class MainActivity extends AppCompatActivity {
         tvBlur = findViewById(R.id.tvBlur);
         deviceList = findViewById(R.id.deviceList);
         tvProbeHint = findViewById(R.id.tvProbeHint);
-        TextView tvDiagMma = findViewById(R.id.tvDiagMma);
-        // 超级岛功能已整体移除（菜单与诊断都不再保留）
-        TextView tvDiagIsland = null;
-        TextView tvDiagService = findViewById(R.id.tvDiagService);
-        TextView tvDiagKeep = findViewById(R.id.tvDiagKeep);
-        TextView tvDiagBatSrc = findViewById(R.id.tvDiagBatSrc);
-        TextView tvDiagMeta = findViewById(R.id.tvDiagMeta);
-        findViewById(R.id.btnDiagRefresh).setOnClickListener(v -> {
-            KeepAliveController.arm(this);   // 立即排一次保活 Alarm
-            refreshDiag(tvDiagMma, tvDiagIsland, tvDiagService, tvDiagKeep, tvDiagBatSrc, tvDiagMeta);
-        });
-        // 弹窗弹出「一瞬间」显示的那个固定数字，来自上一次的电量缓存：
-        // 连接瞬间先读缓存立刻出数，实测完成后才被刷新覆盖。
-        // 若某次读到的是错值（例：MMA 握手半途返回的中间值），
-        // 它会一直留在缓存里当「第一帧」。这个按钮清掉它，
-        // 下次连接就从 --% 直接跳到实测值，不再闪旧数字。
-        View btnClearBattery = findViewById(R.id.btnClearBattery);
-        if (btnClearBattery != null) {
-            btnClearBattery.setOnClickListener(v -> {
-                new BatteryStore(MainActivity.this).clearAll();
-                if (tvDiagBatSrc != null) tvDiagBatSrc.setText("已清空");
-                if (tvDiagMeta != null) tvDiagMeta.setText("已清空");
-                Toast.makeText(MainActivity.this, "电量缓存已清空", Toast.LENGTH_SHORT).show();
-            });
-        }
-        refreshDiag(tvDiagMma, tvDiagIsland, tvDiagService, tvDiagKeep, tvDiagBatSrc, tvDiagMeta);
         swHideRecents = findViewById(R.id.swHideRecents);
     }
 
@@ -284,9 +255,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void loadPrefsToUi() {
         bindingUi = true;
-        denySet.clear();
-        prefs.migrateLegacyAllowedIfNeeded();
-        denySet.addAll(prefs.deniedDevices());
+        allowSet.clear();
+        allowSet.addAll(prefs.allowedDevices());
 
         etTitle.setText(prefs.titleText());
         etSub.setText(prefs.subText());
@@ -301,11 +271,11 @@ public class MainActivity extends AppCompatActivity {
         swNoFocus.setChecked(prefs.notFocusable());
         swPowerSave.setChecked(prefs.powerSave());
         swHideNoti.setChecked(prefs.hideNotification());
+        if (swHideRecents != null) swHideRecents.setChecked(prefs.hideFromRecents());
         if (swWindowBlur != null) swWindowBlur.setChecked(prefs.windowBlur());
         if (swTouchClose != null) swTouchClose.setChecked(prefs.touchOutsideClose());
         if (swLandscapeMini != null) swLandscapeMini.setChecked(prefs.landscapeMode() == 2);
         if (swLandscapeSkip != null) swLandscapeSkip.setChecked(prefs.landscapeMode() == 1);
-        if (swHideRecents != null) swHideRecents.setChecked(prefs.hideFromRecents());
         swAutoColor.setChecked(prefs.autoColor());
 
         syncValueLabels();
@@ -321,7 +291,7 @@ public class MainActivity extends AppCompatActivity {
         prefs.setTitleText(t.isEmpty() ? "耳机已连接" : t);
         prefs.setSubText(etSub.getText().toString());
         // 颜色现在由色彩盘写入 Prefs，这里不再从输入框读取
-        prefs.setDeniedDevices(denySet);
+        prefs.setAllowedDevices(allowSet);
         syncValueLabels();
     }
 
@@ -333,10 +303,7 @@ public class MainActivity extends AppCompatActivity {
         tvDuration.setText(prefs.durationMs() + " ms");
         tvPos.setText(prefs.verticalPos() + "%");
         tvAnim.setText(new String[]{"缩放淡入", "底部上滑", "顶部下滑"}[prefs.animStyle()]);
-        String[] engineLabels = {"系统级", "悬浮窗", "智能"};
-        int engIdx = Math.max(0, Math.min(engineLabels.length - 1, prefs.engine()));
-        if (engIdx != prefs.engine()) prefs.setEngine(engIdx);   // 超级岛档位已移除，旧值收敛到 0..2
-        tvEngine.setText(engineLabels[engIdx]);
+        tvEngine.setText(new String[]{"系统级", "悬浮窗", "智能"}[prefs.engine()]);
         tvDim.setText(Math.round(prefs.dimAmount() * 100) + "%");
         tvBlur.setText(prefs.blurRadius() + " dp");
     }
@@ -344,6 +311,31 @@ public class MainActivity extends AppCompatActivity {
     // ---------------- 事件 ----------------
 
     private void setupListeners() {
+        // 崩溃捕获挂在组件里，不用自定义 Application：
+        // 启动路径上多一个类就多一个崩溃点，这里保持启动链最短。
+        CrashGuard.install(this);
+
+        // HCI 抓包助手（拿左右耳真实电量的唯一前置步骤）
+        View rowHciDial = findViewById(R.id.rowHciDial);
+        if (rowHciDial != null) {
+            rowHciDial.setOnClickListener(v -> HciLogHelper.startLogCapture(this));
+        }
+        View rowHciDev = findViewById(R.id.rowHciDev);
+        if (rowHciDev != null) {
+            rowHciDev.setOnClickListener(v -> HciLogHelper.openDeveloperOptions(this));
+        }
+        View rowHciExport = findViewById(R.id.rowHciExport);
+        if (rowHciExport != null) {
+            rowHciExport.setOnClickListener(v -> HciLogHelper.pickLogFile(this));
+        }
+
+        // 崩溃日志查看 / 导出
+        View rowCrash = findViewById(R.id.rowCrashLog);
+        if (rowCrash != null) {
+            rowCrash.setOnClickListener(v -> showCrashLog());
+        }
+        refreshCrashState();
+
         findViewById(R.id.btnSetup).setOnClickListener(
                 v -> startActivity(new Intent(this, SetupActivity.class)));
 
@@ -353,17 +345,10 @@ public class MainActivity extends AppCompatActivity {
             s.setAction(PopupService.ACTION_SHOW);
             s.putExtra(PopupService.EXTRA_NAME, "我的耳机");
             boolean show = prefs.showBattery();
-            // 预览改用真实探测结果，不再写死 78 / 65。
-            // 之前无论什么设备都是这两个数，用户以为电量已经读到了，实际是假的。
-            BatteryLevels pv = new BatteryStore(this).load(prefs.lastAddress());
-            int l = show ? pv.left : -1;
-            int r = show ? pv.right : -1;
-            int c = (show && prefs.showCaseBattery()) ? pv.caseBox : -1;
-            if (!show || !BatteryLevels.valid(l)) l = show ? pv.overall : -1;
-            if (!show || !BatteryLevels.valid(r)) r = show ? pv.overall : -1;
-            s.putExtra(PopupService.EXTRA_LEFT, l);
-            s.putExtra(PopupService.EXTRA_BATTERY, r);
-            s.putExtra(PopupService.EXTRA_CASE, c);
+            s.putExtra(PopupService.EXTRA_LEFT, show ? 78 : -1);
+            s.putExtra(PopupService.EXTRA_BATTERY, show ? 78 : -1);
+            s.putExtra(PopupService.EXTRA_CASE,
+                    (show && prefs.showCaseBattery()) ? 65 : -1);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(s);
             else startService(s);
         });
@@ -386,7 +371,7 @@ public class MainActivity extends AppCompatActivity {
                 val -> prefs.setImageRatio(val / 100f)));
         findViewById(R.id.rowDuration).setOnClickListener(v -> showSlider("显示时长", "ms",
                 500, 20000, prefs.durationMs(), val -> prefs.setDurationMs(val)));
-        findViewById(R.id.rowDim).setOnClickListener(v -> showSlider("详情区压暗", "%",
+        findViewById(R.id.rowDim).setOnClickListener(v -> showSlider("背景压暗", "%",
                 0, 70, Math.round(prefs.dimAmount() * 100),
                 val -> prefs.setDimAmount(val / 100f)));
         findViewById(R.id.rowBlur).setOnClickListener(v -> showSlider("背景模糊半径", "dp",
@@ -401,7 +386,7 @@ public class MainActivity extends AppCompatActivity {
                 new String[]{"系统级（透明 Activity，锁屏也能弹）",
                         "悬浮窗（兼容性最好）",
                         "智能：先系统级，失败自动降级悬浮窗"},
-                Math.max(0, Math.min(2, prefs.engine())), prefs::setEngine));
+                prefs.engine(), prefs::setEngine));
 
         // 开关
         bindSwitch(swMaster, prefs::setMasterEnabled, () -> toggleService(swMaster.isChecked()));
@@ -433,27 +418,6 @@ public class MainActivity extends AppCompatActivity {
         // 首页快捷操作
         findViewById(R.id.rowBlockMi).setOnClickListener(v -> showMiPopupGuide());
         findViewById(R.id.rowAdb).setOnClickListener(v -> copyAdbCommands());
-
-        // v1.4.1：崩溃日志查看 / 导出
-        View rowCrash = findViewById(R.id.rowCrashLog);
-        if (rowCrash != null) {
-            rowCrash.setOnClickListener(v -> showCrashLog());
-        }
-        refreshCrashState();
-
-        // v1.3：HCI 抓包助手（拿左右耳真实电量的唯一前置步骤）
-        View rowHciDial = findViewById(R.id.rowHciDial);
-        if (rowHciDial != null) {
-            rowHciDial.setOnClickListener(v -> HciLogHelper.startLogCapture(this));
-        }
-        View rowHciDev = findViewById(R.id.rowHciDev);
-        if (rowHciDev != null) {
-            rowHciDev.setOnClickListener(v -> HciLogHelper.openDeveloperOptions(this));
-        }
-        View rowHciExport = findViewById(R.id.rowHciExport);
-        if (rowHciExport != null) {
-            rowHciExport.setOnClickListener(v -> HciLogHelper.pickLogFile(this));
-        }
 
         // 设置页
         findViewById(R.id.btnRefresh).setOnClickListener(v -> refreshDevices());
@@ -488,11 +452,128 @@ public class MainActivity extends AppCompatActivity {
                 runBatteryProbe();
             }
         });
-        // 充电盒电量推断开关已移除：该私有特征已被证实恒为 32、不是电量。
-        // 设置里只保留「显示充电盒电量」一个开关。
+        // 充电盒电量推断开关：默认关闭（该字节未确认是电量，贸然显示会乱跳）
+        View rowCase = findViewById(R.id.rowPrivateCase);
+        if (rowCase != null) {
+            final com.google.android.material.materialswitch.MaterialSwitch swCaseSrc =
+                    rowCase.findViewById(R.id.swPrivateCase);
+            final android.widget.TextView tvCaseDesc =
+                    rowCase.findViewById(R.id.tvPrivateCaseDesc);
+            if (swCaseSrc != null) {
+                swCaseSrc.setChecked(prefs.privateCaseEnabled());
+                swCaseSrc.setOnCheckedChangeListener((btn, on) -> {
+                    prefs.setPrivateCaseEnabled(on);
+                    if (tvCaseDesc != null) {
+                        tvCaseDesc.setText(on
+                                ? "开启：用私有特征读数（已验证恒为32，非电量，仅调试用）"
+                                : "关闭：充电盒显示 --%（该特征值已被证实不是电量）");
+                    }
+                });
+                if (tvCaseDesc != null) {
+                    tvCaseDesc.setText(prefs.privateCaseEnabled()
+                            ? "开启：用私有特征读数当充电盒电量（未确认，可能不准）"
+                            : "关闭：充电盒显示 --%");
+                }
+            }
+        }
         findViewById(R.id.rowInfo).setOnClickListener(v -> showAbout());
 
         watch(etTitle, etSub);
+    }
+
+    /** 刷新崩溃日志状态 */
+    private void refreshCrashState() {
+        TextView tv = findViewById(R.id.tvCrashState);
+        if (tv == null) return;
+        try {
+            java.io.File f = CrashGuard.logFile(this);
+            if (f.exists() && f.length() > 0) {
+                tv.setText("已记录 " + (f.length() / 1024 + 1) + " KB，点此查看或导出");
+            } else {
+                tv.setText("暂无崩溃记录");
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** 显示崩溃日志，并提供导出 */
+    private void showCrashLog() {
+        String text;
+        try {
+            java.io.File f = CrashGuard.logFile(this);
+            if (!f.exists() || f.length() == 0) {
+                Toast.makeText(this, "还没有崩溃记录，说明最近没发生过闪退",
+                        Toast.LENGTH_SHORT).show();
+                return;
+            }
+            byte[] b = new byte[(int) Math.min(f.length(), 60000L)];
+            java.io.FileInputStream in = new java.io.FileInputStream(f);
+            int read = 0;
+            while (read < b.length) {
+                int n = in.read(b, read, b.length - read);
+                if (n < 0) break;
+                read += n;
+            }
+            in.close();
+            text = new String(b, 0, read, "UTF-8");
+        } catch (Throwable e) {
+            Toast.makeText(this, "读取日志失败：" + e.getMessage(), Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        final android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        final TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextIsSelectable(true);
+        tv.setTextSize(10f);
+        tv.setTypeface(android.graphics.Typeface.MONOSPACE);
+        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        tv.setPadding(pad, pad, pad, pad);
+        sv.addView(tv);
+
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle("崩溃日志（可长按选择复制）")
+                .setView(sv)
+                .setNeutralButton("清空", (d, w) -> {
+                    try {
+                        CrashGuard.logFile(this).delete();
+                        refreshCrashState();
+                    } catch (Throwable ignored) {
+                    }
+                })
+                .setPositiveButton("导出", (d, w) -> shareCrashLog())
+                .setNegativeButton("关闭", null)
+                .show();
+    }
+
+    /** 把崩溃日志分享出去 */
+    private void shareCrashLog() {
+        try {
+            java.io.File f = CrashGuard.logFile(this);
+            if (!f.exists() || f.length() == 0) return;
+            android.net.Uri uri = androidx.core.content.FileProvider
+                    .getUriForFile(this, getPackageName() + ".files", f);
+            Intent i = new Intent(Intent.ACTION_SEND);
+            i.setType("text/plain");
+            i.putExtra(Intent.EXTRA_STREAM, uri);
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(i, "导出崩溃日志"));
+        } catch (Throwable e) {
+            Toast.makeText(this, "导出失败：" + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /**
+     * 转发 HCI 日志文件的选择结果。
+     * 挑到文件后立刻转成分享 Intent，用户可以发到自己电脑或网盘。
+     */
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == HciLogHelper.REQ_PICK_LOG && resultCode == RESULT_OK
+                && data != null && data.getData() != null) {
+            HciLogHelper.shareLogFile(this, data.getData());
+        }
     }
 
     private void bindSwitch(SwitchMaterial sw, java.util.function.Consumer<Boolean> save,
@@ -1249,19 +1330,10 @@ public class MainActivity extends AppCompatActivity {
         updatePreview();
     }
 
-    /**
-     * 只给「外观」页的相框挂手势。
-     *
-     * 首页那个弹窗预览是【只读预览】：它显示的就是弹窗真实效果，
-     * 手指划它不该改到图片（之前两个 ImageView 共用同一套
-     * imageScale / dx / dy，在首页调一下会连带改掉实际弹窗）。
-     */
+    /** 给相框和首页预览都挂上双指缩放 / 单指拖动 */
     private void setupImageGesture() {
         attachGesture(pvFrameImage);
-        if (pvImage != null) {
-            pvImage.setOnTouchListener(null);
-            pvImage.setClickable(false);
-        }
+        attachGesture(pvImage);
     }
 
     /**
@@ -1449,14 +1521,21 @@ public class MainActivity extends AppCompatActivity {
 
             MaterialCheckBox cb = new MaterialCheckBox(this);
             cb.setText((shown == null ? "未知设备" : shown) + "\n" + addr);
-            // 勾选 = 允许弹窗（默认），取消勾选 = 排除这台设备。
-            // 新配对的设备从没被排除过，默认就是允许的 ——
-            // 这样换任何耳机都能弹、都能读电量。
-            cb.setChecked(!denySet.contains(addr));
+            cb.setChecked(allowSet.isEmpty() || allowSet.contains(addr));
+            // 先 setChecked 再挂 listener，避免初始化时误触发
             cb.setOnCheckedChangeListener((b, checked) -> {
-                if (checked) denySet.remove(addr);
-                else denySet.add(addr);
-                prefs.setDeniedDevices(denySet);
+                // 关键修正：allowSet 为空代表「所有设备都弹」。
+                // 此时用户取消勾选某一项，若直接 remove 一个本来就不存在的地址，
+                // 存进去还是空集，等于没设置——永远排除不掉任何设备。
+                // 所以第一次交互时先把全部已配对设备灌进 allowSet，再做增删。
+                if (allowSet.isEmpty()) {
+                    for (BluetoothDevice other : bonded) {
+                        allowSet.add(other.getAddress());
+                    }
+                }
+                if (checked) allowSet.add(addr);
+                else allowSet.remove(addr);
+                prefs.setAllowedDevices(allowSet);
             });
             LinearLayout.LayoutParams cbLp = new LinearLayout.LayoutParams(
                     0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
@@ -1480,7 +1559,7 @@ public class MainActivity extends AppCompatActivity {
             deviceList.addView(row, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
-        deviceList.addView(hintText("默认所有耳机都弹窗；取消勾选 = 排除这台设备"));
+        deviceList.addView(hintText("全部取消勾选 = 所有设备都弹窗"));
         deviceList.addView(hintText("点「改名」可自定义弹窗上显示的名字，优先级高于系统蓝牙名"));
     }
 
@@ -1742,27 +1821,22 @@ public class MainActivity extends AppCompatActivity {
 
         final android.app.ProgressDialog pd = new android.app.ProgressDialog(this);
         pd.setTitle("正在探测");
-        pd.setMessage((n == null ? addr : n) + "\nRFCOMM → BLE 私有通道 → GATT，最多 90 秒…");
+        pd.setMessage((n == null ? addr : n) + "\n扫描 BLE 广播并读取 GATT，最多 25 秒…");
         pd.setCancelable(false);
         pd.show();
 
         final BatteryProbe probe = new BatteryProbe(this);
         final boolean[] finished = new boolean[1];
 
-        // 硬超时兜底：GATT 卡死或回调没来时也不能让用户干等。
-        //
-        // 之前只有 25 秒，而整条链路是：
-        //   RFCOMM 8 个通道（约 15~35 秒）→ BLE 私有通道（最多 12 秒）→ GATT 诊断
-        // 25 秒一到就把日志截断了，用户看到的日志永远停在
-        // 「改走 BLE MMA 通道」这一行 —— 因为 BLE 那段【从来没机会执行】。
-        // 这是「BLE 通道看起来完全没生效」的真凶，跟协议本身无关。
+        // 硬超时兜底：GATT 卡死或回调没来时也不能让用户干等，
+        // 25 秒后强制用当前累积日志弹出结果窗口
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             if (finished[0]) return;
             finished[0] = true;
             dismissQuietly(pd);
             showProbeResult(n, addr, null, probe.currentLog()
-                    + "\n\n[超时兜底] 探测超过 90 秒未结束，以上是不完整日志。");
-        }, 90000);
+                    + "\n\n[超时兜底] 探测超过 25 秒未结束，以上是不完整日志。");
+        }, 25000);
 
         probe.probe(addr, dev, (levels, diagnostic) -> {
             if (finished[0]) return;
@@ -1940,101 +2014,6 @@ public class MainActivity extends AppCompatActivity {
                 "已复制，在 Stellar 命令页粘贴执行");
     }
 
-    /**
-     * v1.3：转发 HCI 日志文件的选择结果。
-     * 挑到文件后立刻转成分享 Intent，用户可以发到自己电脑或网盘。
-     */
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == HciLogHelper.REQ_PICK_LOG && resultCode == RESULT_OK
-                && data != null && data.getData() != null) {
-            HciLogHelper.shareLogFile(this, data.getData());
-        }
-    }
-
-    /** v1.4.1：刷新崩溃日志状态 */
-    private void refreshCrashState() {
-        TextView tv = findViewById(R.id.tvCrashState);
-        if (tv == null) return;
-        try {
-            java.io.File f = CrashGuard.logFile(this);
-            if (f.exists() && f.length() > 0) {
-                tv.setText("已记录 " + (f.length() / 1024 + 1) + " KB，点此查看或导出");
-            } else {
-                tv.setText("暂无崩溃记录");
-            }
-        } catch (Throwable ignored) {
-        }
-    }
-
-    /** v1.4.1：显示崩溃日志，并提供导出 */
-    private void showCrashLog() {
-        String text;
-        try {
-            java.io.File f = CrashGuard.logFile(this);
-            if (!f.exists() || f.length() == 0) {
-                Toast.makeText(this, "还没有崩溃记录，说明最近没发生过闪退",
-                        Toast.LENGTH_SHORT).show();
-                return;
-            }
-            byte[] b = new byte[(int) Math.min(f.length(), 60000L)];
-            java.io.FileInputStream in = new java.io.FileInputStream(f);
-            int read = 0;
-            while (read < b.length) {
-                int n = in.read(b, read, b.length - read);
-                if (n < 0) break;
-                read += n;
-            }
-            in.close();
-            text = new String(b, 0, read, "UTF-8");
-        } catch (Throwable e) {
-            Toast.makeText(this, "读取日志失败：" + e.getMessage(), Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        final android.widget.ScrollView sv = new android.widget.ScrollView(this);
-        final android.widget.TextView tv = new android.widget.TextView(this);
-        tv.setText(text);
-        tv.setTextIsSelectable(true);
-        tv.setTextSize(10f);
-        tv.setTypeface(android.graphics.Typeface.MONOSPACE);
-        int pad = (int) (16 * getResources().getDisplayMetrics().density);
-        tv.setPadding(pad, pad, pad, pad);
-        sv.addView(tv);
-
-        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-                .setTitle("崩溃日志（可长按选择复制）")
-                .setView(sv)
-                .setNeutralButton("清空", (d, w) -> {
-                    try {
-                        CrashGuard.logFile(this).delete();
-                        refreshCrashState();
-                    } catch (Throwable ignored) {
-                    }
-                })
-                .setPositiveButton("导出", (d, w) -> shareCrashLog())
-                .setNegativeButton("关闭", null)
-                .show();
-    }
-
-    /** v1.4.1：把崩溃日志分享出去 */
-    private void shareCrashLog() {
-        try {
-            java.io.File f = CrashGuard.logFile(this);
-            if (!f.exists() || f.length() == 0) return;
-            android.net.Uri uri = androidx.core.content.FileProvider
-                    .getUriForFile(this, getPackageName() + ".files", f);
-            Intent i = new Intent(Intent.ACTION_SEND);
-            i.setType("text/plain");
-            i.putExtra(Intent.EXTRA_STREAM, uri);
-            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            startActivity(Intent.createChooser(i, "导出崩溃日志"));
-        } catch (Throwable e) {
-            Toast.makeText(this, "导出失败：" + e.getMessage(), Toast.LENGTH_SHORT).show();
-        }
-    }
-
     private void copyAdbCommands() {
         copy("appops set com.yuanbao.earbuds SYSTEM_ALERT_WINDOW allow\n"
                 + "pm grant com.yuanbao.earbuds android.permission.BLUETOOTH_CONNECT\n"
@@ -2064,96 +2043,4 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         refreshPermStatus();
     }
-    /**
-     * 补丁状态诊断 —— Patch1/Patch2 都是底层改动，界面上看不到，
-     * 所以这里把「代码到底跑没跑」直接显示出来。
-     */
-    private void refreshDiag(TextView mma, TextView island, TextView svc, TextView keep,
-                             TextView src, TextView meta) {
-        // -1) 小米 MMA 语义电量：这是唯一能给真实 L/R/Case 的只读通道
-        if (mma != null) {
-            android.bluetooth.BluetoothDevice dev0 = null;
-            try {
-                android.bluetooth.BluetoothAdapter ad =
-                        android.bluetooth.BluetoothAdapter.getDefaultAdapter();
-                String a0 = prefs.lastAddress();
-                if (ad != null && a0 != null && !a0.isEmpty()) {
-                    dev0 = ad.getRemoteDevice(a0);
-                }
-            } catch (Throwable ignored) {
-                dev0 = null;
-            }
-            boolean xiaomi = XiaomiMmaBatteryReader.likelyXiaomiRedmi(dev0);
-            StringBuilder sb = new StringBuilder();
-            sb.append("设备匹配=").append(xiaomi ? "是（Redmi/Xiaomi TWS）" : "否");
-            if (xiaomi) {
-                sb.append("\n通道：RFCOMM MMA GET_DEVICE_INFO");
-                sb.append("\n成功则返回真实 左/右/盒，否则显示占位");
-            }
-            mma.setText(sb.toString());
-        }
-        // 0) 超级岛诊断已随功能一并移除
-        // 1) 服务是否在运行
-        boolean running = false;
-        try {
-            android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
-            if (am != null) {
-                for (android.app.ActivityManager.RunningServiceInfo i : am.getRunningServices(200)) {
-                    if (i.service != null && PopupService.class.getName().equals(i.service.getClassName())) {
-                        running = true;
-                        break;
-                    }
-                }
-            }
-        } catch (Throwable ignored) {}
-        svc.setText(running ? "运行中 ✓" : "未运行（点按钮会启动）");
-
-        // 2) 保活 Alarm 是否已排（PendingIntent 存在即代表已注册过）
-        boolean armed = false;
-        try {
-            android.app.AlarmManager am = (android.app.AlarmManager) getSystemService(Context.ALARM_SERVICE);
-            android.content.Intent i = new android.content.Intent(this, BootReceiver.class)
-                    .setAction(BootReceiver.ACTION_RECOVER_SERVICE).setPackage(getPackageName());
-            android.app.PendingIntent pi = android.app.PendingIntent.getBroadcast(this, 9147, i,
-                    android.app.PendingIntent.FLAG_NO_CREATE |
-                            (android.os.Build.VERSION.SDK_INT >= 23 ? android.app.PendingIntent.FLAG_IMMUTABLE : 0));
-            armed = pi != null;
-        } catch (Throwable ignored) {}
-        keep.setText(armed ? "已排定（15 分钟低频自恢复）✓" : "未排定 → 点上方按钮");
-
-        // 3) 电量来源 + 4) metadata 实读
-        String addr = prefs.lastAddress();
-        BatteryLevels b = addr == null ? null : new BatteryStore(this).load(addr);
-        if (b == null || (b.source == null || b.source.isEmpty())) {
-            src.setText("暂无（连接一次耳机后再看）");
-        } else {
-            src.setText(b.source);
-        }
-        if (addr == null) {
-            meta.setText("无设备地址");
-        } else {
-            String r = BatteryAuthorityProbeText(addr);
-            meta.setText(r);
-        }
-    }
-
-    /** 直接反射读一次系统 TWS metadata，把结果当字符串显示 */
-    private String BatteryAuthorityProbeText(String addr) {
-        try {
-            android.bluetooth.BluetoothAdapter ba = android.bluetooth.BluetoothAdapter.getDefaultAdapter();
-            if (ba == null || !ba.isEnabled()) return "蓝牙未开启";
-            android.bluetooth.BluetoothDevice d = ba.getRemoteDevice(addr);
-            BatteryLevels lv = BatteryAuthority.read(d);
-            StringBuilder sb = new StringBuilder();
-            sb.append("左=").append(BatteryLevels.valid(lv.left) ? lv.left + "%" : "--")
-              .append(" 右=").append(BatteryLevels.valid(lv.right) ? lv.right + "%" : "--")
-              .append(" 盒=").append(BatteryLevels.valid(lv.caseBox) ? lv.caseBox + "%" : "--");
-            if (!lv.anyKnown()) sb.append("（该 ROM 未暴露给第三方）");
-            return sb.toString();
-        } catch (Throwable e) {
-            return "读取异常: " + e.getClass().getSimpleName();
-        }
-    }
-
-
 }

@@ -86,20 +86,6 @@ public class LiveBlurView extends View {
     /** 压暗画笔，保证文字可读 */
     private final Paint dimPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-    /**
-     * 冻结标记 + 最后一帧模糊位图。
-     * 弹窗淡出时调用 stop()：不再逐帧重算模糊，直接复用最后一次结果。
-     * 只影响“是否重算”，绘制路径与正常时完全一致，模糊样式不变。
-     */
-    private boolean frozen = false;
-    private Bitmap frozenBmp;
-
-    /** 停止逐帧重算（淡出期间调用，避免模糊重算与 alpha 动画叠加导致闪烁）。 */
-    public void stop() {
-        frozen = true;
-        detachCallback();
-    }
-
     public LiveBlurView(Context c) {
         super(c);
     }
@@ -142,43 +128,7 @@ public class LiveBlurView extends View {
     public void setBottomCornerRadius(float px) {
         this.bottomRadiusPx = Math.max(0f, px);
         cornerPath = null;   // 半径变了要重建路径
-        applyOutlineClip();
         invalidate();
-    }
-
-    /**
-     * 框架级圆角裁剪（兜底中的兜底）。
-     *
-     * onDraw 里已经用 canvas.clipPath(shape) 裁过一次，但那次裁剪在
-     * saveLayer 内部生效与否，取决于硬件加速管线的实现，不同 ROM 上
-     * 并不一致。一旦它没生效，drawPath(shape, dimPaint) 就会把
-     * 0x4D000000（30% 黑）铺成【直角矩形】—— 同样是「圆角还在，
-     * 但角落多出黑色直角边」。
-     *
-     * setClipToOutline(true) 的裁剪由框架在合成阶段统一执行，
-     * 不依赖 canvas 的合成模式，必然生效。
-     *
-     * 顶部两角要保持直角，做法是把圆角矩形的上边推到 View 上方（-r），
-     * 这样顶部两个圆角落在可视区之外，裁剪后顶部仍是直角。
-     */
-    private void applyOutlineClip() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return;
-        if (bottomRadiusPx <= 0f) {
-            setClipToOutline(false);
-            return;
-        }
-        setOutlineProvider(new android.view.ViewOutlineProvider() {
-            @Override
-            public void getOutline(View view, Outline outline) {
-                int w = view.getWidth(), h = view.getHeight();
-                if (w <= 0 || h <= 0) return;
-                int r = Math.round(Math.min(bottomRadiusPx, Math.min(w, h) / 2f));
-                if (r <= 0) return;
-                outline.setRoundRect(0, -r, w, h, r);
-            }
-        });
-        setClipToOutline(true);
-        invalidateOutline();
     }
 
     @Override
@@ -188,9 +138,6 @@ public class LiveBlurView extends View {
         // ensureCornerPath 有「已存在就复用」的缓存，如果这里不清，
         // 之后会一直用第一次（可能是错的）尺寸画圆角。
         cornerPath = null;
-        // 渐变同样依赖高度（fh = h * fadeRatio），尺寸变了也要重建，
-        // 否则会一直用首次布局时的高度画渐隐 —— 高度改变后渐变位置就错了。
-        fadeGradient = null;
     }
 
     @Override
@@ -199,12 +146,6 @@ public class LiveBlurView extends View {
         if (changed && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
                 && bottomRadiusPx > 0f) {
             invalidateOutline();
-        }
-        // 尺寸变化后圆角路径/裁剪都要跟着变，否则会一直用首次布局的尺寸裁剪
-        if (changed) {
-            cornerPath = null;
-            fadeGradient = null;
-            applyOutlineClip();
         }
     }
 
@@ -278,15 +219,7 @@ public class LiveBlurView extends View {
             setRenderEffect(null);
         } catch (Throwable ignored) {
         }
-        // 不要再 setClipToOutline(false)。
-        //
-        // 这里曾经把裁剪关掉，而 setSource() 会调用本方法 ——
-        // PopupRenderer.setupLiveBlur 的调用顺序是：
-        //   setBlurRadius → setDim → setBottomCornerRadius(打开裁剪) → setSource(本方法)
-        // 于是最后一步又把刚打开的圆角裁剪关掉了，dimPaint 那层半透明黑
-        // 直接铺成直角矩形 —— 就是弹窗左下/右下两个黑色直角边。
-        // 软件渲染下裁剪依然生效，这里改成重新套用圆角裁剪。
-        applyOutlineClip();
+        setClipToOutline(false);
         // 强制软件渲染：本 View 只是一条约 52dp 高的窄条，开销可忽略。
         // 软件层下 saveLayer / PorterDuff / BitmapShader 行为确定，
         // 不会受硬件 RenderNode、alpha layer 干扰（之前圆角时有时无、
@@ -357,25 +290,9 @@ public class LiveBlurView extends View {
         try {
             drawBlur(canvas);
         } catch (Throwable t) {
-            // 退化：画一层半透明底色，保证文字仍可读。
-            //
-            // 之前这里是 canvas.drawColor(dimColor) —— 画满整个 View 的
-            // 【直角矩形】。弹窗卡片是圆角的，于是底部左右两角多出
-            // 两块直角黑边，这正是用户看到的
-            // 「圆角还在，但多出两个半透明黑色直角边」。
-            // 兜底也必须走同一个圆角形状，不能因为是降级路径就画矩形。
+            // 退化：画一层半透明底色，保证文字仍可读
             try {
-                int vw = getWidth(), vh = getHeight();
-                ensureCornerPath(vw, vh);
-                android.graphics.Path shape = cornerPath;
-                if (shape != null) {
-                    canvas.save();
-                    canvas.clipPath(shape);
-                    canvas.drawColor(dimColor);
-                    canvas.restore();
-                } else {
-                    canvas.drawColor(dimColor);
-                }
+                canvas.drawColor(dimColor);
             } catch (Throwable ignored) {
             }
         }
@@ -422,16 +339,10 @@ public class LiveBlurView extends View {
         }
 
         Bitmap blurred = null;
-        if (frozen) {
-            // 冻结：不再重算，直接用最后一帧结果，后续绘制逻辑完全一致
-            if (frozenBmp != null && !frozenBmp.isRecycled()) blurred = frozenBmp;
-        } else {
-            try {
-                blurred = renderBlurredBitmap(dr, sw, sh, vw, vh);
-                if (blurred != null) frozenBmp = blurred;
-            } catch (Throwable t) {
-                blurred = null;
-            }
+        try {
+            blurred = renderBlurredBitmap(dr, sw, sh, vw, vh);
+        } catch (Throwable t) {
+            blurred = null;
         }
 
         //
@@ -442,22 +353,6 @@ public class LiveBlurView extends View {
         // → 再在同一个图层里用 DST_OUT 擦顶部。此时图层里已有内容，
         // 擦除才真正生效：上边缘全擦（露出清晰动画），往下渐弱。
         //
-        //
-        // 圆角裁剪必须在建图层【之前】做。
-        // 之前只靠「用圆角 Path 填充」来保证圆角，但图层内还有两处
-        // 不守规矩的矩形绘制：
-        //   ① 下面的渐隐 canvas.drawRect(0,0,vw,fh)
-        //   ② shaderPaint 在 CLAMP 模式下会沿 Path 外包盒铺满
-        // 这两处一旦越过圆角边界，角落就会补上半透明黑 ——
-        // 用户看到的「左下/右下两个黑色直角边」就是这么来的。
-        // clipPath 是一刀切：不管里面画什么，都出不了圆角。
-        int clipped = canvas.save();
-        if (shape != null) {
-            try {
-                canvas.clipPath(shape);
-            } catch (Throwable ignored) {
-            }
-        }
         int saved = canvas.saveLayer(0f, 0f, vw, vh, null);
         try {
             if (blurred != null) {
@@ -478,17 +373,11 @@ public class LiveBlurView extends View {
             }
         } finally {
             canvas.restoreToCount(saved);
-            canvas.restoreToCount(clipped);
         }
     }
 
     /** 最小重绘间隔（ms）：把模糊重算限制在 ~30fps，降低 CPU 占用 */
-    // 从 33ms 放宽到 66ms（约 15fps）。
-    // 原因：降采样倍数从 4 改成 2 后（为消除马赛克），stackBlur 要处理的像素量
-    // 变成 4 倍。GIF 每前进一帧就触发一次全量模糊，30fps 下 CPU 吃满，
-    // 表现为「GIF 变卡」。模糊是背景视觉，15fps 完全够用，
-    // 动图本身仍由源 ImageView 按原帧率刷新（不受此限制）。
-    private static final long MIN_REDRAW_MS = 66L;
+    private static final long MIN_REDRAW_MS = 33L;
     private long lastDrawAt = 0L;
 
     private void attachCallback(Drawable dr) {

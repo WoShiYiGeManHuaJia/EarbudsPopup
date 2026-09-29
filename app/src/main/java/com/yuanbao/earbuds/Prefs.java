@@ -21,18 +21,6 @@ public class Prefs {
     public Prefs(Context c) {
         sp = c.getSharedPreferences(NAME, Context.MODE_PRIVATE);
         migrateSizeDefaults();
-        migrateEngineDefault();
-    }
-
-    /**
-     * 超级岛档位（3/4）已随功能移除。这里把引擎默认值收敛到 2（智能），
-     * 并把已经存成 3/4 的老配置一次性拉回 2，避免越界。
-     */
-    private void migrateEngineDefault() {
-        if (sp.getInt("engine_schema", 0) >= 3) return;
-        int cur = sp.getInt("engine", 2);
-        if (cur < 0 || cur > 2) cur = 2;
-        sp.edit().putInt("engine", cur).putInt("engine_schema", 3).apply();
     }
 
     /**
@@ -338,23 +326,14 @@ public class Prefs {
     }
 
     // ---------- 系统级弹窗引擎 ----------
-    /**
-     * 0=系统级Activity 1=悬浮窗 2=智能降级
-     * （原 3/4 为 HyperOS 超级岛档位，功能已移除）
-     */
+    /** 0=系统级Activity 1=悬浮窗 2=智能降级 */
     public int engine() {
-        int v = sp.getInt("engine", 2);
-        if (v < 0 || v > 2) return 2;
-        return v;
+        return sp.getInt("engine", 2);
     }
 
     public void setEngine(int v) {
-        int c = Math.max(0, Math.min(2, v));
-        sp.edit().putInt("engine", c).apply();
+        sp.edit().putInt("engine", v).apply();
     }
-
-    // 超级岛功能已移除：force_island / 强制上岛开关一并删除。
-
 
     /** 背景压暗程度 0~1 */
     public float dimAmount() {
@@ -428,62 +407,6 @@ public class Prefs {
 
     public void setHideFromRecents(boolean v) {
         sp.edit().putBoolean("hide_recents", v).apply();
-    }
-
-    // ---------- v1.2 新增 ----------
-
-    /**
-     * 窗口级背景模糊（Android 12+ setBackgroundBlurRadius）。
-     * 默认关闭：它会把整个窗口渲染成一层半透明磨砂，
-     * 在 HyperOS 上会吞掉弹窗外部的点击，且圆角外可能显出暗块。
-     * 需要柔化效果请用卡片自身的 LiveBlurView，那个不影响触摸。
-     */
-    public boolean windowBlur() {
-        return sp.getBoolean("win_blur", false);
-    }
-
-    public void setWindowBlur(boolean v) {
-        sp.edit().putBoolean("win_blur", v).apply();
-    }
-
-    /** 点击弹窗外部区域时立即关闭弹窗，而不是干等自动消失 */
-    public boolean touchOutsideClose() {
-        return sp.getBoolean("touch_outside_close", true);
-    }
-
-    public void setTouchOutsideClose(boolean v) {
-        sp.edit().putBoolean("touch_outside_close", v).apply();
-    }
-
-    /** 横屏模式：0=照常弹大窗 1=横屏完全不弹 2=横屏显示迷你小窗 */
-    public int landscapeMode() {
-        return sp.getInt("landscape_mode", 2);
-    }
-
-    public void setLandscapeMode(int v) {
-        sp.edit().putInt("landscape_mode", Math.max(0, Math.min(2, v))).apply();
-    }
-
-    /** 横屏时是否完全不弹（landscapeMode==1 的快捷读写） */
-    public boolean landscapeSkip() {
-        return landscapeMode() == 1;
-    }
-
-    public void setLandscapeSkip(boolean v) {
-        if (v) setLandscapeMode(1);
-        else if (landscapeMode() == 1) setLandscapeMode(2);
-    }
-
-    /**
-     * 贴底时卡片距屏幕底部的距离（dp）。
-     * 旧版写死 24dp，在手势导航的全面屏上看起来「离底边还很远」。
-     */
-    public int bottomPadDp() {
-        return sp.getInt("bottom_pad_dp", 8);
-    }
-
-    public void setBottomPadDp(int v) {
-        sp.edit().putInt("bottom_pad_dp", Math.max(0, Math.min(80, v))).apply();
     }
 
     // ---------- 设备显示名 ----------
@@ -581,47 +504,78 @@ public class Prefs {
         sp.edit().putFloat("sound_vol", Math.max(0f, Math.min(1f, v))).apply();
     }
 
-    // ---------- 设备过滤 ----------
-    //
-    // 【重大修正】原来是「允许列表」语义：setAllowedDevices 存的是用户勾选过的
-    // 设备地址集合。只要用户在设置页动过勾选框，这个集合就固化成【当时的】
-    // 已配对设备快照。之后新配对的耳机不在集合里，
-    // PopupService 里 if (!prefs.isAllowed(addr)) return; 会把它直接拦掉 ——
-    // 表现就是「换了个耳机，弹窗不弹、电量不显示，只能认一个耳机」。
-    //
-    // 改成「排除列表」语义：默认所有设备都弹，只有用户明确取消勾选过的才拦截。
-    // 新设备没见过、没被排除 → 一律放行。
-    //
+    // ---------- 本次补齐的设置项 ----------
 
-    /** 被用户明确排除（取消勾选）的设备地址 */
-    public Set<String> deniedDevices() {
-        // 必须返回拷贝：SharedPreferences.getStringSet 返回的是内部实例引用，
-        // 调用方一旦修改它，再存回去时会出现「改了但不生效」的诡异现象。
-        Set<String> v = sp.getStringSet("denied", null);
-        return v == null ? new HashSet<>() : new HashSet<>(v);
+    /**
+     * 窗口级背景模糊（Android 12+ setBackgroundBlurRadius）。
+     * 默认【关闭】：它会在整个窗口后面渲染一层磨砂，
+     * 在 HyperOS 上会吞掉弹窗外部的点击，且圆角外可能显出暗块。
+     * 需要柔化效果请用卡片自身的 LiveBlurView，那个不影响触摸。
+     */
+    public boolean windowBlur() {
+        return sp.getBoolean("win_blur", false);
     }
 
-    public void setDeniedDevices(Set<String> s) {
-        sp.edit().putStringSet("denied", new HashSet<>(s)).apply();
-        // 同时标记已迁移，避免下次又把旧的 allowed 当成排除集
-        sp.edit().putBoolean("denied_migrated", true).apply();
+    public void setWindowBlur(boolean v) {
+        sp.edit().putBoolean("win_blur", v).apply();
+    }
+
+    /** 点击弹窗外部区域时立即关闭弹窗，而不是干等自动消失 */
+    public boolean touchOutsideClose() {
+        return sp.getBoolean("touch_outside_close", true);
+    }
+
+    public void setTouchOutsideClose(boolean v) {
+        sp.edit().putBoolean("touch_outside_close", v).apply();
+    }
+
+    /** 横屏模式：0=照常弹大窗 1=横屏完全不弹 2=横屏显示迷你小窗 */
+    public int landscapeMode() {
+        return sp.getInt("landscape_mode", 2);
+    }
+
+    public void setLandscapeMode(int v) {
+        sp.edit().putInt("landscape_mode", Math.max(0, Math.min(2, v))).apply();
+    }
+
+    /** 横屏时是否完全不弹（landscapeMode==1 的快捷读写） */
+    public boolean landscapeSkip() {
+        return landscapeMode() == 1;
+    }
+
+    public void setLandscapeSkip(boolean v) {
+        if (v) setLandscapeMode(1);
+        else if (landscapeMode() == 1) setLandscapeMode(2);
     }
 
     /**
-     * 一次性迁移：老版本存的 allowed 是「允许列表」，语义与现在相反。
-     * 直接沿用会让用户原本勾选的设备变成被排除 —— 所以一律丢弃，
-     * 重置为「所有设备都弹」。这正好也是本次要修的目标行为。
+     * 贴底时卡片距屏幕底部的距离（dp）。
+     * 旧版写死 24dp，在手势导航的全面屏上看起来「离底边还很远」。
      */
-    public void migrateLegacyAllowedIfNeeded() {
-        if (sp.getBoolean("denied_migrated", false)) return;
-        if (sp.contains("allowed")) {
-            sp.edit().remove("allowed").apply();
-        }
-        sp.edit().putBoolean("denied_migrated", true).apply();
+    public int bottomPadDp() {
+        return sp.getInt("bottom_pad_dp", 8);
+    }
+
+    public void setBottomPadDp(int v) {
+        sp.edit().putInt("bottom_pad_dp", Math.max(0, Math.min(80, v))).apply();
+    }
+
+    // ---------- 设备白名单 ----------
+    /** 返回 null 或空集表示“所有设备都弹” */
+    public Set<String> allowedDevices() {
+        // 必须返回拷贝：SharedPreferences.getStringSet 返回的是内部实例引用，
+        // 调用方一旦修改它，再存回去时会出现「改了但不生效」的诡异现象。
+        Set<String> v = sp.getStringSet("allowed", null);
+        return v == null ? new HashSet<>() : new HashSet<>(v);
+    }
+
+    public void setAllowedDevices(Set<String> s) {
+        sp.edit().putStringSet("allowed", new HashSet<>(s)).apply();
     }
 
     public boolean isAllowed(String address) {
         if (address == null) return true;
-        return !deniedDevices().contains(address);
+        Set<String> s = allowedDevices();
+        return s.isEmpty() || s.contains(address);
     }
 }

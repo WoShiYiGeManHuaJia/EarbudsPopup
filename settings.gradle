@@ -10,9 +10,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url 'https://maven.aliyun.com/repository/public' }
-        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://jitpack.io' }
     }
 }
-rootProject.name = 'EarbudsPopup'
+rootProject.name = "EarbudsPopup"
 include ':app'

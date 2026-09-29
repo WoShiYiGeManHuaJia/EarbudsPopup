@@ -116,7 +116,42 @@ public final class PopupRenderer {
         // ---------- 电量（带图标） ----------
         if (levels != null) levels.sanitize();
         int sub = applyAlpha(battC, 0.95f);
-        applyBattery(root, levels, prefs, sub);
+        // 读不到真实电量的一侧，不再摆一个「--%」占位文字，
+        // 改成让对应耳塞图标轻微上下浮动，表示「还在等真实读数」。
+        // 原则不变：绝不拿猜出来的数字冒充真实电量。
+        boolean waitL = levels == null || !BatteryLevels.valid(levels.left);
+        boolean waitR = levels == null || !BatteryLevels.valid(levels.right);
+
+        if (tvBattery != null) {
+            tvBattery.setVisibility(waitL ? View.GONE : View.VISIBLE);
+            if (!waitL) {
+                tvBattery.setText(batteryText(levels));
+                tvBattery.setTextColor(sub);
+            }
+        }
+        TextView tvBatteryRight = root.findViewById(R.id.tvBatteryRight);
+        if (tvBatteryRight != null) {
+            tvBatteryRight.setVisibility(waitR ? View.GONE : View.VISIBLE);
+            if (!waitR) {
+                tvBatteryRight.setText(batteryTextRight(levels));
+                tvBatteryRight.setTextColor(sub);
+            }
+        }
+        // 充电盒槽位已从布局里【整个移除】：
+        // 系统蓝牙栈 untethered_case_battery=null，该值根本取不到，
+        // 留着只会一直显示 --% 很难看。
+        ImageView icEarbuds = root.findViewById(R.id.icEarbuds);
+        if (icEarbuds != null) {
+            icEarbuds.setColorFilter(sub);
+            if (waitL) startFloat(icEarbuds);
+            else stopFloat(icEarbuds);
+        }
+        ImageView icEarbudsRight = root.findViewById(R.id.icEarbudsRight);
+        if (icEarbudsRight != null) {
+            icEarbudsRight.setColorFilter(sub);
+            if (waitR) startFloat(icEarbudsRight);
+            else stopFloat(icEarbudsRight);
+        }
         // 左右耳塞图标：右耳镜像翻转，形成「一对」
         // 左右图标是从系统状态栏截图里分别提取的，本身形态就不同，
         // 不需要再镜像翻转（之前的 vector 是同一个图翻转的假「一对」）
@@ -143,18 +178,7 @@ public final class PopupRenderer {
                                                 Drawable> transition) {
                                     img.setImageDrawable(resource);
                                     applyImageMatrix(img);
-                                    // 必须手动启动：CustomViewTarget 不像 ImageViewTarget
-                                    // 会自动开动画，GifDrawable 拿到后默认是停止的。
-                                    // 但只在未运行时才 start()，绝不调 stop()，
-                                    // 否则会重置解码器导致掉帧。
-                                    if (resource instanceof android.graphics.drawable.Animatable) {
-                                        try {
-                                            android.graphics.drawable.Animatable an =
-                                                    (android.graphics.drawable.Animatable) resource;
-                                            if (!an.isRunning()) an.start();
-                                        } catch (Throwable ignored) {
-                                        }
-                                    }
+                                    restartGif(resource);
                                 }
 
                                 @Override
@@ -217,8 +241,7 @@ public final class PopupRenderer {
             main.postDelayed(() -> {
                 // 模糊失败也必须让文字出现，否则用户看到的是"没有文字"
                 try {
-                    setupLiveBlur(detailBlurBg, img, cardBg, prefs.radiusDp(), detailArea,
-                            prefs.dimAmount());
+                    setupLiveBlur(detailBlurBg, img, cardBg, prefs.radiusDp(), detailArea);
                 } catch (Throwable ignored) {
                 }
                 // 绑定后重新归零：setupLiveBlur 只改内容，不改动画属性，
@@ -263,8 +286,7 @@ public final class PopupRenderer {
      */
     private static void setupLiveBlur(LiveBlurView blur, ImageView img,
                                        int cardBg, float radiusDp,
-                                       View detailArea,
-                                       float dimAmount) {
+                                       View detailArea) {
         if (blur == null || img == null) return;
         final float d = blur.getResources().getDisplayMetrics().density;
 
@@ -279,9 +301,7 @@ public final class PopupRenderer {
         // 为什么必须 post：此时 detailArea 还没走完 layout，
         // getHeight() 直接取会是 0。
         //
-        // 18dp 的过渡带太短，视觉上接近硬边（用户反馈「一刀切」）。
-        // 加到 28dp，让上边界有足够距离柔和地融进清晰画面。
-        final int extraPx = (int) (28f * d);   // 文字区之上额外留的渐隐过渡带
+        final int extraPx = (int) (18f * d);   // 文字区之上额外留的渐隐过渡带
         if (detailArea != null) {
             detailArea.post(() -> {
                 int h = detailArea.getHeight();
@@ -309,13 +329,7 @@ public final class PopupRenderer {
         // 加上模糊区本身内容偏淡，整体看着就「几乎透明」。
         // 改成固定的深色，只做适度压暗，保证文字可读又不会盖住模糊。
         // 30%（原 40%）：压暗只为保证文字可读，太重会把模糊盖成黑块
-        //
-        // 现在由「详情区压暗」滑块控制。
-        // 原来这个滑块调的是【窗口级】FLAG_DIM_BEHIND，而窗口级压暗会
-        // 在圆角卡片之外的四个角落露出来，就是那两块黑色直角边。
-        // 压暗挪进卡片内部后，它被裁在圆角形状里，不会再溢出成直角。
-        int dimAlpha = Math.round(Math.max(0f, Math.min(0.70f, dimAmount)) * 255f);
-        blur.setDim((dimAlpha << 24) | 0x000000);
+        blur.setDim(0x4D000000);
         // 底部两角跟随卡片圆角
         blur.setBottomCornerRadius(radiusDp * d);
         blur.setSource(img);
@@ -329,111 +343,6 @@ public final class PopupRenderer {
      * 用户要求左右耳分开显示，所以即便两值相同也照实分列，
      * 读不到就显示 --%，不再合并成一个数字。
      */
-    /**
-     * 耳机电量文本。
-     *
-     * 不能带 "L"/"R" 字样：布局里左右两侧各有【一个耳塞图标】，
-     * 图标本身已经区分了左右，再写字母既多余又丑（用户明确要求去掉）。
-     * 这里只返回纯数字。
-     */
-    private static String batteryText(BatteryLevels b) {
-        if (b == null) return "--%";
-        return BatteryLevels.valid(b.left) ? b.left + "%" : "--%";
-    }
-
-    /** 右耳电量文本（左耳用 batteryText） */
-    private static String batteryTextRight(BatteryLevels b) {
-        if (b == null) return "--%";
-        return BatteryLevels.valid(b.right) ? b.right + "%" : "--%";
-    }
-
-    /**
-     * 电量渲染：有真实分项（左/右）就显示一对；
-     * 拿不到分项但拿到整机值时，显示单个耳机图标 + 整机百分比。
-     *
-     * 之前只渲染 left/right/caseBox，从不渲染 overall，
-     * 而这台机器上分项永远取不到 —— 于是明明知道整机 100%，
-     * 弹窗却一直显示 --%。这就是「换什么耳机都不显示」的直接原因。
-     */
-    private static void applyBattery(View root, BatteryLevels levels, Prefs prefs, int sub) {
-        if (root == null) return;
-        TextView tvL = root.findViewById(R.id.tvBattery);
-        TextView tvR = root.findViewById(R.id.tvBatteryRight);
-        TextView tvC = root.findViewById(R.id.tvBatteryCase);
-        ImageView icL = root.findViewById(R.id.icEarbuds);
-        ImageView icR = root.findViewById(R.id.icEarbudsRight);
-        ImageView icC = root.findViewById(R.id.icCase);
-        if (levels != null) levels.sanitize();
-
-        boolean hasLeft = levels != null && BatteryLevels.valid(levels.left);
-        boolean hasRight = levels != null && BatteryLevels.valid(levels.right);
-        boolean hasCase = levels != null && BatteryLevels.valid(levels.caseBox);
-        boolean hasOverall = levels != null && BatteryLevels.valid(levels.overall);
-
-        //
-        // 两个耳塞图标【恒定显示】，绝不退化成「单个耳朵」。
-        //
-        // 之前只要拿不到左右分项就隐藏右耳图标、只留一个耳机图标 ——
-        // 用户看到的「弹窗只显示单个耳朵」就是这么来的。
-        // 现在左耳 / 右耳两个图标永远在；数值有多少显示多少，
-        // 读不到的一侧显示 --%，而不是把一只耳朵藏掉、也不是编一个假值。
-        //
-        // 整机值（overall）只补在【左耳】槽位：它是「整副耳机」这一个
-        // 真实读数，不能再复制一份到右耳（那会变成两个相同的假左右耳）。
-        //
-        String textL;
-        if (hasLeft) textL = batteryText(levels);
-        else if (hasOverall) textL = levels.overall + "%";
-        else textL = "--%";
-
-        String textR;
-        if (hasRight) textR = batteryTextRight(levels);
-        else textR = "--%";
-
-        // v1.2：读不到真实电量的一侧，不再摆一个「--%」占位文字，
-        // 改成让对应耳塞图标轻微上下浮动，表示「还在等真实读数」。
-        // 原则不变：绝不拿猜出来的数字冒充真实电量。
-        boolean waitL = "--%".equals(textL);
-        boolean waitR = "--%".equals(textR);
-
-        if (icL != null) {
-            icL.setVisibility(View.VISIBLE);
-            if (waitL) startFloat(icL);
-            else stopFloat(icL);
-        }
-        if (icR != null) {
-            icR.setVisibility(View.VISIBLE);
-            if (waitR) startFloat(icR);
-            else stopFloat(icR);
-        }
-        if (tvL != null) {
-            tvL.setVisibility(waitL ? View.GONE : View.VISIBLE);
-            if (!waitL) {
-                tvL.setText(textL);
-                tvL.setTextColor(sub);
-            }
-        }
-        if (tvR != null) {
-            tvR.setVisibility(waitR ? View.GONE : View.VISIBLE);
-            if (!waitR) {
-                tvR.setText(textR);
-                tvR.setTextColor(sub);
-            }
-        }
-
-        // 充电盒：拿到真实值才显示，绝不显示占位
-        boolean showCase = hasCase && prefs.showCaseBattery();
-        if (tvC != null) {
-            tvC.setText(hasCase ? batteryTextCase(levels) : "");
-            tvC.setTextColor(sub);
-            tvC.setVisibility(showCase ? View.VISIBLE : View.GONE);
-        }
-        if (icC != null) {
-            icC.setColorFilter(sub);
-            icC.setVisibility(showCase ? View.VISIBLE : View.GONE);
-        }
-    }
-
     /**
      * 耳塞图标浮动：表示「这一侧还没拿到真实电量」。
      * 用 tag 去重，避免多次刷新把动画叠成一团。
@@ -475,10 +384,22 @@ public final class PopupRenderer {
         v.setAlpha(1f);
     }
 
-    /** 充电盒电量文本 */
-    private static String batteryTextCase(BatteryLevels b) {
+    /**
+     * 耳机电量文本。
+     *
+     * 不能带 "L"/"R" 字样：布局里左右两侧各有【一个耳塞图标】，
+     * 图标本身已经区分了左右，再写字母既多余又丑（用户明确要求去掉）。
+     * 这里只返回纯数字。
+     */
+    private static String batteryText(BatteryLevels b) {
         if (b == null) return "--%";
-        return BatteryLevels.valid(b.caseBox) ? b.caseBox + "%" : "--%";
+        return BatteryLevels.valid(b.left) ? b.left + "%" : "--%";
+    }
+
+    /** 右耳电量文本（左耳用 batteryText） */
+    private static String batteryTextRight(BatteryLevels b) {
+        if (b == null) return "--%";
+        return BatteryLevels.valid(b.right) ? b.right + "%" : "--%";
     }
 
     public static void applyImageMatrix(ImageView img) {
@@ -599,8 +520,26 @@ public final class PopupRenderer {
         TextView tvBattery = root.findViewById(R.id.tvBattery);
         TextView tvBatteryRight = root.findViewById(R.id.tvBatteryRight);
         levels.sanitize();
-        int subU = applyAlpha(resolveColor(prefs.batteryColor(), Color.WHITE), 0.95f);
-        applyBattery(root, levels, prefs, subU);
+        boolean waitL = !BatteryLevels.valid(levels.left);
+        boolean waitR = !BatteryLevels.valid(levels.right);
+        if (tvBattery != null) {
+            tvBattery.setVisibility(waitL ? View.GONE : View.VISIBLE);
+            if (!waitL) tvBattery.setText(batteryText(levels));
+        }
+        if (tvBatteryRight != null) {
+            tvBatteryRight.setVisibility(waitR ? View.GONE : View.VISIBLE);
+            if (!waitR) tvBatteryRight.setText(batteryTextRight(levels));
+        }
+        ImageView icL = root.findViewById(R.id.icEarbuds);
+        if (icL != null) {
+            if (waitL) startFloat(icL);
+            else stopFloat(icL);
+        }
+        ImageView icR = root.findViewById(R.id.icEarbudsRight);
+        if (icR != null) {
+            if (waitR) startFloat(icR);
+            else stopFloat(icR);
+        }
     }
 
     /** 分档色没设过（空串/解析失败）时退回通用文字色 */

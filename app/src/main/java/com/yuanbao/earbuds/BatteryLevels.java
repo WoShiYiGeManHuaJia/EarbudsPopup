@@ -10,11 +10,6 @@ package com.yuanbao.earbuds;
 public class BatteryLevels {
 
     public int left = -1;
-
-    /** 系统元数据提供的真实充电状态。 */
-    public boolean leftCharging = false;
-    public boolean rightCharging = false;
-    public boolean caseCharging = false;
     public int right = -1;
     public int caseBox = -1;
     /** 只拿到一个整机值时的兜底 */
@@ -37,29 +32,12 @@ public class BatteryLevels {
         return valid(left) || valid(right) || valid(caseBox) || valid(overall);
     }
 
-    /**
-     * 「只有整机值、没有分项」——UI 应该显示单个耳机图标 + 整机百分比。
-     *
-     * 典型场景：标准 0x180F/0x2A19 只上报一个聚合值，左右耳各是多少它不知道。
-     */
-    public boolean singleOnly() {
-        return !valid(left) && !valid(right) && valid(overall);
-    }
-
-    /**
-     * 只保留整机值，绝不把 overall 复制进 left / right。
-     *
-     * 历史坑：旧版这里是 `left = overall; right = overall`，于是弹窗永远显示
-     * 「两个 100」或「两个 90」——而实际是一只 100、一只 90。整机值就是整机值，
-     * 不能假装知道左右各多少。UI（PopupRenderer.applyBattery）已支持 single
-     * 模式，会渲染成单个耳机图标 + 整机百分比。
-     */
-    public void keepOverallOnly() {
-        // 不做任何填充，只把无效值归一
-        left = norm(left);
-        right = norm(right);
-        caseBox = norm(caseBox);
-        overall = norm(overall);
+    /** 用整机值填补缺失的左右耳（整机值必须有效才填） */
+    public void fillFromOverall() {
+        if (valid(overall)) {
+            if (!valid(left)) left = overall;
+            if (!valid(right)) right = overall;
+        }
     }
 
     /** 把所有字段里的 0 清成 -1 */

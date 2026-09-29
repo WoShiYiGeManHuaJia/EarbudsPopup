@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  v1.2 新增：横屏 / 小窗场景下的迷你弹窗。
+  横屏 / 小窗场景下的迷你弹窗。
   只显示「设备名 + 一个真实电量」，不铺大图，避免横屏时大窗挡住游戏画面。
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -29,7 +29,7 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:text="耳机已连接"
-            android:textColor="#FF202020"
+            android:textColor="@color/ui_text_primary"
             android:textSize="14sp"
             android:textStyle="bold" />
 
@@ -42,7 +42,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="--%"
-            android:textColor="#FF202020"
+            android:textColor="@color/ui_text_primary"
             android:textSize="14sp"
             android:textStyle="bold" />
     </LinearLayout>

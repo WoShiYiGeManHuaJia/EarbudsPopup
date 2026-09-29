@@ -3,8 +3,8 @@ package com.yuanbao.earbuds;
 import android.app.KeyguardManager;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Color;
 import android.content.res.Configuration;
+import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.os.Bundle;
@@ -81,7 +81,7 @@ public class PopupActivity extends AppCompatActivity {
     /**
      * 彻底清掉窗口压暗。
      * 用户反复反馈的「四角黑色直角边」有两条来源：
-     *   ① 主题 backgroundDimEnabled（v1.2 已改为 false）
+     *   ① 主题 backgroundDimEnabled（已改为 false）
      *   ② generateLayout() 在 setContentView 时重新加回的 FLAG_DIM_BEHIND
      * 这里两道都堵住，并把 decorView 背景显式设为透明。
      */
@@ -134,41 +134,6 @@ public class PopupActivity extends AppCompatActivity {
     }
 
     /**
-     * Activity 复用时必须走这里。
-     * manifest 里 launchMode="singleInstance"，且启动 Intent 带了
-     * SINGLE_TOP / CLEAR_TOP：当上一个弹窗还没消失就来新弹窗时，
-     * 系统不会重新 onCreate，而是回调 onNewIntent。
-     * 之前没重写 onNewIntent，结果第二次弹窗什么都不做——
-     * 内容不更新、计时不重置、GIF 从上次的进度继续播（就是用户说的「续播」）。
-     */
-    @Override
-    protected void onNewIntent(Intent intent) {
-        super.onNewIntent(intent);
-        setIntent(intent);
-        lastShownAt = System.currentTimeMillis();
-        // 先取消上一次的自动关闭计时，再重新走一遍绑定
-        main.removeCallbacksAndMessages(null);
-        boolean wantMini = useMini();
-        boolean miniNow = findViewById(R.id.miniCard) != null;
-        if (wantMini != miniNow) {
-            setContentView(wantMini ? R.layout.popup_mini : R.layout.activity_popup);
-        }
-        if (wantMini) applyMini(intent);
-        else applyIntent(intent);
-        clearDimBehind();
-    }
-
-    /**
-     * 某些 ROM 会在 onResume 之后再次按主题刷新窗口属性，
-     * 这里兜底再清一次压暗，确保任何时刻都不会出现四角暗块。
-     */
-    @Override
-    protected void onResume() {
-        super.onResume();
-        clearDimBehind();
-    }
-
-    /**
      * 点击弹窗外部立即关闭。
      *
      * 之前「弹出后点外面没反应，只能等它自己消失」：
@@ -204,6 +169,41 @@ public class PopupActivity extends AppCompatActivity {
         return super.dispatchTouchEvent(ev);
     }
 
+    /**
+     * 某些 ROM 会在 onResume 之后再次按主题刷新窗口属性，
+     * 这里兜底再清一次压暗，确保任何时刻都不会出现四角暗块。
+     */
+    @Override
+    protected void onResume() {
+        super.onResume();
+        clearDimBehind();
+    }
+
+    /**
+     * Activity 复用时必须走这里。
+     * manifest 里 launchMode="singleInstance"，且启动 Intent 带了
+     * SINGLE_TOP / CLEAR_TOP：当上一个弹窗还没消失就来新弹窗时，
+     * 系统不会重新 onCreate，而是回调 onNewIntent。
+     * 之前没重写 onNewIntent，结果第二次弹窗什么都不做——
+     * 内容不更新、计时不重置、GIF 从上次的进度继续播（就是用户说的「续播」）。
+     */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        lastShownAt = System.currentTimeMillis();
+        // 先取消上一次的自动关闭计时，再重新走一遍绑定
+        main.removeCallbacksAndMessages(null);
+        boolean wantMini = useMini();
+        boolean miniNow = findViewById(R.id.miniCard) != null;
+        if (wantMini != miniNow) {
+            setContentView(wantMini ? R.layout.popup_mini : R.layout.activity_popup);
+        }
+        if (wantMini) applyMini(intent);
+        else applyIntent(intent);
+        clearDimBehind();
+    }
+
     private void applyIntent(Intent it) {
         if (it == null) return;
         String name = it.getStringExtra(PopupService.EXTRA_NAME);
@@ -217,7 +217,7 @@ public class PopupActivity extends AppCompatActivity {
             levels.overall = levels.right;
         }
         levels.sanitize();
-        levels.keepOverallOnly();
+        levels.fillFromOverall();
         levels.timestamp = System.currentTimeMillis();
 
         View card = findViewById(R.id.card);
@@ -272,11 +272,10 @@ public class PopupActivity extends AppCompatActivity {
         w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         w.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL);  // 弹窗外区域点击穿透到下层应用
         w.addFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
-        // 背景压暗【已关闭】。
-        // 之前 FLAG_DIM_BEHIND + setDimAmount(0.30) 会把整个窗口后面压一层
-        // 30% 黑。而卡片是 match_parent 铺满窗口、四角圆角 ——
-        // 圆角之外的四个角落没有被卡片覆盖，露出来的正是这层压暗，
-        // 于是用户看到「圆角还在，但左下/右下多出两块半透明黑色直角边」。
+        // 背景压暗【已移除】。
+        // FLAG_DIM_BEHIND + setDimAmount 会把整个窗口后面压一层黑。
+        // 而卡片是圆角的 —— 圆角之外的四个角落没有被卡片覆盖，
+        // 露出来的正是这层压暗，于是看到「圆角还在，但四角多出黑色直角边」。
         // 小米原生弹窗也是不压暗的：卡片直接浮在当前应用之上。
         // 需要压暗的话用卡片自身的 bgColor / LiveBlurView 的 dim 就够了。
         w.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
@@ -284,9 +283,9 @@ public class PopupActivity extends AppCompatActivity {
         if (prefs.notFocusable()) {
             w.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE); // 打游戏/输入时不夺取焦点
         }
-        // v1.2：窗口级背景模糊改为【默认关闭】。
+        // 窗口级背景模糊改为【默认关闭】。
         // 它会在整个窗口后面渲染一层磨砂，在 HyperOS 上会吞掉弹窗外部的点击，
-        // 也是「全局变模糊、点外面没反应」的直接来源。
+        // 也就是「全局变模糊、点外面没反应」的直接来源。
         // 想要柔化请用卡片自身的 LiveBlurView（只糊卡片底部，不影响触摸）。
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             int r = prefs.windowBlur() ? prefs.blurRadius() : 0;
@@ -354,13 +353,6 @@ public class PopupActivity extends AppCompatActivity {
             i.putExtra(PopupService.EXTRA_LEFT, levels.left);
             i.putExtra(PopupService.EXTRA_BATTERY, levels.right);
             i.putExtra(PopupService.EXTRA_CASE, levels.caseBox);
-            // 整机值必须一起传！
-            // 小米/Redmi TWS 拿不到左右耳分项，show() 里只保留了 overall=100，
-            // 而这里从来没把 overall 放进 Intent —— 于是 Activity 收到的
-            // left/right/case 全是 -1，弹窗只能显示 --%。
-            // 用户日志里 getBatteryLevel()=100 明明读到了，界面却是两横杠，
-            // 真凶就是这行缺失。
-            i.putExtra(PopupService.EXTRA_OVERALL, levels.overall);
         }
         return i;
     }

@@ -1,26 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="md_primary">#FF6D5CE7</color>
+    <color name="md_primary">#FF6D4AFF</color>
     <color name="md_on_primary">#FFFFFFFF</color>
-    <color name="md_primary_container">#FFEAE6FF</color>
-    <color name="md_on_primary_container">#FF24184F</color>
-    <color name="md_secondary_container">#FFE5F0FF</color>
-    <color name="md_on_secondary_container">#FF17304D</color>
-    <color name="md_tertiary_container">#FFE4F8F4</color>
-    <color name="md_on_tertiary_container">#FF123A34</color>
-    <color name="md_error">#FFB3261E</color>
+    <color name="md_primary_container">#FFEAE4FF</color>
+    <color name="md_on_primary_container">#FF21154D</color>
+    <color name="md_secondary_container">#FFFFE8E1</color>
+    <color name="md_on_secondary_container">#FF4B1B12</color>
+    <color name="md_tertiary_container">#FFE1F4F2</color>
+    <color name="md_on_tertiary_container">#FF0B3532</color>
+    <color name="md_error">#FFBA1A1A</color>
     <color name="md_error_container">#FFFFDAD6</color>
     <color name="md_on_error_container">#FF410002</color>
-    <color name="ui_text_primary">#FF171720</color>
-    <color name="ui_text_secondary">#FF686875</color>
-    <color name="ui_text_tertiary">#FF9898A5</color>
-    <color name="ui_divider">#16000000</color>
-    <color name="ui_card_bg">#F9FFFFFF</color>
-    <color name="ui_card_glass">#EAFBFAFF</color>
-    <color name="ui_card_stroke">#3AFFFFFF</color>
-    <color name="ui_background">#FFF6F5FA</color>
-    <color name="ui_background_2">#FFEDEBFA</color>
-    <color name="md_background">#FFF6F5FA</color>
-    <color name="md_surface">#FFFCFBFF</color>
-    <color name="ui_success">#FF2E9D78</color>
-    <color name="ui_warning">#FFE68A3A</color>
+
+    <color name="ui_text_primary">#FF20202A</color>
+    <color name="ui_text_secondary">#FF747382</color>
+    <color name="ui_text_tertiary">#FFA19FAC</color>
+    <color name="ui_divider">#1A4B4658</color>
+    <color name="ui_card_bg">#FFFDFBFF</color>
+    <color name="ui_card_glass">#EFFFFFFF</color>
+    <color name="ui_card_stroke">#35FFFFFF</color>
+    <color name="ui_background">#FFF6F3FA</color>
+    <color name="ui_background_2">#FFF0ECF8</color>
+    <color name="md_background">#FFF6F3FA</color>
+    <color name="md_surface">#FFFDFBFF</color>
 </resources>
