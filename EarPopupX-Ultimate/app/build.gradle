@@ -5,21 +5,60 @@ plugins {
 android {
     namespace 'com.earpopupx'
     compileSdk 35
+
     defaultConfig {
         applicationId 'com.earpopupx'
         minSdk 29
         targetSdk 35
-        versionCode 201
-        versionName '2.1.0'
+        versionCode 202
+        versionName '2.2.0'
     }
 
-    // The CI has no release keystore configured, so assembleRelease would emit
-    // an *unsigned* apk that cannot be installed. Sign the release build with
-    // the standard debug key so the produced file is installable as-is.
+    // 必须用与 2.0 相同的正式密钥签名，否则用户无法覆盖安装（安装失败 -7）
+    signingConfigs {
+        release {
+            def ksPath = System.getenv("KEYSTORE_FILE")
+            if (ksPath && file(ksPath).exists()) {
+                storeFile file(ksPath)
+                storePassword System.getenv("KEYSTORE_PASSWORD")
+                keyAlias System.getenv("KEY_ALIAS")
+                keyPassword System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
-            signingConfig signingConfigs.debug
+            shrinkResources false
+            if (System.getenv("KEYSTORE_FILE")) {
+                signingConfig signingConfigs.release
+            }
+        }
+        debug {
+            if (System.getenv("KEYSTORE_FILE")) {
+                signingConfig signingConfigs.release
+            }
         }
     }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'dev.rikka.shizuku:api:13.1.5'
+    implementation 'dev.rikka.shizuku:provider:13.1.5'
 }
