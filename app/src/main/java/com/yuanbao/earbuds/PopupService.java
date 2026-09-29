@@ -364,27 +364,54 @@ public class PopupService extends Service {
         String custom = prefs.deviceName(addr);
         String name = (custom != null && !custom.trim().isEmpty())
                 ? custom.trim() : safeName(dev);
-        BatteryLevels cached = new BatteryStore(this).load(addr);
-        int sys = readBattery(dev);
-        // 只有有效值才采用；0 是「未上报」，不能当 0% 显示
-        if (BatteryLevels.valid(sys)) {
-            cached.overall = sys;
-            cached.fillFromOverall();
+        //
+        // 首帧电量：只取【此刻】从系统读到的值，不碰任何缓存。
+        //
+        // 之前是从 BatteryStore 读上次缓存填首帧，再靠 STALE_MS 判断新旧。
+        // 用户明确不要这个：缓存会带来各种看起来像 bug 的表现 ——
+        // 充完电还显示旧值、左右耳数值串了、连着两次弹窗数字对不上。
+        //
+        // 现在：首帧只有一个来源，就是 readBattery() 的同步实时读数
+        // （系统隐藏 getBatteryLevel()，毫秒级，不等 GATT）。
+        // 左右耳与充电盒一律留 -1 进等待态，由 autoRefreshBattery 拿到真值后刷新。
+        // 拿不到就一直不显示数字，绝不用旧值补位。
+        BatteryLevels fresh = new BatteryLevels();
+        fresh.left = -1;
+        fresh.right = -1;
+        fresh.caseBox = -1;
+        fresh.overall = -1;
+        if (prefs.realTimeOnly()) {
+            int sys = readBattery(dev);
+            // 只有有效值才采用；0 是「未上报」，不能当 0% 显示
+            if (BatteryLevels.valid(sys)) {
+                fresh.overall = sys;
+                fresh.source = "live";
+                fresh.timestamp = System.currentTimeMillis();
+            } else {
+                fresh.source = "pending";
+            }
+        } else {
+            // 用户主动关掉「只显实时」时，才退回缓存路径（不推荐）
+            BatteryLevels cached = new BatteryStore(this).load(addr);
+            int sys = readBattery(dev);
+            if (BatteryLevels.valid(sys)) {
+                cached.overall = sys;
+                cached.fillFromOverall();
+            }
+            cached.sanitize();
+            if (cached.timestamp > 0L
+                    && System.currentTimeMillis() - cached.timestamp > BatteryStore.STALE_MS) {
+                cached.left = -1;
+                cached.right = -1;
+                cached.caseBox = -1;
+                cached.overall = -1;
+                cached.source = "stale";
+            }
+            fresh = cached;
         }
-        cached.sanitize();
-        // 关键：缓存必须「够新鲜」才敢显示。
-        // 之前直接拿几小时前的旧值当实时电量，用户充完电还看到 30%。
-        // 超过 STALE_MS 就作废，先显示 --%，由 autoRefreshBattery 实测后刷新。
-        if (cached.timestamp > 0L
-                && System.currentTimeMillis() - cached.timestamp > BatteryStore.STALE_MS) {
-            cached.left = -1;
-            cached.right = -1;
-            cached.caseBox = -1;
-            cached.overall = -1;
-            cached.source = "stale";
-        }
+        fresh.sanitize();
         currentAddress = addr;
-        show(name, addr, cached, dev);
+        show(name, addr, fresh, dev);
     }
 
     private String safeName(BluetoothDevice dev) {
@@ -677,6 +704,8 @@ public class PopupService extends Service {
         float dens = getResources().getDisplayMetrics().density;
         // 基准尺寸（竖屏原始值）
         float r = Math.max(0.40f, Math.min(0.94f, prefs.imageRatio()));
+        // 横屏更扁长：压低图片占比 → 同样宽度下高度更小
+        if (scaled) r = Math.max(0.40f, r - prefs.landscapeFlat());
         int baseW = (int) dp(prefs.widthDp());
         int baseH = (int) (baseW * (0.45f + r * 0.33f));
 

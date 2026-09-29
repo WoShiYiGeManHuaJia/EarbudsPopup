@@ -95,6 +95,31 @@
                 android:layout_marginStart="56dp"
                 android:background="@color/ui_divider" />
 
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/swRealtime"
+                style="@style/AppItem"
+                android:drawableStart="@drawable/ic_shield"
+                android:text="只显示实时真值（不用缓存）"
+                android:textSize="15.5sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="14dp"
+                android:lineSpacingExtra="3dp"
+                android:text="开启后，弹窗不会先摆一个上次缓存的数字再跳变：读不到的那一项就一直不显示（图标浮动表示等待），直到拿到真实读数才出现。缓存会导致充完电还显示旧值、左右耳数值串味等问题，建议保持开启。"
+                android:textColor="@color/ui_text_secondary"
+                android:textSize="11.5sp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="@color/ui_divider" />
+
             <LinearLayout
                 android:id="@+id/rowQuiet"
                 style="@style/AppRow">
@@ -454,6 +479,68 @@
                 android:drawableStart="@drawable/ic_lock"
                 android:text="横屏时完全不弹窗"
                 android:textSize="15.5sp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="@color/ui_divider" />
+
+            <LinearLayout
+                android:id="@+id/rowLandscapeFlat"
+                style="@style/AppRow">
+
+                <ImageView
+                    style="@style/AppRowIcon"
+                    android:contentDescription="扁平"
+                    android:src="@drawable/ic_layers" />
+
+                <LinearLayout style="@style/AppRowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="横屏扁平度" />
+
+                    <TextView
+                        style="@style/TextRowSub"
+                        android:text="越大越扁越长，竖屏不受影响" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvLandscapeFlat"
+                    style="@style/TextRowValue"
+                    android:text="30%" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="@color/ui_divider" />
+
+            <LinearLayout
+                android:id="@+id/rowEnterAnim"
+                style="@style/AppRow">
+
+                <ImageView
+                    style="@style/AppRowIcon"
+                    android:contentDescription="动画"
+                    android:src="@drawable/ic_animation" />
+
+                <LinearLayout style="@style/AppRowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="弹窗入场时长" />
+
+                    <TextView
+                        style="@style/TextRowSub"
+                        android:text="越短越快，0 为直接出现" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvEnterAnim"
+                    style="@style/TextRowValue"
+                    android:text="180 ms" />
+            </LinearLayout>
 
             <TextView
                 android:layout_width="match_parent"

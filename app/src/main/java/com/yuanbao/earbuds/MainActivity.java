@@ -86,6 +86,8 @@ public class MainActivity extends AppCompatActivity {
     private SwitchMaterial swLock, swNoFocus, swPowerSave, swHideNoti;
     // 新增：窗口模糊 / 点外部关闭 / 横屏小窗
     private SwitchMaterial swWindowBlur, swTouchClose, swLandscapeMini, swLandscapeSkip;
+    private SwitchMaterial swRealtime;
+    private TextView tvLandscapeFlat, tvEnterAnim;
     private TextView tvEngine, tvDim, tvBlur;
     private LinearLayout deviceList;
     private TextView tvProbeHint;
@@ -250,6 +252,9 @@ public class MainActivity extends AppCompatActivity {
         swTouchClose = findViewById(R.id.swTouchClose);
         swLandscapeMini = findViewById(R.id.swLandscapeMini);
         swLandscapeSkip = findViewById(R.id.swLandscapeSkip);
+        swRealtime = findViewById(R.id.swRealtime);
+        tvLandscapeFlat = findViewById(R.id.tvLandscapeFlat);
+        tvEnterAnim = findViewById(R.id.tvEnterAnim);
         tvEngine = findViewById(R.id.tvEngine);
         tvDim = findViewById(R.id.tvDim);
         tvBlur = findViewById(R.id.tvBlur);
@@ -283,6 +288,7 @@ public class MainActivity extends AppCompatActivity {
         if (swTouchClose != null) swTouchClose.setChecked(prefs.touchOutsideClose());
         if (swLandscapeMini != null) swLandscapeMini.setChecked(prefs.landscapeMode() == 2);
         if (swLandscapeSkip != null) swLandscapeSkip.setChecked(prefs.landscapeMode() == 1);
+        if (swRealtime != null) swRealtime.setChecked(prefs.realTimeOnly());
         swAutoColor.setChecked(prefs.autoColor());
 
         syncValueLabels();
@@ -319,6 +325,13 @@ public class MainActivity extends AppCompatActivity {
         if (tvQuiet != null) {
             int s = prefs.reconnectQuietSec();
             tvQuiet.setText(s == 0 ? "关闭" : s + " 秒");
+        }
+        if (tvLandscapeFlat != null) {
+            tvLandscapeFlat.setText(Math.round(prefs.landscapeFlat() * 100) + "%");
+        }
+        if (tvEnterAnim != null) {
+            int ms = prefs.enterAnimMs();
+            tvEnterAnim.setText(ms == 0 ? "直接出现" : ms + " ms");
         }
     }
 
@@ -406,6 +419,18 @@ public class MainActivity extends AppCompatActivity {
                     0, 120, prefs.reconnectQuietSec(),
                     val -> prefs.setReconnectQuietSec(val)));
         }
+        View rowFlat = findViewById(R.id.rowLandscapeFlat);
+        if (rowFlat != null) {
+            rowFlat.setOnClickListener(v -> showSlider("横屏扁平度", "%",
+                    0, 45, Math.round(prefs.landscapeFlat() * 100),
+                    val -> prefs.setLandscapeFlat(val / 100f)));
+        }
+        View rowAnim = findViewById(R.id.rowEnterAnim);
+        if (rowAnim != null) {
+            rowAnim.setOnClickListener(v -> showSlider("弹窗入场时长", "ms",
+                    0, 500, prefs.enterAnimMs(),
+                    val -> prefs.setEnterAnimMs(val)));
+        }
 
         // 单选项
         findViewById(R.id.rowPos).setOnClickListener(v -> showPositionSlider());
@@ -435,6 +460,7 @@ public class MainActivity extends AppCompatActivity {
             else prefs.setLandscapeMode(prefs.landscapeSkip() ? 1 : 0);
         }, null);
         bindSwitch(swLandscapeSkip, prefs::setLandscapeSkip, null);
+        bindSwitch(swRealtime, prefs::setRealTimeOnly, null);
         bindSwitch(swHideRecents, v -> {
             prefs.setHideFromRecents(v);
             applyRecentsHidden(v);

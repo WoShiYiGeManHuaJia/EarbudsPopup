@@ -568,6 +568,49 @@ public class Prefs {
     }
 
     /**
+     * 只显示实时真值，绝不显示缓存值。
+     *
+     * 用户明确要求：弹窗那一瞬间显示的数字必须是当时真实读到的，
+     * 不能先摆一个上次缓存的数字再跳变 —— 缓存会带来各种看起来像 bug
+     * 的表现（充完电还显示旧值、左右耳数值串了、先后两次弹窗数字不一致）。
+     *
+     * 开启后：弹窗首帧只填「此刻从系统读到的整机值」（同步、毫秒级），
+     * 左右耳与充电盒一律留空进等待态，等探测拿到真值才显示。
+     * 没拿到就一直不显示数字，绝不用旧值补位。
+     */
+    public boolean realTimeOnly() {
+        return sp.getBoolean("realtime_only", true);
+    }
+
+    public void setRealTimeOnly(boolean v) {
+        sp.edit().putBoolean("realtime_only", v).apply();
+    }
+
+    /**
+     * 横屏扁平度：让横屏弹窗更「扁长」。
+     *
+     * 竖屏卡片是竖高比例，横屏下等比缩放仍然偏高偏窄，看着别扭。
+     * 这里在横屏时把图片占比往下压（r 越小卡片越矮），
+     * 于是同样的宽度下高度更小 —— 视觉上更扁更长。
+     */
+    public float landscapeFlat() {
+        return sp.getFloat("landscape_flat", 0.30f);
+    }
+
+    public void setLandscapeFlat(float v) {
+        sp.edit().putFloat("landscape_flat", Math.max(0f, Math.min(0.45f, v))).apply();
+    }
+
+    /** 横屏弹窗入场动画时长（ms）。横屏时更短，观感更快。 */
+    public int enterAnimMs() {
+        return sp.getInt("enter_anim_ms", 180);
+    }
+
+    public void setEnterAnimMs(int v) {
+        sp.edit().putInt("enter_anim_ms", Math.max(0, Math.min(800, v))).apply();
+    }
+
+    /**
      * 横屏时弹窗的整体缩放系数。
      *
      * 卡片高度是按宽度算出来的（h = w * (0.45 + 图片比例 * 0.33)），

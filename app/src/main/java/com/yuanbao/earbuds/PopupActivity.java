@@ -184,11 +184,17 @@ public class PopupActivity extends AppCompatActivity {
             //
             // 正确做法：内部完全按原尺寸排版，再对整张卡做 setScale()，
             // 这样图片、设备名、左右耳电量全部同比例缩小，就是「等比缩小版」。
+            boolean land = useLandscapeScale();
             int w = (int) (prefs.widthDp() * dens);
+            // 横屏时卡片要更「扁长」：竖屏的高瘦比例在横屏下看着别扭。
+            // 高度公式是 h = w * (0.45 + r * 0.33)，r 是图片占比 ——
+            // r 越小卡片越矮。横屏把 r 往下压，同样宽度下高度更小，
+            // 于是视觉上更宽更扁。
+            float r = Math.max(0.40f, Math.min(0.94f, prefs.imageRatio()));
+            if (land) r = Math.max(0.40f, r - prefs.landscapeFlat());
             // 必须用固定高度：媒体区子 View 是 match_parent，
             // 若这里给 WRAP_CONTENT，卡片高度会失控（表现为比例奇怪）。
             // 高度算法与 PopupRenderer 保持一致。
-            float r = Math.max(0.40f, Math.min(0.94f, prefs.imageRatio()));
             int h = (int) (w * (0.45f + r * 0.33f));
 
             float scale = useLandscapeScale() ? prefs.landscapeScale() : 1f;

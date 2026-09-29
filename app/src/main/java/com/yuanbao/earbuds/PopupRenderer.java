@@ -218,7 +218,10 @@ public final class PopupRenderer {
         SoundPlayer.play(c, prefs);
 
         // ---------- 入场：从下往上 ----------
-        if (card != null) applyEnter(card, prefs.animStyle());
+        if (card != null) {
+            applyEnter(card, prefs.animStyle(),
+                    prefs == null ? 340 : prefs.enterAnimMs());
+        }
 
         // ---------- 第 2 段：1 秒后，模糊 + 文字【一起】淡入上移 ----------
         //
@@ -484,10 +487,21 @@ public final class PopupRenderer {
     public static volatile float cardScale = 1f;
 
     public static void applyEnter(View card, int style) {
+        applyEnter(card, style, 340);
+    }
+
+    /**
+     * @param ms 入场动画时长。默认 340ms 偏慢，用户反馈「弹窗太慢」，
+     *           现在可由设置项控制，默认 180ms —— 卡片更快到位，
+     *           电量数字该什么时候出现还是什么时候出现，不受动画影响。
+     */
+    public static void applyEnter(View card, int style, int ms) {
         if (card == null) return;
         float d = card.getResources().getDisplayMetrics().density;
         card.animate().cancel();
-        card.setTranslationY(140 * d);
+        // 动画时长越短，起始位移也该越小，否则短时间里位移过大看着像闪现
+        float shift = 140 * d * (ms / 340f);
+        card.setTranslationY(shift);
         card.setAlpha(0.15f);
         // 收在 cardScale（横屏缩小值）上，而不是写死的 1f
         float ts = cardScale;
@@ -495,14 +509,14 @@ public final class PopupRenderer {
             card.setScaleX(ts * 0.94f);
             card.setScaleY(ts * 0.94f);
             card.animate().translationY(0).scaleX(ts).scaleY(ts).alpha(1f)
-                    .setDuration(340)
+                    .setDuration(ms)
                     .setInterpolator(new DecelerateInterpolator())
                     .start();
         } else {
             card.setScaleX(ts);
             card.setScaleY(ts);
             card.animate().translationY(0).alpha(1f)
-                    .setDuration(340)
+                    .setDuration(ms)
                     .setInterpolator(new DecelerateInterpolator())
                     .start();
         }
