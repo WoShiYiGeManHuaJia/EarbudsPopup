@@ -1,1 +1,5 @@
-XC5ncmFkbGUKL2J1aWxkLwphcHAvYnVpbGQvCiouaW1sCi5pZGVhLwo=
+\.gradle
+/build/
+app/build/
+*.iml
+.idea/

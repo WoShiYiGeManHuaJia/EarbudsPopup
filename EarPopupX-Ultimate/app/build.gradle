@@ -1,1 +1,53 @@
-cGx1Z2lucyB7CiAgICBpZCAnY29tLmFuZHJvaWQuYXBwbGljYXRpb24nCn0KCmFuZHJvaWQgewogICAgbmFtZXNwYWNlICdjb20uZWFycG9wdXB4JwogICAgY29tcGlsZVNkayAzNAoKICAgIGRlZmF1bHRDb25maWcgewogICAgICAgIGFwcGxpY2F0aW9uSWQgJ2NvbS5lYXJwb3B1cHgnCiAgICAgICAgbWluU2RrIDI5CiAgICAgICAgdGFyZ2V0U2RrIDM0CiAgICAgICAgdmVyc2lvbkNvZGUgMjAwCiAgICAgICAgdmVyc2lvbk5hbWUgJzIuMC4wJwogICAgfQoKICAgIHNpZ25pbmdDb25maWdzIHsKICAgICAgICByZWxlYXNlIHsKICAgICAgICAgICAgZGVmIGtzUGF0aCA9IFN5c3RlbS5nZXRlbnYoIktFWVNUT1JFX0ZJTEUiKQogICAgICAgICAgICBpZiAoa3NQYXRoICYmIGZpbGUoa3NQYXRoKS5leGlzdHMoKSkgewogICAgICAgICAgICAgICAgc3RvcmVGaWxlIGZpbGUoa3NQYXRoKQogICAgICAgICAgICAgICAgc3RvcmVQYXNzd29yZCBTeXN0ZW0uZ2V0ZW52KCJLRVlTVE9SRV9QQVNTV09SRCIpCiAgICAgICAgICAgICAgICBrZXlBbGlhcyBTeXN0ZW0uZ2V0ZW52KCJLRVlfQUxJQVMiKQogICAgICAgICAgICAgICAga2V5UGFzc3dvcmQgU3lzdGVtLmdldGVudigiS0VZX1BBU1NXT1JEIikKICAgICAgICAgICAgfQogICAgICAgIH0KICAgIH0KCiAgICBidWlsZFR5cGVzIHsKICAgICAgICByZWxlYXNlIHsKICAgICAgICAgICAgbWluaWZ5RW5hYmxlZCBmYWxzZQogICAgICAgICAgICBzaHJpbmtSZXNvdXJjZXMgZmFsc2UKICAgICAgICAgICAgaWYgKFN5c3RlbS5nZXRlbnYoIktFWVNUT1JFX0ZJTEUiKSkgewogICAgICAgICAgICAgICAgc2lnbmluZ0NvbmZpZyBzaWduaW5nQ29uZmlncy5yZWxlYXNlCiAgICAgICAgICAgIH0KICAgICAgICB9CiAgICAgICAgZGVidWcgewogICAgICAgICAgICBpZiAoU3lzdGVtLmdldGVudigiS0VZU1RPUkVfRklMRSIpKSB7CiAgICAgICAgICAgICAgICBzaWduaW5nQ29uZmlnIHNpZ25pbmdDb25maWdzLnJlbGVhc2UKICAgICAgICAgICAgfQogICAgICAgIH0KICAgIH0KCiAgICBjb21waWxlT3B0aW9ucyB7CiAgICAgICAgc291cmNlQ29tcGF0aWJpbGl0eSBKYXZhVmVyc2lvbi5WRVJTSU9OXzE3CiAgICAgICAgdGFyZ2V0Q29tcGF0aWJpbGl0eSBKYXZhVmVyc2lvbi5WRVJTSU9OXzE3CiAgICB9CgogICAgbGludCB7CiAgICAgICAgYWJvcnRPbkVycm9yIGZhbHNlCiAgICAgICAgY2hlY2tSZWxlYXNlQnVpbGRzIGZhbHNlCiAgICB9Cn0K
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.earpopupx'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.earpopupx'
+        minSdk 29
+        targetSdk 34
+        versionCode 200
+        versionName '2.0.0'
+    }
+
+    signingConfigs {
+        release {
+            def ksPath = System.getenv("KEYSTORE_FILE")
+            if (ksPath && file(ksPath).exists()) {
+                storeFile file(ksPath)
+                storePassword System.getenv("KEYSTORE_PASSWORD")
+                keyAlias System.getenv("KEY_ALIAS")
+                keyPassword System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            shrinkResources false
+            if (System.getenv("KEYSTORE_FILE")) {
+                signingConfig signingConfigs.release
+            }
+        }
+        debug {
+            if (System.getenv("KEYSTORE_FILE")) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}

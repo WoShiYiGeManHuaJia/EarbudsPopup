@@ -1,1 +1,24 @@
-IyBFYXJQb3B1cCBYIFVsdGltYXRlIDIuMAoK6ZKI5a+5IFJlZG1pIEs3MCBQcm8gLyBIeXBlck9TIC8g5pegIFJvb3Qg55qE5a6M5pW05rqQ56CB5bel56iL44CCCgojIyDmoLjlv4MKLSDok53niZkgQUNMIOi/nuaOpeeri+WNs+W8ueeql++8jOS4jeetieW+heeUtemHj+OAggotIOezu+e7n+iTneeJmeeUtemHj+W5v+aSreWIsOi+vuWQjuWunuaXtuabtOaWsOOAggotIOagh+WHhiBCTEUgQmF0dGVyeSBTZXJ2aWNlIOS9nOS4uuWQjuWkh+ivu+WPluOAggotIOabtOaNouiAs+acuuaMiSBCbHVldG9vdGhEZXZpY2Ug5Zyw5Z2A6YeN5paw5bu656uL5Lya6K+d44CCCi0g6Ieq5a6a5LmJIFBORy9KUEcvV2ViUC9HSUbvvIxHSUYg5L+d5oyB5Yqo55S744CCCi0g57Sg5p2Q5ZyG6KeS6KOB5Ymq44CCCi0g5Yqo5oCBIGJsdXIgYmVoaW5k77yI6K6+5aSH5pSv5oyB5pe277yJKyBkaW0gZmFsbGJhY2vjgIIKLSDlhbPpl63mjInpkq7jgIIKLSBYL1kv5a696auYL+Wchuinki/mqKHns4ov5Y6L5pqXL+aYvuekuuaXtumXtOWPr+iwg+OAggotIOa1i+ivleW8ueeql+aUr+aMgeaLluWKqOWumuS9jeW5tuS/neWtmOS9jee9ruOAggotIGNvbm5lY3RlZERldmljZSDliY3lj7DmnI3liqHjgIIKLSBBbmRyb2lkIDE1IOS4jeS7jiBCT09UX0NPTVBMRVRFRCDlvLrooYzlkK/liqggRkdT44CCCi0gQURCIOi+heWKqeiEmuacrOOAggoKIyMg6YeN6KaB6L6555WMCuaXoCBSb290IOeahOaZrumAmiBBUEsg5peg5rOV5rOo5YWlIGNvbS5hbmRyb2lkLnN5c3RlbXVpIC8gY29tLnhpYW9taS5ibHVldG9vdGgg55qE57O757uf6L+b56iL77yM5Zug5q2k5pys6aG555uu5L2/55SoIFRZUEVfQVBQTElDQVRJT05fT1ZFUkxBWeOAguecn+atoyBIeXBlck9TIEZvY3VzIElzbGFuZCDns7vnu5/ms6jlhaXpnIDopoEgUm9vdCArIExTUG9zZWTjgIIKCiMjIOaehOW7ugrpnIDopoEgQW5kcm9pZCBTdHVkaW8gLyBKREsgMTcgLyBBbmRyb2lkIFNESyAvIEdyYWRsZSA4LjEzICsgQUdQIDguMTMuMOOAgumhueebruS4jeWMheWQqyBHcmFkbGUgd3JhcHBlciBqYXLvvIzlm6DmraTlj6/nlLEgQW5kcm9pZCBTdHVkaW8g6Ieq5Yqo5a+85YWl5oiW5Zyo5bey5a6J6KOFIEdyYWRsZSDnmoTnjq/looPmnoTlu7rjgIIK
+# EarPopup X Ultimate 2.0
+
+针对 Redmi K70 Pro / HyperOS / 无 Root 的完整源码工程。
+
+## 核心
+- 蓝牙 ACL 连接立即弹窗，不等待电量。
+- 系统蓝牙电量广播到达后实时更新。
+- 标准 BLE Battery Service 作为后备读取。
+- 更换耳机按 BluetoothDevice 地址重新建立会话。
+- 自定义 PNG/JPG/WebP/GIF，GIF 保持动画。
+- 素材圆角裁剪。
+- 动态 blur behind（设备支持时）+ dim fallback。
+- 关闭按钮。
+- X/Y/宽高/圆角/模糊/压暗/显示时间可调。
+- 测试弹窗支持拖动定位并保存位置。
+- connectedDevice 前台服务。
+- Android 15 不从 BOOT_COMPLETED 强行启动 FGS。
+- ADB 辅助脚本。
+
+## 重要边界
+无 Root 的普通 APK 无法注入 com.android.systemui / com.xiaomi.bluetooth 的系统进程，因此本项目使用 TYPE_APPLICATION_OVERLAY。真正 HyperOS Focus Island 系统注入需要 Root + LSPosed。
+
+## 构建
+需要 Android Studio / JDK 17 / Android SDK / Gradle 8.13 + AGP 8.13.0。项目不包含 Gradle wrapper jar，因此可由 Android Studio 自动导入或在已安装 Gradle 的环境构建。

@@ -1,1 +1,7 @@
-cGx1Z2lucyB7CiAgICBpZCAnY29tLmFuZHJvaWQuYXBwbGljYXRpb24nIHZlcnNpb24gJzguMS40JyBhcHBseSBmYWxzZQp9Cgp0YXNrcy5yZWdpc3RlcignY2xlYW4nLCBEZWxldGUpIHsKICAgIGRlbGV0ZSByb290UHJvamVjdC5sYXlvdXQuYnVpbGREaXJlY3RvcnkKfQo=
+plugins {
+    id 'com.android.application' version '8.1.4' apply false
+}
+
+tasks.register('clean', Delete) {
+    delete rootProject.layout.buildDirectory
+}

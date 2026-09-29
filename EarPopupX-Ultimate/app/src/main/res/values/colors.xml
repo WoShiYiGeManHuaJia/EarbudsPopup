@@ -1,1 +1,7 @@
-PHJlc291cmNlcz4KICAgIDxjb2xvciBuYW1lPSJpbmsiPiMxNzE4MUM8L2NvbG9yPgogICAgPGNvbG9yIG5hbWU9Im11dGVkIj4jNzQ3NjdEPC9jb2xvcj4KICAgIDxjb2xvciBuYW1lPSJhY2NlbnQiPiM1RTZDRTg8L2NvbG9yPgogICAgPGNvbG9yIG5hbWU9InN1cmZhY2UiPiNGN0Y3RkE8L2NvbG9yPgogICAgPGNvbG9yIG5hbWU9ImNhcmQiPiNGRkZGRkY8L2NvbG9yPgo8L3Jlc291cmNlcz4K
+<resources>
+    <color name="ink">#17181C</color>
+    <color name="muted">#74767D</color>
+    <color name="accent">#5E6CE8</color>
+    <color name="surface">#F7F7FA</color>
+    <color name="card">#FFFFFF</color>
+</resources>

@@ -1,1 +1,14 @@
-QGVjaG8gb2ZmCnNldCBQS0c9Y29tLmVhcnBvcHVweAplY2hvID09PSBFYXJQb3B1cCBYIFVsdGltYXRlIEFEQiBQcm90ZWN0aW9uID09PQphZGIgd2FpdC1mb3ItZGV2aWNlCmFkYiBzaGVsbCBhcHBvcHMgc2V0ICVQS0clIFNZU1RFTV9BTEVSVF9XSU5ET1cgYWxsb3cKYWRiIHNoZWxsIGNtZCBkZXZpY2VpZGxlIHdoaXRlbGlzdCArJVBLRyUKYWRiIHNoZWxsIGFwcG9wcyBzZXQgJVBLRyUgUlVOX0lOX0JBQ0tHUk9VTkQgYWxsb3cKYWRiIHNoZWxsIGFwcG9wcyBzZXQgJVBLRyUgUlVOX0FOWV9JTl9CQUNLR1JPVU5EIGFsbG93CmFkYiBzaGVsbCBwbSBncmFudCAlUEtHJSBhbmRyb2lkLnBlcm1pc3Npb24uQkxVRVRPT1RIX0NPTk5FQ1QgMj5udWwKYWRiIHNoZWxsIHBtIGdyYW50ICVQS0clIGFuZHJvaWQucGVybWlzc2lvbi5CTFVFVE9PVEhfU0NBTiAyPm51bAphZGIgc2hlbGwgcG0gZ3JhbnQgJVBLRyUgYW5kcm9pZC5wZXJtaXNzaW9uLlBPU1RfTk9USUZJQ0FUSU9OUyAyPm51bAplY2hvLgplY2hvIERvbmUuIE9wZW4gRWFyUG9wdXAgWCwgZW5hYmxlIE92ZXJsYXksIHRoZW4gdGFwIFN0YXJ0L1Jlc3VtZSBNb25pdG9yLgpwYXVzZQo=
+@echo off
+set PKG=com.earpopupx
+echo === EarPopup X Ultimate ADB Protection ===
+adb wait-for-device
+adb shell appops set %PKG% SYSTEM_ALERT_WINDOW allow
+adb shell cmd deviceidle whitelist +%PKG%
+adb shell appops set %PKG% RUN_IN_BACKGROUND allow
+adb shell appops set %PKG% RUN_ANY_IN_BACKGROUND allow
+adb shell pm grant %PKG% android.permission.BLUETOOTH_CONNECT 2>nul
+adb shell pm grant %PKG% android.permission.BLUETOOTH_SCAN 2>nul
+adb shell pm grant %PKG% android.permission.POST_NOTIFICATIONS 2>nul
+echo.
+echo Done. Open EarPopup X, enable Overlay, then tap Start/Resume Monitor.
+pause

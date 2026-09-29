@@ -1,1 +1,12 @@
-cGFja2FnZSBjb20uZWFycG9wdXB4OwoKcHVibGljIGZpbmFsIGNsYXNzIEJhdHRlcnlTdGF0ZSB7CiAgICBwdWJsaWMgZmluYWwgaW50IGFnZ3JlZ2F0ZSwgbGVmdCwgcmlnaHQsIGNhc2VMZXZlbDsKICAgIHB1YmxpYyBmaW5hbCBib29sZWFuIGxlZnRDaGFyZ2luZywgcmlnaHRDaGFyZ2luZywgY2FzZUNoYXJnaW5nOwogICAgcHVibGljIGZpbmFsIFN0cmluZyBzb3VyY2U7CiAgICBwdWJsaWMgQmF0dGVyeVN0YXRlKGludCBhZ2dyZWdhdGUsIGludCBsZWZ0LCBpbnQgcmlnaHQsIGludCBjYXNlTGV2ZWwsIGJvb2xlYW4gbGMsIGJvb2xlYW4gcmMsIGJvb2xlYW4gY2MsIFN0cmluZyBzb3VyY2UpIHsKICAgICAgICB0aGlzLmFnZ3JlZ2F0ZT1hZ2dyZWdhdGU7IHRoaXMubGVmdD1sZWZ0OyB0aGlzLnJpZ2h0PXJpZ2h0OyB0aGlzLmNhc2VMZXZlbD1jYXNlTGV2ZWw7CiAgICAgICAgdGhpcy5sZWZ0Q2hhcmdpbmc9bGM7IHRoaXMucmlnaHRDaGFyZ2luZz1yYzsgdGhpcy5jYXNlQ2hhcmdpbmc9Y2M7IHRoaXMuc291cmNlPXNvdXJjZTsKICAgIH0KICAgIHB1YmxpYyBzdGF0aWMgQmF0dGVyeVN0YXRlIHVua25vd24oU3RyaW5nIHNvdXJjZSkgeyByZXR1cm4gbmV3IEJhdHRlcnlTdGF0ZSgtMSwtMSwtMSwtMSxmYWxzZSxmYWxzZSxmYWxzZSxzb3VyY2UpOyB9Cn0K
+package com.earpopupx;
+
+public final class BatteryState {
+    public final int aggregate, left, right, caseLevel;
+    public final boolean leftCharging, rightCharging, caseCharging;
+    public final String source;
+    public BatteryState(int aggregate, int left, int right, int caseLevel, boolean lc, boolean rc, boolean cc, String source) {
+        this.aggregate=aggregate; this.left=left; this.right=right; this.caseLevel=caseLevel;
+        this.leftCharging=lc; this.rightCharging=rc; this.caseCharging=cc; this.source=source;
+    }
+    public static BatteryState unknown(String source) { return new BatteryState(-1,-1,-1,-1,false,false,false,source); }
+}

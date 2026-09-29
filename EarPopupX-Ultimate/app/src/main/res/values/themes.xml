@@ -1,1 +1,9 @@
-PHJlc291cmNlcz4KICAgIDxzdHlsZSBuYW1lPSJBcHBUaGVtZSIgcGFyZW50PSJhbmRyb2lkOnN0eWxlL1RoZW1lLk1hdGVyaWFsLkxpZ2h0Lk5vQWN0aW9uQmFyIj4KICAgICAgICA8aXRlbSBuYW1lPSJhbmRyb2lkOmZvbnRGYW1pbHkiPnNhbnM8L2l0ZW0+CiAgICAgICAgPGl0ZW0gbmFtZT0iYW5kcm9pZDp3aW5kb3dMaWdodFN0YXR1c0JhciI+dHJ1ZTwvaXRlbT4KICAgICAgICA8aXRlbSBuYW1lPSJhbmRyb2lkOnN0YXR1c0JhckNvbG9yIj4jRjdGN0ZBPC9pdGVtPgogICAgICAgIDxpdGVtIG5hbWU9ImFuZHJvaWQ6bmF2aWdhdGlvbkJhckNvbG9yIj4jRjdGN0ZBPC9pdGVtPgogICAgICAgIDxpdGVtIG5hbWU9ImFuZHJvaWQ6d2luZG93QWN0aW9uTW9kZU92ZXJsYXkiPnRydWU8L2l0ZW0+CiAgICA8L3N0eWxlPgo8L3Jlc291cmNlcz4K
+<resources>
+    <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">#F7F7FA</item>
+        <item name="android:navigationBarColor">#F7F7FA</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+</resources>
