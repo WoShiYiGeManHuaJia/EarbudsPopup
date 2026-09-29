@@ -14,6 +14,10 @@ android {
         versionName '3.0.0'
     }
 
+    // Shizuku 的 AIDL 与 API 源码已内置在 src/main/aidl 与 src/main/java
+    buildFeatures {
+        aidl true
+    }
 
     // 必须用与 2.0 相同的正式密钥签名，否则用户无法覆盖安装（安装失败 -7）
     signingConfigs {
@@ -55,6 +59,5 @@ android {
 }
 
 dependencies {
-    implementation 'dev.rikka.shizuku:api:13.1.5'
-    implementation 'dev.rikka.shizuku:provider:13.1.5'
+    // Shizuku API 已内置源码，不能再引远程库，否则 dex 里类重复
 }
