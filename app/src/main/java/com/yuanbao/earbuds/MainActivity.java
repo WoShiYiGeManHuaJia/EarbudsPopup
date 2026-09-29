@@ -75,6 +75,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvBg, tvTextColor, tvAccent;
     private TextView tvWidth, tvRadius, tvImgH, tvDuration, tvPos, tvAnim;
     private TextView tvLandscapeScale;
+    private TextView tvQuiet;
 
     /** 挑选 HCI 日志做精简的请求码 */
     private static final int REQ_PICK_HCI_FILTER = 9912;
@@ -229,6 +230,7 @@ public class MainActivity extends AppCompatActivity {
         tvWidth = findViewById(R.id.tvWidth);
         tvRadius = findViewById(R.id.tvRadius);
         tvLandscapeScale = findViewById(R.id.tvLandscapeScale);
+        tvQuiet = findViewById(R.id.tvQuiet);
         tvImgH = findViewById(R.id.tvImgH);
         tvDuration = findViewById(R.id.tvDuration);
         tvPos = findViewById(R.id.tvPos);
@@ -314,6 +316,10 @@ public class MainActivity extends AppCompatActivity {
         if (tvLandscapeScale != null) {
             tvLandscapeScale.setText(Math.round(prefs.landscapeScale() * 100) + "%");
         }
+        if (tvQuiet != null) {
+            int s = prefs.reconnectQuietSec();
+            tvQuiet.setText(s == 0 ? "关闭" : s + " 秒");
+        }
     }
 
     // ---------------- 事件 ----------------
@@ -393,6 +399,12 @@ public class MainActivity extends AppCompatActivity {
             rowScale.setOnClickListener(v -> showSlider("横屏缩放比例", "%",
                     40, 100, Math.round(prefs.landscapeScale() * 100),
                     val -> prefs.setLandscapeScale(val / 100f)));
+        }
+        View rowQuiet = findViewById(R.id.rowQuiet);
+        if (rowQuiet != null) {
+            rowQuiet.setOnClickListener(v -> showSlider("重连静默期", "秒",
+                    0, 120, prefs.reconnectQuietSec(),
+                    val -> prefs.setReconnectQuietSec(val)));
         }
 
         // 单选项

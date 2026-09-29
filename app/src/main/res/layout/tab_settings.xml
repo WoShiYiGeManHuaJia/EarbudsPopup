@@ -88,6 +88,49 @@
                 android:drawableStart="@drawable/ic_battery"
                 android:text="显示充电盒电量"
                 android:textSize="15.5sp" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="@color/ui_divider" />
+
+            <LinearLayout
+                android:id="@+id/rowQuiet"
+                style="@style/AppRow">
+
+                <ImageView
+                    style="@style/AppRowIcon"
+                    android:contentDescription="静默期"
+                    android:src="@drawable/ic_refresh" />
+
+                <LinearLayout style="@style/AppRowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="重连静默期" />
+
+                    <TextView
+                        style="@style/TextRowSub"
+                        android:text="取出单耳合盖导致的重连，不再重复弹窗" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvQuiet"
+                    style="@style/TextRowValue"
+                    android:text="25 秒" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="14dp"
+                android:lineSpacingExtra="3dp"
+                android:text="开盖弹出后，取出一只耳机再合盖，耳机内部会做主从切换，手机侧就是一次断开紧接着一次重连——于是弹窗弹了第二次。设一个静默期，同一副耳机断开后在这个时间内重新连上就不再弹窗。静默期内仍然会刷新电量，数据不会变旧。设为 0 秒则关闭（每次连接都弹）。"
+                android:textColor="@color/ui_text_secondary"
+                android:textSize="11.5sp" />
         </LinearLayout>
 
         <!-- ===== 触发设备 ===== -->

@@ -539,6 +539,35 @@ public class Prefs {
     }
 
     /**
+     * 重连静默期（毫秒）：同一副耳机断开后在这个时间内重新连上，不再弹窗。
+     *
+     * 背景：TWS 耳机从盒里取出一只、再把盒子盖上时，耳机内部要做
+     * 「主从切换 / 主耳从盒内连接切到直连」，手机侧看到的是一次
+     * ACL 断开紧接着一次 ACL 重连 —— 于是弹窗弹了第二次。
+     * 这属于同一副耳机的连续动作，不是用户新连了一副耳机，不该再弹。
+     *
+     * 默认 25 秒：足够覆盖开盖→取耳→盖盖这一段操作，
+     * 又不至于让用户「摘下耳机放一会儿再戴」时也弹不出来。
+     * 设为 0 表示关闭这个功能（每次连接都弹）。
+     */
+    public int reconnectQuietMs() {
+        return sp.getInt("reconnect_quiet_ms", 25000);
+    }
+
+    public void setReconnectQuietMs(int v) {
+        sp.edit().putInt("reconnect_quiet_ms", Math.max(0, Math.min(600000, v))).apply();
+    }
+
+    /** 重连静默期，以秒为单位（供设置页滑块使用） */
+    public int reconnectQuietSec() {
+        return reconnectQuietMs() / 1000;
+    }
+
+    public void setReconnectQuietSec(int sec) {
+        setReconnectQuietMs(sec * 1000);
+    }
+
+    /**
      * 横屏时弹窗的整体缩放系数。
      *
      * 卡片高度是按宽度算出来的（h = w * (0.45 + 图片比例 * 0.33)），

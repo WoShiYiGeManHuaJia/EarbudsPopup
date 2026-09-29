@@ -10,8 +10,8 @@ android {
         applicationId "com.yuanbao.earbuds"
         minSdk 26
         targetSdk 33
-        versionCode 210
-        versionName "2.1"
+        versionCode 220
+        versionName "2.2"
     }
 
     // 发布签名：密钥库由 CI 注入，本地没有时自动退回未签名配置

@@ -347,6 +347,11 @@ public class PopupService extends Service {
             connected = true;
         } else if (BluetoothDevice.ACTION_ACL_DISCONNECTED.equals(action)) {
             connected = false;
+            // 记下「这副耳机刚刚断开」的时刻。
+            // 取出一只耳机再合盖时，耳机会做主从切换，手机侧就是
+            // 断→连各一次；有了这个时刻，重连时才能判断要不要再弹窗。
+            lastDisconnectAt = System.currentTimeMillis();
+            lastDisconnectAddr = dev.getAddress();
         } else {
             int st = i.getIntExtra(BluetoothA2dp.EXTRA_STATE, -1);
             connected = (st == BluetoothA2dp.STATE_CONNECTED
@@ -482,6 +487,9 @@ public class PopupService extends Service {
      */
     /** 上次真正弹出弹窗的时间，用于防抖 */
     private static volatile long lastLaunchAt = 0L;
+    /** 上次收到「断开」广播的时刻与设备地址，用于识别主从切换导致的重连 */
+    private static volatile long lastDisconnectAt = 0L;
+    private static volatile String lastDisconnectAddr = null;
 
     private void launch(String name, String address, BatteryLevels levels, BluetoothDevice dev) {
         // 防抖：蓝牙连接会连发多个广播（ACL_CONNECTED、A2DP_CONNECTED、
@@ -490,6 +498,26 @@ public class PopupService extends Service {
         // 3 秒内只弹一次。
         long now = System.currentTimeMillis();
         if (now - lastLaunchAt < 3000L) return;
+
+        // 同一副耳机的「断开后重连」不再重复弹窗。
+        //
+        // 典型场景：开盖弹出 → 取出一只耳机 → 合盖。
+        // 耳机内部在此刻做主从切换（主耳从盒内连接改为直连），
+        // 手机侧表现为 ACL 断开紧接着 ACL 重连，于是弹窗弹第二次。
+        // 这是同一副耳机的连续动作，不是用户新连了一副，不该再弹。
+        //
+        // 注意：静默期内仍然会走后面的电量探测与缓存更新，
+        // 只是不弹窗 —— 数据不会因此变旧。
+        int quiet = prefs.reconnectQuietMs();
+        if (quiet > 0 && address != null
+                && address.equals(lastDisconnectAddr)
+                && lastDisconnectAt > 0L
+                && (now - lastDisconnectAt) < quiet) {
+            // 静默期内照样刷新电量，保证下次弹窗显示的是最新值
+            autoRefreshBattery(address, dev);
+            return;
+        }
+
         lastLaunchAt = now;
         int engine = prefs.engine();
         boolean canOverlay = android.provider.Settings.canDrawOverlays(this);
