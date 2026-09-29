@@ -100,7 +100,7 @@ public final class MainActivity extends Activity{
 
  private void runAdbOneClick(){
   if(!ShizukuHelper.isRunning()){
-   Toast.makeText(this,"未检测到 Shizuku / Stellar 在运行。请先打开 Stellar 并启动它的服务，再回来点这个按钮。",Toast.LENGTH_LONG).show();
+   Toast.makeText(this,"当前版本没有内置 Shizuku 运行库，点不了。请先用按钮②复制命令，到 Stellar 里粘贴执行；下次我把运行库打进去就能真的一键。",Toast.LENGTH_LONG).show();
    return;
   }
   if(!ShizukuHelper.hasPermission()){
