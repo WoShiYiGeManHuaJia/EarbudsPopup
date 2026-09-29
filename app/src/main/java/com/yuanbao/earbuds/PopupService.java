@@ -1,0 +1,1067 @@
+package com.yuanbao.earbuds;
+
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.Service;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothA2dp;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothHeadset;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.graphics.Color;
+import android.graphics.PixelFormat;
+import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Handler;
+import android.os.IBinder;
+import android.os.Looper;
+import android.os.PowerManager;
+import android.util.TypedValue;
+import android.view.Gravity;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.view.animation.DecelerateInterpolator;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import androidx.core.app.NotificationCompat;
+
+import com.bumptech.glide.Glide;
+
+/**
+ * 常驻前台服务：监听蓝牙 / 有线耳机的连接事件，弹出自定义悬浮窗动画。
+ */
+public class PopupService extends Service {
+
+    /** 悬浮窗最近一次显示的时间戳。
+     *  智能模式下 Activity 启动可能慢于降级判定，导致两个弹窗先后出现
+     *  （用户看到的「闪两下」）。PopupActivity 会读这个值，
+     *  若发现刚刚已有悬浮窗显示，就直接结束自己。 */
+    public static volatile long lastOverlayShownAt = 0L;
+
+    /** 沉底模式距屏幕底部的边距（dp） */
+    public static final int BOTTOM_MARGIN_DP = 28;
+
+    /**
+     * 按连续垂直位置算出距屏幕顶部的偏移。
+     * 上下各留安全边距（顶部避挖孔、底部避手势条），中间线性分布。
+     */
+    public static int topOffsetForVPos(int vpos, int cardHeightPx, int screenHeightPx) {
+        return topOffsetForVPos(vpos, cardHeightPx, screenHeightPx, 0f);
+    }
+
+    /**
+     * 按连续垂直位置算出距屏幕顶部的偏移（px）。
+     *
+     * 0   → 贴顶（仅留顶部安全边距）
+     * 100 → 贴底（仅留底部安全边距）
+     * 中间 → 在可用空间内线性分布
+     *
+     * @param density 用于把 dp 安全边距换算成 px
+     */
+    public static int topOffsetForVPos(int vpos, int cardHeightPx,
+                                       int screenHeightPx, float density) {
+        int topPad = (int) (24 * density);
+        int botPad = (int) (24 * density);
+        int usable = screenHeightPx - cardHeightPx - topPad - botPad;
+        if (usable <= 0) return topPad;
+        int v = Math.max(0, Math.min(100, vpos));
+        return topPad + Math.round(usable * v / 100f);
+    }
+
+    public static final String ACTION_SHOW = "com.yuanbao.earbuds.ACTION_SHOW";
+    public static final String ACTION_RESTART = "com.yuanbao.earbuds.ACTION_RESTART";
+    public static final String EXTRA_NAME = "name";
+    public static final String EXTRA_BATTERY = "battery";
+    public static final String EXTRA_CASE = "case_battery";
+    public static final String EXTRA_LEFT = "left_battery";
+    public static final String EXTRA_OVERALL = "overall_battery";
+    public static final String EXTRA_ADDRESS = "address";
+    public static final String EXTRA_WIRED = "wired";
+    /** 系统隐藏广播：耳机电量变化 */
+    public static final String ACTION_BATTERY_CHANGED =
+            "android.bluetooth.device.action.BATTERY_LEVEL_CHANGED";
+    /**
+     * 电量值的 extra 名。
+     * BluetoothDevice.EXTRA_BATTERY_LEVEL 是隐藏 API，编译期不可见，
+     * 所以这里直接写字面量（值与系统一致）。
+     */
+    public static final String EXTRA_BATTERY_LEVEL =
+            "android.bluetooth.device.extra.BATTERY_LEVEL";
+
+    private static final String CHANNEL_ID = "popup_service";
+    private static final String CHANNEL_SILENT = "popup_service_silent";
+    private static final int NOTI_ID = 1001;
+
+    private WindowManager wm;
+    private View current;
+    /** 尚未执行的自动消失回调，dismiss 时要一并撤销 */
+    private Runnable pendingDismiss;
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private Prefs prefs;
+    private volatile boolean screenOn = true;
+    private View currentRoot;
+    private String currentName;
+    private volatile String currentAddress;
+    /** 每台设备独立的刷新序号：切换耳机后旧的探测结果绝不会覆盖新耳机的弹窗。 */
+    private final java.util.concurrent.ConcurrentHashMap<String, Long> batteryJobs =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * 每台设备最近一次【断开】的时刻。
+     *
+     * 部分 ROM（HyperOS 尤其）在耳机断开或关闭蓝牙时，会乱序补发一条
+     * profile「已连接」广播，于是用户明明是关掉耳机，却仍然弹出弹窗。
+     * 断开后 DISCONNECT_SUPPRESS_MS 内一律不再为该设备弹窗。
+     */
+    // 断开后 12 秒内不再为该设备弹窗。
+    // 之前是 4 秒：HyperOS 在断开后会补发一次迟到的「已连接」广播，
+    // 4 秒压不住，于是「关掉蓝牙 / 断开耳机，它又弹一个出来」。
+    private static final long DISCONNECT_SUPPRESS_MS = 12000L;
+    private final java.util.concurrent.ConcurrentHashMap<String, Long> lastDisconnectAt =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    // 【整机值延迟显示】
+    // getBatteryLevel() 返回的是系统蓝牙栈缓存，连接后会【逐步更新】：
+    // 中途读到的 85 / 95 往往只是"还没更新完"的中间态。
+    // applyMeasured 会把整机值写进界面并 keepOverallOnly() —— 左右耳被清成
+    // 无效，于是弹出一个「单耳图标 + 中间值」；等真实分项（左/右/盒）到达
+    // 再被覆盖，用户看到的就是「先闪一个单耳错误数字，再跳真实电量」。
+    //
+    // 现在：整机值不立刻显示，先挂一个延迟任务；延迟期内更权威的分项值
+    // 到达就取消它、直接用分项覆盖 —— 界面一次性落到真实值，不再闪。
+    private Runnable pendingOverall;
+    private String pendingOverallAddr;
+    private static final long OVERALL_DEFER_MS = 1500L;
+
+    /** 取消尚未执行的整机值显示任务（分项值到达时调用）。 */
+    private void cancelPendingOverall() {
+        if (pendingOverall != null) {
+            main.removeCallbacks(pendingOverall);
+            android.util.Log.i("Battery", "取消待显示的整机值，改用分项 " + pendingOverallAddr);
+            pendingOverall = null;
+            pendingOverallAddr = null;
+        }
+    }
+
+    /**
+     * 整机值延迟显示：先挂 OVERALL_DEFER_MS 等分项，分项先到就取消。
+     * 延迟期内界面保持原样 / 空，不会再闪一个错的单耳数字。
+     */
+    private void scheduleOverall(String addr, int value, String source, long job) {
+        cancelPendingOverall();
+        final String a = addr;
+        final int v = value;
+        final String src = source;
+        final long jb = job;
+        pendingOverallAddr = addr;
+        pendingOverall = () -> {
+            pendingOverall = null;
+            pendingOverallAddr = null;
+            applyMeasured(a, v, src, jb);
+        };
+        android.util.Log.i("Battery", "整机值 " + v + "(" + src + ") 延迟 "
+                + OVERALL_DEFER_MS + "ms 显示，等分项");
+        main.postDelayed(pendingOverall, OVERALL_DEFER_MS);
+    }
+
+    private final BroadcastReceiver receiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context c, Intent i) {
+            handle(i);
+        }
+    };
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        prefs = new Prefs(this);
+        // 弹窗渲染用静态 PrefsHolder 取配置，必须在服务里也初始化，
+        // 否则开机自启时用户设的图片缩放会丢失（拿到 null 回退成默认值）
+        PopupRenderer.PrefsHolder.init(this);
+        wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+        startForeground(NOTI_ID, buildNotification());
+        KeepAliveController.arm(this);
+        refreshNotificationVisibility();
+        syncScreenState();
+        registerReceivers();
+        warmUpImage();
+    }
+
+    /**
+     * 预热：把弹窗图片提前解码进 Glide 内存缓存。
+     * 弹窗时直接命中缓存，省掉解码耗时，首帧出现更快（目标 < 1 秒）。
+     */
+    private void warmUpImage() {
+        try {
+            String u = prefs.imageUri();
+            if (u == null || u.isEmpty()) return;
+            Glide.with(this).load(Uri.parse(u)).preload();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * 注册广播。抽成方法是为了能在设置变化后重新注册——
+     * 之前只在 onCreate 里注册一次，用户在设置页改「省电模式」后
+     * （ ACTION_RESTART 只重载了 Prefs），屏幕开关监听不会跟着变，开关形同虚设。
+     */
+    private void registerReceivers() {
+        try {
+            unregisterReceiver(receiver);
+        } catch (Exception ignored) {
+        }
+        IntentFilter f = new IntentFilter();
+        f.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
+        f.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
+        f.addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED);
+        f.addAction(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED);
+        // 不在这里监听 ACTION_HEADSET_PLUG：
+        // WiredReceiver（静态注册）也在监听它，两边都弹会导致插一次弹两遍。
+        // 统一由 WiredReceiver 收到后发 ACTION_SHOW，走 onStartCommand 单路径弹窗。
+        f.addAction(ACTION_SHOW);
+        f.addAction(ACTION_RESTART);
+        // 系统蓝牙栈在耳机电量变化时发出的广播（隐藏广播，但动态注册可收到）。
+        // 这是最实时的电量来源：耳机一上报新电量，我们立刻更新缓存。
+        // 之前完全没监听它，所以电量只能靠手动探测——这就是「录死」的根因。
+        f.addAction(ACTION_BATTERY_CHANGED);
+        if (prefs.powerSave()) {
+            f.addAction(Intent.ACTION_SCREEN_ON);
+            f.addAction(Intent.ACTION_SCREEN_OFF);
+        }
+        try {
+            registerReceiver(receiver, f);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** 用系统实际状态初始化 screenOn，避免熄屏启动时误判为亮屏而弹窗 */
+    private void syncScreenState() {
+        try {
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            screenOn = pm == null || pm.isInteractive();
+        } catch (Throwable t) {
+            screenOn = true;
+        }
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent != null && ACTION_SHOW.equals(intent.getAction())) {
+            String name = intent.getStringExtra(EXTRA_NAME);
+            String addr = intent.getStringExtra(EXTRA_ADDRESS);
+            BatteryLevels lv = new BatteryLevels();
+            lv.left = intent.getIntExtra(EXTRA_LEFT, -1);
+            lv.right = intent.getIntExtra(EXTRA_BATTERY, -1);
+            lv.caseBox = intent.getIntExtra(EXTRA_CASE, -1);
+            lv.overall = intent.getIntExtra(EXTRA_OVERALL, lv.right);
+            lv.sanitize();
+            lv.keepOverallOnly();
+            lv.timestamp = System.currentTimeMillis();
+            show(name == null ? "耳机" : name, addr, lv, null);
+        }
+        KeepAliveController.arm(this);
+        return START_STICKY;
+    }
+
+    private Notification buildNotification() {
+        boolean hide = prefs.hideNotification();
+        String useChannel = hide && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? CHANNEL_SILENT : CHANNEL_ID;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationManager nm = getSystemService(NotificationManager.class);
+            if (nm != null) {
+                if (hide) {
+                    NotificationChannel ch = new NotificationChannel(
+                            CHANNEL_SILENT, "后台服务（静默）",
+                            NotificationManager.IMPORTANCE_MIN);
+                    ch.setDescription("不显示通知，仅保持服务运行");
+                    ch.setShowBadge(false);
+                    ch.enableLights(false);
+                    ch.enableVibration(false);
+                    ch.setSound(null, null);
+                    nm.createNotificationChannel(ch);
+                } else {
+                    NotificationChannel ch = new NotificationChannel(
+                            CHANNEL_ID, "耳机弹窗服务", NotificationManager.IMPORTANCE_LOW);
+                    ch.setDescription("保持弹窗服务在后台运行");
+                    ch.setShowBadge(false);
+                    nm.createNotificationChannel(ch);
+                }
+            }
+        }
+        Intent open = new Intent(this, MainActivity.class);
+        open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        android.app.PendingIntent pi = android.app.PendingIntent.getActivity(
+                this, 1, open,
+                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+                        ? android.app.PendingIntent.FLAG_IMMUTABLE
+                        : 0);
+        return new NotificationCompat.Builder(this, useChannel)
+                .setContentTitle("耳机弹窗已就绪")
+                .setContentText("连接耳机时会显示自定义弹窗")
+                .setSmallIcon(R.drawable.ic_stat_notify)
+                .setContentIntent(pi)
+                .setOngoing(!hide)
+                .setSilent(true)
+                .setPriority(hide ? NotificationCompat.PRIORITY_MIN
+                        : NotificationCompat.PRIORITY_LOW)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                .build();
+    }
+
+    private void handle(Intent i) {
+        if (i == null || i.getAction() == null) return;
+
+        // 省电：熄屏时跳过弹窗，避免唤醒屏幕白白耗电
+        if (prefs.powerSave() && Intent.ACTION_SCREEN_OFF.equals(i.getAction())) {
+            screenOn = false;
+            return;
+        }
+        if (Intent.ACTION_SCREEN_ON.equals(i.getAction())) {
+            screenOn = true;
+            return;
+        }
+        if (prefs.powerSave() && !screenOn
+                && !ACTION_SHOW.equals(i.getAction())
+                && !ACTION_RESTART.equals(i.getAction())) {
+            return;
+        }
+
+        // 重新加载设置并应用（通知可见性 / 省电策略变了）
+        if (ACTION_RESTART.equals(i.getAction())) {
+            prefs = new Prefs(this);
+            syncScreenState();
+            registerReceivers();     // 省电开关可能变了，要重新注册
+            refreshNotificationVisibility();
+            startForeground(NOTI_ID, buildNotification());
+            return;
+        }
+        if (!prefs.masterEnabled()) return;
+
+        String action = i.getAction();
+
+        if (ACTION_SHOW.equals(action)) {
+            BatteryLevels demo = new BatteryLevels();
+            demo.left = i.getIntExtra(EXTRA_LEFT, -1);
+            demo.right = i.getIntExtra(EXTRA_BATTERY, -1);
+            demo.caseBox = i.getIntExtra(EXTRA_CASE, -1);
+            demo.overall = i.getIntExtra(EXTRA_OVERALL, demo.right);
+            demo.sanitize();
+            demo.keepOverallOnly();
+            demo.timestamp = System.currentTimeMillis();
+            show(i.getStringExtra(EXTRA_NAME), i.getStringExtra(EXTRA_ADDRESS), demo, null);
+            return;
+        }
+
+        // 电量变化广播：立刻写入缓存，下次弹窗就是最新值
+        if (ACTION_BATTERY_CHANGED.equals(action)) {
+            BluetoothDevice bd = i.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+            int lvl = i.getIntExtra(EXTRA_BATTERY_LEVEL, -1);
+            if (bd != null && BatteryLevels.valid(lvl)) {
+                String a2 = bd.getAddress();
+                BatteryLevels bl = new BatteryStore(this).load(a2);
+                bl.overall = lvl;
+                bl.keepOverallOnly();
+                bl.sanitize();
+                bl.timestamp = System.currentTimeMillis();
+                bl.source = "sys-broadcast";
+                new BatteryStore(this).save(a2, bl);
+                // 若当前弹窗正是这台设备，原地刷新
+                if (currentRoot != null && a2.equals(currentAddress)) {
+                    PopupRenderer.updateInfo(currentRoot, currentName, bl, prefs);
+                }
+            }
+            return;
+        }
+
+        BluetoothDevice dev = i.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+        if (dev == null) return;
+
+        String addr = dev.getAddress();
+        final long nowMs = System.currentTimeMillis();
+
+        boolean connected;
+        if (BluetoothDevice.ACTION_ACL_CONNECTED.equals(action)) {
+            connected = true;
+        } else if (BluetoothDevice.ACTION_ACL_DISCONNECTED.equals(action)) {
+            connected = false;
+        } else {
+            // A2DP 与 HFP 用的是两个不同的 extra key，之前只读了 A2DP 的，
+            // 于是 HFP 广播永远读不到状态。这里两个都读。
+            int st = i.getIntExtra(BluetoothA2dp.EXTRA_STATE, -1);
+            if (st < 0) st = i.getIntExtra(BluetoothHeadset.EXTRA_STATE, -1);
+            connected = (st == BluetoothA2dp.STATE_CONNECTED
+                    || st == BluetoothHeadset.STATE_CONNECTED);
+            // 断开中 / 已断开：一律视为断开，绝不弹窗
+            if (st == BluetoothA2dp.STATE_DISCONNECTED
+                    || st == BluetoothA2dp.STATE_DISCONNECTING) {
+                connected = false;
+            }
+        }
+        if (!connected) {
+            // 断开信号：记下时刻，并在一段时间内抑制该设备的误触发
+            if (addr != null) lastDisconnectAt.put(addr, nowMs);
+            return;
+        }
+        if (addr != null) {
+            Long t = lastDisconnectAt.get(addr);
+            if (t != null && nowMs - t < DISCONNECT_SUPPRESS_MS) return;
+            lastDisconnectAt.remove(addr);
+        }
+
+        if (!prefs.isAllowed(addr)) return;
+        String custom = prefs.deviceName(addr);
+        String name = (custom != null && !custom.trim().isEmpty())
+                ? custom.trim() : safeName(dev);
+        BatteryLevels cached = new BatteryStore(this).load(addr);
+        int sys = readBattery(dev);
+        // 小米/Redmi TWS 的聚合值不是 L/R 语义：0x180F 只有一个整机百分比，
+        // 把它复制成「L=100 R=100」是伪造。这类设备改由 MMA 通道给真实三元组；
+        // MMA 成功前宁可显示 --%。
+        boolean xiaomiTws = XiaomiMmaBatteryReader.likelyXiaomiRedmi(dev);
+        // 只有有效值才采用；0 是「未上报」，不能当 0% 显示
+        if (BatteryLevels.valid(sys)) {
+            cached.overall = sys;
+            if (!xiaomiTws) cached.keepOverallOnly();
+        }
+        cached.sanitize();
+        // 小米 TWS：只要不是 MMA 真实三元组，就不把聚合值当左右耳显示。
+        // 必须同时放行 BLE 通道的 source，否则 BLE MMA 好不容易拿到的真实三元组，
+        // 在下一次连接时会被这里当成「非真实分项」清成 -1，白干一场。
+        if (xiaomiTws) {
+            //
+            // 整机聚合值不能伪装成左右耳（那是伪造数据）。
+            // 但【缓存里已有的真实分项必须保留】：那是上一次实测到的真值，
+            // 首帧直接显示它，弹窗一出现就是完整的一对耳机，
+            // 不会先闪一个「单耳 + 中间态数字」再跳变。
+            //
+            // 之前的写法无条件把 left/right/caseBox 清成 -1，
+            // 于是每次连接都得等后台实测，首帧永远是单耳 + 一个不准的数。
+            //
+            cached.left = BatteryLevels.norm(cached.left);
+            cached.right = BatteryLevels.norm(cached.right);
+            cached.caseBox = BatteryLevels.norm(cached.caseBox);
+            if (!BatteryLevels.valid(cached.left)
+                    && !BatteryLevels.valid(cached.right)
+                    && !BatteryLevels.valid(cached.caseBox)) {
+                cached.source = "xiaomi-awaiting-mma";
+            }
+        }
+        // 关键：缓存必须「够新鲜」才敢显示。
+        // 之前直接拿几小时前的旧值当实时电量，用户充完电还看到 30%。
+        // 超过 STALE_MS 就作废，先显示 --%，由 autoRefreshBattery 实测后刷新。
+        // STALE 只应该作废「旧缓存里的值」，绝不能作废【本次刚实测到的值】。
+        // 之前无条件清 overall：上面第 362 行刚把 readBattery()=100 赋进去，
+        // 这里立刻因为 timestamp 陈旧而清成 -1。
+        // 用户日志里 getBatteryLevel()=100 明明读到了，弹窗却显示 --%
+        // ——真凶就在这里。
+        // 而且走系统级 Activity 引擎时，弹窗用的是这次传入的 levels，
+        // 后续 applyMeasured 只刷新 Overlay 的 root，Activity 界面根本不更新，
+        // 于是 --% 会一直卡住不动。
+        if (!BatteryLevels.valid(sys)
+                && cached.timestamp > 0L
+                && System.currentTimeMillis() - cached.timestamp > BatteryStore.STALE_MS) {
+            cached.left = -1;
+            cached.right = -1;
+            cached.caseBox = -1;
+            cached.overall = -1;
+            cached.source = "stale";
+        }
+        currentAddress = addr;
+        show(name, addr, cached, dev);
+    }
+
+    private String safeName(BluetoothDevice dev) {
+        try {
+            String n = dev.getName();
+            return (n == null || n.isEmpty()) ? "蓝牙耳机" : n;
+        } catch (SecurityException e) {
+            return "蓝牙耳机";
+        }
+    }
+
+    /** 把蓝牙广播名换成更好看的显示名 */
+    private String prettyName(String raw) {
+        if (raw == null) return "耳机";
+        String n = raw.trim();
+        String low = n.toLowerCase();
+        if (low.contains("buds 5 pro") || low.contains("buds5pro")) {
+            return n.contains("电竞") ? "Redmi Buds 5 Pro 电竞版" : "Redmi Buds 5 Pro";
+        }
+        if (low.contains("buds 5")) return "Redmi Buds 5";
+        if (low.contains("buds 4 pro")) return "Xiaomi Buds 4 Pro";
+        if (low.contains("airpods")) return "AirPods";
+        return n;
+    }
+
+    /**
+     * 后台通知可见性。
+     * Android 8+ 系统强制前台服务必须带通知，App 无法凭空取消；
+     * 但可以把渠道重要性降到最低、并引导用户在系统设置里彻底关闭，
+     * 关掉后通知栏不再显示，服务照常运行。
+     */
+    private void refreshNotificationVisibility() {
+        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        if (nm == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+        boolean hide = prefs.hideNotification();
+        if (hide) {
+            NotificationChannel c = new NotificationChannel(
+                    CHANNEL_SILENT, "后台服务（已隐藏）",
+                    NotificationManager.IMPORTANCE_MIN);
+            c.setShowBadge(false);
+            c.setSound(null, null);
+            c.enableVibration(false);
+            c.enableLights(false);
+            nm.createNotificationChannel(c);
+        }
+    }
+
+    /** 省电：把服务降级为普通后台服务并撤销前台通知（会略微降低优先级） */
+    private void applyPowerSave() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && prefs.hideNotification()) {
+            try {
+                stopForeground(STOP_FOREGROUND_DETACH);
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    /**
+     * 异步探测三方电量（BLE GATT 多实例 + MiBeacon + 系统隐藏单值）。
+     * GATT 连接通常要 1~5 秒，来不及在弹窗出现瞬间拿到，
+     * 所以先弹（用缓存/整机值），探测回来后原地更新信息条并写缓存，
+     * 下次连接就能立刻显示。
+     */
+    private void startProbe(String name, String address, BluetoothDevice dev) {
+        if (!prefs.showBattery() || address == null || address.isEmpty()) return;
+        new BatteryProbe(this).probe(address, dev, (levels, diagnostic) -> {
+            lastDiagnostic = diagnostic;
+            if (levels != null) levels.sanitize();
+            new BatteryStore(PopupService.this).save(address, levels);
+            if (currentRoot != null && current != null) {
+                PopupRenderer.updateInfo(currentRoot, currentName, levels, prefs);
+            }
+        });
+    }
+
+    /** 最近一次探测的完整日志，供诊断页读取 */
+    public static volatile String lastDiagnostic = "";
+
+    /** 安卓没有公开的耳机电量 API，用反射读隐藏方法；失败返回 -1（不显示电量） */
+    private int readBattery(BluetoothDevice dev) {
+        try {
+            java.lang.reflect.Method m = dev.getClass().getMethod("getBatteryLevel");
+            Object r = m.invoke(dev);
+            if (r instanceof Integer) return (Integer) r;
+        } catch (Throwable ignored) {
+        }
+        return -1;
+    }
+
+    // ---------------- 弹窗渲染 ----------------
+
+    private void show(String name, String address, BatteryLevels levels, BluetoothDevice dev) {
+        main.post(() -> launch(name, address, levels, dev));
+    }
+
+    /**
+     * 按引擎分发：系统级透明 Activity / 悬浮窗 / 智能降级。
+     * 之所以能从后台启动 Activity：已授予 SYSTEM_ALERT_WINDOW 的应用
+     * 属于 Android 10+ 后台启动 Activity 限制的官方例外之一。
+     */
+    /** 上次真正弹出弹窗的时间，用于防抖 */
+    private static volatile long lastLaunchAt = 0L;
+
+    private void launch(String name, String address, BatteryLevels levels, BluetoothDevice dev) {
+        // 防抖：蓝牙连接会连发多个广播（ACL_CONNECTED、A2DP_CONNECTED、
+        // HFP_CONNECTED…），导致 launch() 被连续调用多次，
+        // 于是弹窗被创建了两个 —— 用户看到的「闪两次」。
+        // 3 秒内只弹一次。
+        long now = System.currentTimeMillis();
+        if (now - lastLaunchAt < 3000L) return;
+        lastLaunchAt = now;
+        int engine = prefs.engine();
+
+        boolean canOverlay = android.provider.Settings.canDrawOverlays(this);
+
+        // 无论走哪个引擎，都必须启动自动电量探测。
+        // 之前只有 engine==1（悬浮窗）分支调用了 startProbe，
+        // 系统级和智能模式下压根不会自动探测，所以用户只能手动点——这是根因。
+        if (engine == 1) {
+            showOverlay(name, address, levels);
+            autoRefreshBattery(address, dev);
+            return;
+        }
+
+        if (engine == 0) {
+            try {
+                startActivity(PopupActivity.makeIntent(this, name, levels));
+            } catch (Exception e) {
+                if (canOverlay) showOverlay(name, address, levels);
+            }
+            autoRefreshBattery(address, dev);
+            return;
+        }
+
+        // 智能模式：先试系统级 Activity，确认没起来才降级悬浮窗。
+        //
+        // 之前确认窗口只有 800ms：系统级 Activity 走 AMS 调度本来就慢，
+        // 经常 800ms 还没起，于是又弹一个悬浮窗 —— 两个弹窗叠着出现，
+        // 用户看到的就是「闪两下」。同时 autoRefreshBattery 被调了两次，
+        // 多一次 GATT 连接，白白拖慢弹窗速度。
+        //
+        // 现在：确认窗口放宽到 1600ms，且探测只做一次。
+        PopupActivity.lastShownAt = 0L;
+        final boolean[] probed = {false};
+        Runnable doProbe = () -> {
+            if (probed[0]) return;
+            probed[0] = true;
+            autoRefreshBattery(address, dev);
+        };
+        try {
+            startActivity(PopupActivity.makeIntent(this, name, levels));
+        } catch (Exception e) {
+            if (canOverlay) showOverlay(name, address, levels);
+            doProbe.run();
+            return;
+        }
+        main.postDelayed(() -> {
+            if (PopupActivity.lastShownAt <= 0L && canOverlay) {
+                showOverlay(name, address, levels);
+            }
+            doProbe.run();
+        }, 1600);
+    }
+
+    /**
+     * 连接时自动刷新电量：先做一次轻量 GATT 读取（快），
+     * 拿到值就写缓存并原地刷新弹窗信息条；下次连接立刻就能显示。
+     */
+    /**
+     * 弹窗后异步取真实电量并原地刷新。
+     *
+     * 优先级：系统蓝牙栈（dumpsys，经 Shizuku）> BLE GATT。
+     * 不沿用陈旧缓存：拿不到真值就在信息条上留 --%，
+     * 绝不再把几小时前的旧数字当实时电量显示。
+     */
+    private void autoRefreshBattery(String address, BluetoothDevice dev) {
+        if (!prefs.showBattery() || address == null || address.isEmpty()) return;
+        final String addr = address;
+        final Handler h = main;
+        final long job = System.nanoTime();
+        batteryJobs.put(addr, job);
+
+
+        //
+        // 第 -1 步（优先级最高）：Redmi/Xiaomi TWS 走厂商语义通道 MMA。
+        //
+        // 0x180F/0x2A19 对这类 TWS 往往只有一个聚合百分比，无法区分 L/R/Case；
+        // MMA 的 GET_DEVICE_INFO 能一次返回 [LL RR CC] 三元组，这是唯一能拿到
+        // 真实左右耳与充电盒的只读通道。成功即采用并结束；失败才继续通用路线。
+        //
+        //
+        // 第 -2 步（最快，最先执行）：系统隐藏 API 立刻给一个整机值。
+        //
+        // 之前 Xiaomi 设备一上来就走 MMA RFCOMM，连接要几秒甚至超时，
+        // 期间 UI 一直是 --%；而这台机器上 MMA 必然失败
+        // （日志: FD2D connect failed / all RFCOMM transports failed），
+        // 失败后才 fallback，于是「永远吃不到电量」。
+        // 这里先同步读一次，有效就立刻显示，MMA 再到后台慢慢试分项。
+        //
+        try {
+            BluetoothDevice quickDev = dev;
+            if (quickDev == null) {
+                BluetoothAdapter ba0 = BluetoothAdapter.getDefaultAdapter();
+                if (ba0 != null) quickDev = ba0.getRemoteDevice(addr);
+            }
+            if (quickDev != null) {
+                int quickV = readBattery(quickDev);
+                // 保守策略：只有缓存里已经有可信值时，才用系统快读值立刻刷新。
+                //
+                // getBatteryLevel() 返回的是【系统蓝牙栈缓存】，不是实时读。
+                // 换设备的瞬间，栈里存的还是「上一台设备」的旧值（或是更新前的
+                // 中间值）。而 applyMeasured 会把它写进缓存并把 timestamp 设成
+                // now —— 之后 30 分钟都当新鲜值用，用户看到的就是
+                // 「换了个耳机，电量还是错的」。
+                //
+                // 所以：缓存里没值（首次连接 / 刚换耳机 / 清过缓存）时，
+                // 不立刻显示这个旧值，交给后台轮询去取稳定值。
+                if (BatteryLevels.valid(quickV)) {
+                    BatteryLevels prevCached =
+                            new BatteryStore(PopupService.this).load(addr);
+                    // 首帧绝不再用系统缓存旧值顶数。
+                    // getBatteryLevel() 是蓝牙栈缓存，换耳机瞬间拿到的还是上一台的值，
+                    // 之前却会立刻显示并把 timestamp 刷成 now，之后 30 分钟都当新鲜值。
+                    boolean hasCache = false;
+                    if (hasCache) {
+                        applyMeasured(addr, quickV, "sys-fast", job);
+                    } else {
+                        android.util.Log.i("Battery",
+                                "无缓存，跳过 sys-fast 快读值 " + quickV + "，等待实测");
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+
+        //
+        // 【顺序修正】先跑通用通道，MMA 只作为「升级通道」并行跑。
+        //
+        // 之前是「先 MMA，失败才 fallback」。而 MMA 在这台机器上必然失败：
+        // 8 个 RFCOMM 通道逐个试、每个几秒超时，整套下来十几秒。
+        // 通用通道（唯一真正能拿到实时电量的 GATT 0x2A19）被堵在这十几秒
+        // 之后才执行 —— 弹窗早就显示完了，所以首帧永远是旧值/空值，
+        // 「过一会儿才跳到真实电量」。
+        //
+        // 现在：通用通道立刻启动；MMA 在后台慢慢试，真拿到分项就覆盖升级，
+        // 拿不到也完全不影响已经拿到的整机真值。
+        //
+        autoRefreshBatteryFallback(addr, dev, job);
+
+        if (XiaomiMmaBatteryReader.likelyXiaomiRedmi(dev)) {
+            new Thread(() -> {
+                XiaomiMmaBatteryReader.read(dev, (mma, diag) -> {
+                    android.util.Log.i("MMA", diag);
+                    if (mma != null && (BatteryLevels.valid(mma.left)
+                            || BatteryLevels.valid(mma.right)
+                            || BatteryLevels.valid(mma.caseBox))) {
+                        final BatteryLevels fv = mma;
+                        h.post(() -> applyMeasuredLevels(addr, fv, job));
+                    }
+                });
+            }).start();
+        }
+        return;
+    }
+
+    /** MMA 不可用/失败时的通用电量获取路线（原 autoRefreshBattery 主体）。 */
+    private void autoRefreshBatteryFallback(String address, BluetoothDevice dev, long job) {
+        final String addr = address;
+        final Handler h = main;
+
+        //
+        // 【新增】第 0 步：系统隐藏 API getBatteryLevel()
+        //
+        // 这是毫秒级的同步调用，系统蓝牙栈已经缓存了耳机电量（耳机通过
+        // 标准 Battery Service 上报，栈里就有）。市面上的第三方弹窗 App
+        // 基本都走这条路 —— 所以它们能"一连接就显示"，不需要用户手动抓。
+        //
+        // 之前这里一上来就跑 dumpsys（要 fork 进程、解析文本，几百毫秒
+        // 甚至数秒），拿不到再退 GATT（又要走一遍连接+发现服务，1~5 秒）。
+        // 换耳机时慢路径来不及返回，弹窗就只能显示旧值或空 ——
+        // 这就是「换个耳机，电量直接不显示」的原因。
+        //
+        //
+        // 第一层：直接读 Android 蓝牙栈里的 TWS metadata（左 10 / 右 11 / 盒 12）。
+        // 这是 AOSP 为 TWS 定义的专用字段，能读到就最可信。
+        // 不再用「私有特征里随便找一个 1~100 的数」去猜充电盒。
+        //
+        //
+        // 【真值优先】一进来就并发发起 BLE GATT 读取。
+        //
+        // 0x180F/0x2A19 是本机型唯一经日志确认能拿到【实时】电量的通道
+        // （同一副耳机在不同时刻读到 100 和 90，随真实电量变化）。
+        // 之前它排在系统轮询之后、只在系统拿不到时才走，于是真值永远迟到。
+        // 这里先发出去，谁先回来用谁（后续的分项会覆盖整机值）。
+        //
+        try {
+            new BatteryProbe(PopupService.this).quickRead(addr, dev, gattVal -> {
+                if (BatteryLevels.valid(gattVal)) {
+                    if (batteryJobs.get(addr) == null) return;
+                    final long cur = batteryJobs.get(addr);
+                    if (cur == job) scheduleOverall(addr, gattVal, "gatt-quick", job);
+                }
+            });
+        } catch (Throwable ignored) {
+        }
+
+        BatteryLevels authority = BatteryAuthority.read(dev);
+        if (authority.anyKnown()) {
+            authority.source = authority.source + ":fast";
+            final BatteryLevels fin = authority;
+            h.post(() -> applyMeasuredLevels(addr, fin, job));
+        }
+        // metadata 拿全就不用深度探测了
+        if (BatteryLevels.valid(authority.left)
+                && BatteryLevels.valid(authority.right)
+                && BatteryLevels.valid(authority.caseBox)) {
+            return;
+        }
+
+        // 后台线程：先试系统栈（dumpsys 较慢，不能占主线程）
+        new Thread(() -> {
+            //
+            // 【新增】第 0.5 步：轮询重试系统隐藏 API
+            //
+            // getBatteryLevel() 返回的是【系统蓝牙栈缓存】的电量，不是实时读。
+            // 耳机刚连上时，系统往往要 1~3 秒才通过 HFP AT 命令或 GATT
+            // 把电量填进缓存；连接那一刻读，几乎必然是 -1。
+            // 原来只在连接瞬间读一次，拿不到就直接跳到慢路径，
+            // 于是「换个耳机，电量就不显示」。
+            // 这里轮询约 4 秒，系统一填上就能立刻拿到。
+            //
+            BluetoothAdapter ba = BluetoothAdapter.getDefaultAdapter();
+            BluetoothDevice target = dev;
+            if (target == null && ba != null) {
+                try {
+                    target = ba.getRemoteDevice(addr);
+                } catch (Throwable ignored) {
+                    target = null;
+                }
+            }
+            if (target != null) {
+                // 轮询之前先等一会儿，让系统把【新设备】的电量填进蓝牙栈缓存。
+                //
+                // 原来的写法 attempt=0 是立刻读，而此刻系统缓存里还是上一台
+                // 设备的旧值 —— 读到就 return，后面的等待一次都没执行过。
+                // 旧值被写进缓存并刷新时间戳，之后 30 分钟不再实测，
+                // 于是「换耳机后电量一直是错的」。
+                try {
+                    // 原来只等 900ms：系统往往还没开始更新，读到的是上一台设备的
+                    // 残值；而「连续两次一致」恰恰因为【都没更新】而成立 ——
+                    // 这个判定反而锁死了错误的中间值。这里多给系统一点时间。
+                    Thread.sleep(700);
+                } catch (InterruptedException e) {
+                    return;
+                }
+                int prev = -1;
+                int stableHits = 0;
+                for (int attempt = 0; attempt < 6; attempt++) {
+                    int v = readBattery(target);
+                    if (BatteryLevels.valid(v)) {
+                        // 连续两次读到同一个值，才认定系统值已经稳定。
+                        // 只一次就采用，很可能读到的是系统更新过程中的中间态。
+                        if (v == prev) {
+                            stableHits++;
+                            // 连续三次一致才认定稳定：两次一致很容易在
+                            // 「系统还没开始更新」时误成立。
+                            if (stableHits >= 2) {
+                                final int fv = v;
+                                h.post(() -> scheduleOverall(addr, fv, "sys-stable", job));
+                                return;
+                            }
+                        } else {
+                            stableHits = 0;
+                        }
+                        prev = v;
+                    }
+                    try {
+                        Thread.sleep(600);
+                    } catch (InterruptedException e) {
+                        return;
+                    }
+                }
+                // 兜底：始终没等到两次一致，就用最后一次有效读数，
+                // 避免一直空白。
+                if (BatteryLevels.valid(prev)) {
+                    final int fv = prev;
+                    h.post(() -> scheduleOverall(addr, fv, "sys-retry", job));
+                    return;
+                }
+            }
+
+            int sysLvl = -1;
+            if (ShizukuHelper.hasPermission()) {
+                sysLvl = BatterySysQuery.query(addr);
+            }
+            final int v = sysLvl;
+
+            if (BatteryLevels.valid(v)) {
+                // 拿到权威值：写缓存 + 刷新弹窗
+                h.post(() -> applyMeasured(addr, v, "sys-dumpsys", job));
+                return;
+            }
+            // 系统栈没拿到，退回 BLE GATT
+            h.post(() -> new BatteryProbe(PopupService.this)
+                    .quickRead(addr, dev, gattVal -> {
+                        if (BatteryLevels.valid(gattVal)) {
+                            scheduleOverall(addr, gattVal, "gatt-auto", job);
+                        } else {
+                            // 拿不到分项 ≠ 没电。
+                            // 之前这里无条件把 overall 也清成 -1 —— 于是
+                            // getBatteryLevel()=100、2A19=100 都读到了，
+                            // 弹窗却显示 --%、来源"未取到"。这是核心 bug。
+                            // 现在：整机值还在就保留，真的什么都没有才作废。
+                            BatteryStore st = new BatteryStore(PopupService.this);
+                            BatteryLevels b = st.load(addr);
+                            if (!BatteryLevels.valid(b.overall)) {
+                                b.left = -1;
+                                b.right = -1;
+                                b.caseBox = -1;
+                                b.overall = -1;
+                                b.source = "unavailable";
+                                if (currentRoot != null && addr.equals(currentAddress)) {
+                                    PopupRenderer.updateInfo(currentRoot, currentName, b, prefs);
+                                }
+                            }
+                        }
+                    }));
+        }).start();
+    }
+
+    /** 带 job 校验写入：切了耳机，旧回调直接丢弃 */
+    private void applyMeasuredLevels(String addr, BatteryLevels levels, long job) {
+        // 真实分项（左/右/盒）到了：取消待显示的整机值，避免先闪单耳再跳三个。
+        cancelPendingOverall();
+        if (levels == null) return;
+        Long cur = batteryJobs.get(addr);
+        if (cur == null || cur != job) return;   // 已切换到别的耳机/新任务
+        BatteryStore st = new BatteryStore(this);
+        BatteryLevels b = st.load(addr);
+        if (BatteryLevels.valid(levels.left)) b.left = levels.left;
+        if (BatteryLevels.valid(levels.right)) b.right = levels.right;
+        if (BatteryLevels.valid(levels.caseBox)) b.caseBox = levels.caseBox;
+        if (BatteryLevels.valid(levels.overall)) b.overall = levels.overall;
+        b.leftCharging = levels.leftCharging;
+        b.rightCharging = levels.rightCharging;
+        b.caseCharging = levels.caseCharging;
+        b.keepOverallOnly();
+        b.sanitize();
+        b.timestamp = System.currentTimeMillis();
+        b.source = levels.source;
+        st.save(addr, b);
+        if (currentRoot != null && addr.equals(currentAddress)) {
+            PopupRenderer.updateInfo(currentRoot, currentName, b, prefs);
+        }
+    }
+
+    /** 写入实测值并刷新当前弹窗 */
+    private void applyMeasured(String addr, int value, String source, long job) {
+        if (!BatteryLevels.valid(value)) return;
+        Long jb = batteryJobs.get(addr);
+        if (jb != null && jb != job) return;   // 已切到别的耳机，丢弃旧结果
+        BatteryStore st = new BatteryStore(this);
+        BatteryLevels b = st.load(addr);
+        b.overall = value;
+        b.keepOverallOnly();
+        b.sanitize();
+        b.timestamp = System.currentTimeMillis();
+        b.source = source;
+        st.save(addr, b);
+        if (currentRoot != null && addr.equals(currentAddress)) {
+            PopupRenderer.updateInfo(currentRoot, currentName, b, prefs);
+        }
+    }
+
+    private void showOverlay(String name, String address, BatteryLevels levels) {
+        dismiss();
+        lastOverlayShownAt = System.currentTimeMillis();
+        if (!android.provider.Settings.canDrawOverlays(this)) return;
+
+        View v = LayoutInflater.from(this).inflate(R.layout.popup_card, null);
+        PopupRenderer.bind(this, v, name, levels, prefs, this::dismiss);
+        currentRoot = v;
+        currentName = name;
+
+        int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                : WindowManager.LayoutParams.TYPE_PHONE;
+
+        // 高度必须写死：媒体区子 View 是 match_parent，
+        // 用 WRAP_CONTENT 会让卡片高度失控（表现为比例奇怪）。
+        // 算法与 PopupRenderer / PopupActivity 保持一致。
+        float r = Math.max(0.40f, Math.min(0.94f, prefs.imageRatio()));
+        int widthPx = (int) dp(prefs.widthDp());
+        int heightPx = (int) (widthPx * (0.45f + r * 0.33f));
+
+        WindowManager.LayoutParams p = new WindowManager.LayoutParams(
+                widthPx,
+                heightPx,
+                type,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT);
+
+        // 连续垂直位置：0=贴顶 100=贴底。
+        // 用 TOP gravity + 计算出的 y 偏移，比三档重力更精细可调。
+        int vpos = prefs.verticalPos();
+        p.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        int screenH = getResources().getDisplayMetrics().heightPixels;
+        float dens = getResources().getDisplayMetrics().density;
+        p.y = topOffsetForVPos(vpos, heightPx, screenH, dens);
+
+        try {
+            wm.addView(v, p);
+        } catch (Exception e) {
+            Toast.makeText(this, "弹窗显示失败，请检查悬浮窗权限", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        current = v;
+
+        // 注意：这里【不能】再调 applyEnter。
+        // PopupRenderer.bind() 内部已经执行过入场动画；
+        // 再调一次会 cancel 掉正在进行的动画并重置 translationY(140dp)，
+        // 于是弹窗滑上来后又被拽回起点重新播一遍 ——
+        // 这就是「弹出来一瞬间，然后又被压下去」的原因。
+
+        final Runnable dr = this::dismiss;
+        pendingDismiss = dr;
+        v.postDelayed(dr, prefs.durationMs());
+    }
+
+    private void dismiss() {
+        // 取消尚未到期的自动消失，避免同一张卡片被 dismiss 两次
+        if (pendingDismiss != null) {
+            main.removeCallbacks(pendingDismiss);
+            pendingDismiss = null;
+        }
+        final View v = current;
+        if (v == null) return;
+        current = null;
+        currentRoot = null;
+        // 淡出期间先停掉模糊层的逐帧重算。
+        // 否则背景还在每一帧重算模糊，与淡出的 alpha 动画叠加，
+        // 表现为「弹窗结束前抖动/闪烁一下」。
+        View blur = v.findViewById(R.id.detailBlurBg);
+        if (blur instanceof LiveBlurView) ((LiveBlurView) blur).stop();
+        v.animate().cancel();
+        v.animate().alpha(0f).translationY(-dp(24)).setDuration(200)
+                .withEndAction(() -> {
+                    try {
+                        wm.removeView(v);
+                    } catch (Exception ignored) {
+                    }
+                }).start();
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        // 用户从最近任务划掉 UI 不等于关闭后台服务；安排一次低频自恢复。
+        KeepAliveController.arm(this);
+        super.onTaskRemoved(rootIntent);
+    }
+
+    private float dp(float v) {
+        return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v,
+                getResources().getDisplayMetrics());
+    }
+
+    @Override
+    public void onDestroy() {
+        KeepAliveController.arm(this);
+        dismiss();
+        try {
+            unregisterReceiver(receiver);
+        } catch (Exception ignored) {
+        }
+        super.onDestroy();
+    }
+
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null;
+    }
+}

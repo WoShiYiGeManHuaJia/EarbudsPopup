@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hero 卡是紫→粉橙渐变（深色），上面的按钮必须是【白底 + 深字】。
+     之前用 android:backgroundTint 想把紫色渐变染成白色，
+     但 MaterialButton 不一定转发这个 tint —— 一旦没生效就是
+     「紫底 + 橙字」，两者亮度几乎相同，字完全看不清。
+     这里直接用确定的白色 solid，不依赖任何 tint 行为。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#FFFFFFFF" />
+    <corners android:radius="20dp" />
+</shape>

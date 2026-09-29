@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  弹窗卡片（类小米：靠底沉底、顶部两角圆角、详情区叠在底部）。
+
+  结构变化（本次关键修正）：
+    - 媒体区铺满【整个卡片】，不再给详情区预留空白条。
+      之前详情区占位留白，用户看到「下面空一段等文字浮上来」，很难看。
+    - 详情区改为 overlay，叠在卡片底部；出现时先把该区域做模糊，再淡入文字。
+    - 卡片本身用 RoundedCardLayout 做圆角合成，保证顶部两角也是圆角。
+
+  信息行带耳机图标与充电仓图标。
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <com.yuanbao.earbuds.RoundedCardLayout
+        android:id="@+id/card"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <!-- 媒体区：铺满整张卡片 -->
+        <FrameLayout
+            android:id="@+id/gifWrap"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <com.yuanbao.earbuds.RoundedImageView
+                android:id="@+id/popupImage"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="弹窗动画"
+                android:scaleType="matrix" />
+
+            <View
+                android:id="@+id/gradientFade"
+                android:layout_width="match_parent"
+                android:layout_height="96dp"
+                android:layout_gravity="bottom"
+                android:importantForAccessibility="no" />
+
+            <View
+                android:id="@+id/shimmer"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="center_vertical"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <!-- 实时模糊背景：作为卡片的直接子 View，放在详情区【之前】，
+             于是层级上位于图片之上、文字之下。
+             · 默认 gone：不参与测量，绝不会撑高任何父容器
+             · 高度写死 76dp：不再用 match_parent（那会把整个卡片都糊掉）
+             · 运行时由 PopupRenderer 显示 -->
+        <com.yuanbao.earbuds.LiveBlurView
+            android:id="@+id/detailBlurBg"
+            android:layout_width="match_parent"
+            android:layout_height="76dp"
+            android:layout_gravity="bottom"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
+
+        <!-- 详情区：叠在底部，不占位 -->
+        <FrameLayout
+            android:id="@+id/detailArea"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom">
+
+            <!-- 模糊背景层：铺满详情区，位于文字下方。
+                 之前它被放在垂直 LinearLayout 里且高度 match_parent，
+                 一旦 setVisible 就会吃掉全部高度，把文字挤到可视区外
+                 —— 这就是「1 秒后文字消失」的原因。
+                 现在详情区改成 FrameLayout，它只做背景，不参与挤压。 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="20dp"
+                android:paddingEnd="20dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="11dp">
+
+            <TextView
+                android:id="@+id/tvDeviceName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:lines="1"
+                android:singleLine="true"
+                android:text="耳机"
+                android:textColor="#FFFFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:id="@+id/icEarbuds"
+                    android:layout_width="15dp"
+                    android:layout_height="15dp"
+                    android:contentDescription="左耳电量"
+                    android:src="@drawable/ic_earbud_left" />
+
+                <TextView
+                    android:id="@+id/tvBattery"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:includeFontPadding="false"
+                    android:lines="1"
+                    android:singleLine="true"
+                    android:text="--%"
+                    android:textColor="#E6FFFFFF"
+                    android:textSize="12.5sp" />
+
+                <!-- 右耳：图标加纯数字，不带字母。
+                     顺序为 左耳 → 右耳 → 充电盒（用户明确要求），
+                     之前充电盒夹在中间，读数不便。 -->
+                <ImageView
+                    android:id="@+id/icEarbudsRight"
+                    android:layout_width="15dp"
+                    android:layout_height="15dp"
+                    android:layout_marginStart="14dp"
+                    android:contentDescription="右耳电量"
+                    android:src="@drawable/ic_earbud_right" />
+
+                <TextView
+                    android:id="@+id/tvBatteryRight"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:includeFontPadding="false"
+                    android:lines="1"
+                    android:singleLine="true"
+                    android:text="--%"
+                    android:textColor="#E6FFFFFF"
+                    android:textSize="12.5sp" />
+
+                <!-- 充电盒：排在最后。拿到真实值才显示，绝不显示占位。 -->
+                <ImageView
+                    android:id="@+id/icCase"
+                    android:layout_width="15dp"
+                    android:layout_height="15dp"
+                    android:layout_marginStart="14dp"
+                    android:contentDescription="充电盒电量"
+                    android:src="@drawable/ic_case" />
+
+                <TextView
+                    android:id="@+id/tvBatteryCase"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:includeFontPadding="false"
+                    android:lines="1"
+                    android:singleLine="true"
+                    android:text="--%"
+                    android:textColor="#E6FFFFFF"
+                    android:textSize="12.5sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tipText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="7dp"
+                android:includeFontPadding="false"
+                android:lines="1"
+                android:singleLine="true"
+                android:text=""
+                android:textColor="#99FFFFFF"
+                android:textSize="10sp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/infoBar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:visibility="gone" />
+            </LinearLayout>
+        </FrameLayout>
+
+    </com.yuanbao.earbuds.RoundedCardLayout>
+</FrameLayout>
