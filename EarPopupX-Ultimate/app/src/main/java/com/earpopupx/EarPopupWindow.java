@@ -239,7 +239,7 @@ public final class EarPopupWindow {
  private void apply(){
    if(lp==null||root==null||wm==null)return;
    boolean landscape=AppPrefs.landscapeMode(c)==1 && isLandscape();
-   DisplayMetrics dm=c.getResources().getDisplayMetrics();
+   android.util.DisplayMetrics dm=c.getResources().getDisplayMetrics();
    if(landscape){
      lp.width=(int)(Math.min(dm.widthPixels,dm.heightPixels)*0.42f);
      lp.height=dp(76);
