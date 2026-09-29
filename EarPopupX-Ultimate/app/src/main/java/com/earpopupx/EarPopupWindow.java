@@ -8,6 +8,8 @@ public final class EarPopupWindow {
  private final Context c;private final Handler h=new Handler(Looper.getMainLooper());private WindowManager wm;private View root;private WindowManager.LayoutParams lp;
  private TextView title,battery,source,aggLine,lv,rv;private ImageView media,licon,ricon;private float dx,dy;private int sx,sy;private boolean dragging;private Runnable dismissTask;
  private boolean shownForThisDevice,miniMode,testMode;private String shownName;
+ /** 还没拿到真实电量时不计时：弹窗会一直等，图标持续浮动，直到某个通道给出数值。 */
+ private boolean hasValue;
  private AnimatorSet floatAnim;
  private EarPopupWindow(Context x){c=x.getApplicationContext();}
 
@@ -22,6 +24,7 @@ public final class EarPopupWindow {
    boolean mini = land && !test && AppPrefs.landscapeMode(c)==1;             // 横屏：小弹窗
 
    testMode=test;
+   if(test)hasValue=true;           // 测试弹窗不阻塞：即使没电量也按设定时长消失
 
    // 已经显示中：只更新内容，不再重放入场动画 —— 那正是"闪一下"的来源。
    if(root!=null){
@@ -53,8 +56,13 @@ public final class EarPopupWindow {
    else if(!haveLR && s.aggregate>=0) aggLine.setText("电量 "+s.aggregate+"%");
    else aggLine.setText("");
    battery.setText("");
-   if(haveLR || s.aggregate>=0 || s.caseLevel>=0){ stopFloat(); licon.setAlpha(1f); ricon.setAlpha(1f); }
-   else startFloat();
+   if(haveLR || s.aggregate>=0 || s.caseLevel>=0){
+     stopFloat(); licon.setAlpha(1f); ricon.setAlpha(1f);
+     hasValue=true; schedule();
+   } else {
+     hasValue=false; startFloat();
+     if(dismissTask!=null){h.removeCallbacks(dismissTask);dismissTask=null;}
+   }
  }
 
  /** 未读到电量时让耳机图标上下浮动；读到就停住并恢复原位。 */
@@ -216,6 +224,12 @@ public final class EarPopupWindow {
 
  private void schedule(){
    if(dismissTask!=null)h.removeCallbacks(dismissTask);
+   dismissTask=null;
+   if(!hasValue){                   // 还没读到：等更久（25s 兜底），读到后会被重排成设定时长
+     dismissTask=this::dismiss;
+     h.postDelayed(dismissTask,25000L);
+     return;
+   }
    dismissTask=this::dismiss;
    long ms=AppPrefs.durationSec(c)*1000L;
    if(ms<1000L)ms=1000L;

@@ -155,6 +155,20 @@ public final class BluetoothMonitorService extends Service {
         });
         sniffer.start(addr);
 
+        // dumpsys 是唯一能看到 untethered_left/right/case_battery 的通道。
+        // shell 执行慢，放后台线程；拿到就升级成三元组。
+        new Thread(()->{
+            StringBuilder lg=new StringBuilder();
+            BatteryState ds=VendorBatterySniffer.fromDumpsys(addr,lg);
+            main.post(()->{
+                record("[dumpsys] "+lg.toString().trim());
+                if(ds!=null&&same(d)&&AppPrefs.enabled(BluetoothMonitorService.this)){
+                    gotValue=true;
+                    popup.update(safeName(d),ds);
+                }
+            });
+        }).start();
+
         reader.read(d,s->{
             main.post(()->{
                 record("标准通道 "+s.source+(s.aggregate>=0?(" = "+s.aggregate+"%"):""));

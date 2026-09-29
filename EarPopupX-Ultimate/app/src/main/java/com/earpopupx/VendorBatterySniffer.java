@@ -86,6 +86,107 @@ public final class VendorBatterySniffer {
         sink = s;
     }
 
+    // ------------------------------------------------------------ dumpsys
+
+    /** 执行 shell：先用本进程 Runtime 直跑（普通 App 也能跑 dumpsys，只是输出可能被裁剪），
+     *  拿不到再退到 Shizuku/Stellar 的 adb 权限。两条路都不依赖 Root。 */
+    public static String runShell(String cmd) {
+        try {
+            Process p = Runtime.getRuntime().exec(new String[]{"sh", "-c", cmd});
+            final java.io.InputStream in = p.getInputStream();
+            StringBuilder sb = new StringBuilder();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) sb.append(new String(buf, 0, n, "UTF-8"));
+            try { in.close(); } catch (Throwable ignored) {}
+            try { p.destroy(); } catch (Throwable ignored) {}
+            String s = sb.toString();
+            if (s != null && s.length() > 20) return s;
+        } catch (Throwable ignored) {}
+        try {
+            if (ShizukuHelper.isServiceRunning() && ShizukuHelper.hasPermission()) {
+                String s = ShizukuHelper.run(cmd);
+                if (s != null && s.length() > 20) return s;
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    /** 读 dumpsys bluetooth_manager，按 MAC 定位那一段，取左右耳与充电盒电量。
+     *  这是能看到 untethered_left/right/case_battery 的唯一途径。 */
+    public static BatteryState fromDumpsys(String address, StringBuilder log) {
+        String out = runShell("dumpsys bluetooth_manager");
+        if (out == null) out = runShell("dumpsys bluetooth");
+        if (out == null) {
+            if (log != null) log.append("dumpsys: 执行失败\n");
+            return null;
+        }
+        return parseDumpsys(out, address, log);
+    }
+
+    static BatteryState parseDumpsys(String text, String address, StringBuilder log) {
+        String[] lines = text.split("\n");
+        String block = null;
+        if (address != null && address.length() > 6) {
+            for (String l : lines) {
+                if (l.contains(address)) { block = l; break; }
+            }
+        }
+        if (block == null) {
+            for (String l : lines) {
+                if (l.indexOf("untethered_left_battery") < 0) continue;
+                String v = field(l, "untethered_left_battery");
+                if (v != null && !"null".equalsIgnoreCase(v)) { block = l; break; }
+            }
+        }
+        if (block == null) {
+            if (log != null) log.append("dumpsys: 未定位到设备段（MAC 可能被脱敏）\n");
+            return null;
+        }
+        int left = num(field(block, "untethered_left_battery"));
+        int right = num(field(block, "untethered_right_battery"));
+        int caseL = num(field(block, "untethered_case_battery"));
+        int main = num(field(block, "main_battery"));
+        boolean lc = on(field(block, "untethered_left_charging"));
+        boolean rc = on(field(block, "untethered_right_charging"));
+        boolean cc = on(field(block, "untethered_case_charging"));
+        if (log != null) {
+            log.append("dumpsys L=").append(left).append(" R=").append(right)
+               .append(" C=").append(caseL).append(" main=").append(main).append("\n");
+        }
+        if (left < 0 && right < 0 && caseL < 0 && main < 0) return null;
+        return new BatteryState(main, left, right, caseL, lc, rc, cc, "dumpsys 左右耳");
+    }
+
+    private static String field(String line, String key) {
+        int i = line.indexOf(key + "=");
+        if (i < 0) return null;
+        int s = i + key.length() + 1;
+        int e = s;
+        while (e < line.length()) {
+            char ch = line.charAt(e);
+            if (ch == '|' || ch == ',' || ch == ')' || ch == '}' || ch == ' ' || ch == '\t') break;
+            e++;
+        }
+        return line.substring(s, e);
+    }
+
+    private static int num(String v) {
+        if (v == null) return -1;
+        String t = v.trim();
+        if (t.isEmpty() || "null".equalsIgnoreCase(t)) return -1;
+        try {
+            int n = Integer.parseInt(t);
+            return (n >= 0 && n <= 100) ? n : -1;
+        } catch (Throwable e) { return -1; }
+    }
+
+    private static boolean on(String v) {
+        if (v == null) return false;
+        String t = v.trim();
+        return "true".equalsIgnoreCase(t) || "1".equals(t);
+    }
+
     public void start(String address) {
         targetAddress = address;
         registerVendorEvents();

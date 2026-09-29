@@ -145,7 +145,7 @@ public final class MainActivity extends Activity{
 
  /** 尝试拉起 Shizuku / Stellar；返回是否成功打开 */
  private boolean openStellar(){
-  String[] pkgs={"moe.shizuku.stellar","moe.shizuku.privileged.api","rikka.shizuku.stellar","com.stellar.shizuku"};
+  String[] pkgs={"roro.stellar.manager","moe.shizuku.privileged.api","moe.shizuku.stellar","rikka.shizuku.stellar","com.stellar.shizuku","moe.shizuku.stellar.manager"};
   for(String p:pkgs){
    try{
     Intent i=getPackageManager().getLaunchIntentForPackage(p);
