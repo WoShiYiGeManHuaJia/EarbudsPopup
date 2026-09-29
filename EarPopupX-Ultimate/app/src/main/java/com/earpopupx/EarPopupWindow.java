@@ -8,6 +8,7 @@ import android.net.Uri;
 import android.os.*;
 import android.provider.Settings;
 import android.view.*;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.*;
 
 /**
