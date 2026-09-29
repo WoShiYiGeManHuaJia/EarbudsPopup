@@ -1,93 +1,106 @@
 package com.earpopupx;
 
+import android.content.Context;
+import android.util.Log;
+
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.lang.reflect.Method;
+
+import rikka.shizuku.Shizuku;
+import rikka.shizuku.ShizukuRemoteProcess;
 
 /**
- * Shizuku / Stellar 封装（反射版）。
+ * Shizuku / Stellar 封装。
  *
- * 这里刻意不引入 rikka.shizuku 编译依赖：Stellar 内置了 Shizuku 兼容层，
- * 运行时如果它的类可用，就直接调用；不可用就降级提示，不影响其余功能。
+ * API 已内置在工程里（rikka.shizuku.* + moe.shizuku.server.*），
+ * 不再走反射，因此 Stellar（基于 Shizuku，完整兼容其 API）可直接识别并授权本应用。
  */
 public final class ShizukuHelper {
 
-    private ShizukuHelper() {
-    }
+    private static final String TAG = "ShizukuHelper";
 
-    private static Class<?> cls() {
+    /** 收到 binder 说明 Shizuku/Stellar 服务已在运行 */
+    public static boolean isServiceRunning() {
         try {
-            return Class.forName("rikka.shizuku.Shizuku");
-        } catch (Throwable t) {
-            return null;
-        }
-    }
-
-    public static boolean isRunning() {
-        try {
-            Class<?> c = cls();
-            if (c == null) {
-                return false;
-            }
-            Method m = c.getMethod("pingBinder");
-            Object r = m.invoke(null);
-            return r instanceof Boolean && (Boolean) r;
+            return Shizuku.pingBinder();
         } catch (Throwable t) {
             return false;
         }
     }
 
+    /** binder 已到，但用户可能还没对本应用授权 */
     public static boolean hasPermission() {
         try {
-            Class<?> c = cls();
-            if (c == null) {
-                return false;
-            }
-            Method m = c.getMethod("checkSelfPermission");
-            Object r = m.invoke(null);
-            return r instanceof Integer && ((Integer) r) == 0;
+            return Shizuku.checkSelfPermission() == 0;
         } catch (Throwable t) {
             return false;
         }
     }
 
-    public static void requestPermission(int code) {
+    public static void requestPermission() {
         try {
-            Class<?> c = cls();
-            if (c == null) {
-                return;
-            }
-            Method m = c.getMethod("requestPermission", int.class);
-            m.invoke(null, code);
+            Shizuku.requestPermission(1001);
         } catch (Throwable t) {
-            // ignore
+            Log.w(TAG, "requestPermission", t);
         }
     }
 
-    /** 以 adb 权限执行 shell 脚本；不可用时返回 null */
-    public static String run(String script) {
+    public static String serverInfo() {
         try {
-            Class<?> c = cls();
-            if (c == null) {
+            return "v" + Shizuku.getServerApiVersion() + "." + Shizuku.getServerPatchVersion()
+                    + " uid=" + Shizuku.getServerUid();
+        } catch (Throwable t) {
+            return "unknown";
+        }
+    }
+
+    /** 以 adb 权限执行一段 shell；返回合并后的输出，失败返回 null */
+    public static String run(String script) {
+        ShizukuRemoteProcess process = null;
+        try {
+            process = Shizuku.newProcess(new String[]{"sh", "-c", script}, null, null);
+            if (process == null) {
                 return null;
             }
-            Method m = c.getMethod("newProcess", String[].class, String[].class, String.class);
-            Object proc = m.invoke(null, new String[]{"sh", "-c", script}, null, null);
-            String out = readAll((InputStream) proc.getClass().getMethod("getInputStream").invoke(proc));
-            String err = readAll((InputStream) proc.getClass().getMethod("getErrorStream").invoke(proc));
+            String out = readAll(process.getInputStream());
+            String err = readAll(process.getErrorStream());
             try {
-                proc.getClass().getMethod("waitFor").invoke(proc);
+                process.waitFor();
             } catch (Throwable t) {
                 // ignore
             }
-            if (err != null && err.length() > 0) {
-                return out + "\n[stderr] " + err;
+            if (err != null && err.trim().length() > 0) {
+                return out + "\n[stderr] " + err.trim();
             }
-            return out;
+            return out == null ? "" : out;
         } catch (Throwable t) {
+            Log.w(TAG, "run", t);
             return null;
+        } finally {
+            if (process != null) {
+                try {
+                    process.destroy();
+                } catch (Throwable ignored) {
+                }
+            }
         }
+    }
+
+    /** 逐条执行，返回每条命令与其结果 */
+    public static String runAll(Context context, String[] cmds) {
+        StringBuilder sb = new StringBuilder();
+        for (String c : cmds) {
+            String r = run(c);
+            sb.append("$ ").append(c).append('\n');
+            if (r == null) {
+                sb.append("  <执行失败>\n");
+            } else {
+                String t = r.trim();
+                sb.append(t.isEmpty() ? "  ok\n" : "  ").append(t).append('\n');
+            }
+        }
+        return sb.toString();
     }
 
     private static String readAll(InputStream in) {
@@ -101,14 +114,13 @@ public final class ShizukuHelper {
             while ((line = r.readLine()) != null) {
                 sb.append(line).append('\n');
             }
-            try {
-                r.close();
-            } catch (Throwable t) {
-                // ignore
-            }
+            r.close();
         } catch (Throwable t) {
             return sb.toString();
         }
         return sb.toString();
+    }
+
+    private ShizukuHelper() {
     }
 }
