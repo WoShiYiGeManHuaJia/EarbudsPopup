@@ -1,96 +1,210 @@
+<?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="#F2F3F7"
     android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="22dp">
+        android:padding="16dp"
+        android:paddingBottom="40dp">
 
         <TextView
-            android:id="@+id/title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="EarPopup X"
-            android:textSize="28sp"
+            android:textColor="#1A1A1A"
+            android:textSize="26sp"
             android:textStyle="bold" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="无需 Root · 只读真实电量 · 绝不伪造"
+            android:textColor="#8A8A8A"
+            android:textSize="13sp" />
+
+        <!-- ① 权限 -->
+        <LinearLayout style="@style/Card">
+            <TextView
+                style="@style/CardTitle"
+                android:text="① 权限状态" />
+            <TextView
+                android:id="@+id/status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="检查中…"
+                android:textColor="#4A4A4A"
+                android:textSize="14sp"
+                android:lineSpacingExtra="4dp" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal">
+                <Button android:id="@+id/btnOverlay" style="@style/Btn" android:layout_weight="1" android:text="悬浮窗权限" />
+                <Button android:id="@+id/btnBluetooth" style="@style/BtnGhost" android:layout_weight="1" android:text="蓝牙权限" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <Button android:id="@+id/btnNotify" style="@style/BtnGhost" android:layout_weight="1" android:text="通知权限" />
+                <Button android:id="@+id/btnBattery" style="@style/BtnGhost" android:layout_weight="1" android:text="电池优化" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ② 监听 -->
+        <LinearLayout style="@style/Card">
+            <TextView style="@style/CardTitle" android:text="② 耳机监听" />
+            <TextView
+                android:id="@+id/serviceState"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="未启动"
+                android:textColor="#8A8A8A"
+                android:textSize="13sp" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal">
+                <Button android:id="@+id/btnStart" style="@style/Btn" android:layout_weight="1" android:text="启动监听" />
+                <Button android:id="@+id/btnStop" style="@style/BtnGhost" android:layout_weight="1" android:text="停止监听" />
+            </LinearLayout>
+            <Button
+                android:id="@+id/btnTest"
+                style="@style/BtnGhost"
+                android:layout_width="match_parent"
+                android:text="显示测试弹窗" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="运行日志"
+                android:textColor="#8A8A8A"
+                android:textSize="12sp" />
+            <TextView
+                android:id="@+id/diag"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_card"
+                android:padding="10dp"
+                android:text="（暂无）"
+                android:textColor="#5A5A5A"
+                android:textSize="11sp"
+                android:typeface="monospace" />
+            <Button
+                android:id="@+id/btnRefreshDiag"
+                style="@style/BtnGhost"
+                android:layout_width="match_parent"
+                android:text="刷新日志" />
+        </LinearLayout>
+
+        <!-- ③ 图片 -->
+        <LinearLayout style="@style/Card">
+            <TextView style="@style/CardTitle" android:text="③ 弹窗图片 / GIF" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+                <Button android:id="@+id/btnPick" style="@style/Btn" android:layout_weight="1" android:text="选择图片 / GIF" />
+                <Button android:id="@+id/btnReset" style="@style/BtnGhost" android:layout_weight="1" android:text="恢复默认" />
+            </LinearLayout>
+            <ImageView
+                android:id="@+id/preview"
+                android:layout_width="match_parent"
+                android:layout_height="130dp"
+                android:layout_marginTop="10dp"
+                android:scaleType="centerCrop"
+                android:background="@drawable/bg_media_default" />
+        </LinearLayout>
+
+        <!-- ④ 位置调试 -->
+        <LinearLayout style="@style/Card">
+            <TextView style="@style/CardTitle" android:text="④ 弹窗位置调试" />
+
+            <LinearLayout style="@style/RowLabel">
+                <TextView style="@style/RowName" android:text="垂直位置" />
+                <TextView android:id="@+id/tvOffset" style="@style/RowValue" android:text="0" />
+            </LinearLayout>
+            <SeekBar android:id="@+id/sbOffset" style="@style/Bar" android:max="400" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <Button android:id="@+id/btnTop" style="@style/BtnGhost" android:layout_weight="1" android:text="靠上" />
+                <Button android:id="@+id/btnMid" style="@style/BtnGhost" android:layout_weight="1" android:text="居中" />
+                <Button android:id="@+id/btnBottom" style="@style/BtnGhost" android:layout_weight="1" android:text="靠下" />
+            </LinearLayout>
+
+            <LinearLayout style="@style/RowLabel">
+                <TextView style="@style/RowName" android:text="弹窗宽度" />
+                <TextView android:id="@+id/tvWidth" style="@style/RowValue" android:text="92%" />
+            </LinearLayout>
+            <SeekBar android:id="@+id/sbWidth" style="@style/Bar" android:max="40" />
+
+            <LinearLayout style="@style/RowLabel">
+                <TextView style="@style/RowName" android:text="图片高度" />
+                <TextView android:id="@+id/tvMediaH" style="@style/RowValue" android:text="240dp" />
+            </LinearLayout>
+            <SeekBar android:id="@+id/sbMediaH" style="@style/Bar" android:max="280" />
+
+            <LinearLayout style="@style/RowLabel">
+                <TextView style="@style/RowName" android:text="圆角" />
+                <TextView android:id="@+id/tvCorner" style="@style/RowValue" android:text="30dp" />
+            </LinearLayout>
+            <SeekBar android:id="@+id/sbCorner" style="@style/Bar" android:max="28" />
+        </LinearLayout>
+
+        <!-- ⑤ 显示 -->
+        <LinearLayout style="@style/Card">
+            <TextView style="@style/CardTitle" android:text="⑤ 显示时长 / 背景" />
+
+            <LinearLayout style="@style/RowLabel">
+                <TextView style="@style/RowName" android:text="自动消失" />
+                <TextView android:id="@+id/tvDuration" style="@style/RowValue" android:text="6.5 秒" />
+            </LinearLayout>
+            <SeekBar android:id="@+id/sbDuration" style="@style/Bar" android:max="13000" />
+
+            <LinearLayout style="@style/RowLabel">
+                <TextView style="@style/RowName" android:text="背景压暗" />
+                <TextView android:id="@+id/tvDim" style="@style/RowValue" android:text="30%" />
+            </LinearLayout>
+            <SeekBar android:id="@+id/sbDim" style="@style/Bar" android:max="70" />
+
+            <CheckBox
+                android:id="@+id/cbBlur"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="使用系统实时背景模糊（需 Android 12+）"
+                android:textSize="14sp" />
+            <CheckBox
+                android:id="@+id/cbEnabled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="连接耳机时自动弹窗"
+                android:textSize="14sp" />
+        </LinearLayout>
 
         <TextView
-            android:id="@+id/status"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="正在检查权限…"
-            android:textSize="15sp" />
-
-        <Switch
-            android:id="@+id/enable"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:checked="true"
-            android:text="启用耳机连接弹窗"
-            android:textSize="16sp" />
-
-        <Button
-            android:id="@+id/overlay"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:text="开启悬浮窗权限" />
-
-        <Button
-            android:id="@+id/notifications"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="开启通知权限" />
-
-        <Button
-            android:id="@+id/bluetooth"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="开启蓝牙权限" />
-
-        <Button
-            android:id="@+id/battery"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="关闭电池优化（系统设置）" />
-
-        <Button
-            android:id="@+id/start"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="启动耳机监听" />
-
-        <Button
-            android:id="@+id/test"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="测试弹窗" />
-
-        <Button
-            android:id="@+id/pick"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="选择图片 / GIF" />
-
-        <Button
-            android:id="@+id/reset"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="清除已选图片" />
-
-        <TextView
-            android:id="@+id/info"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:text="说明：不需要 Root。电量只显示系统蓝牙或标准 BLE 电量服务真实提供的数值，读不到就显示 --，绝不伪造。左耳 / 右耳 / 充电盒的独立数值取决于耳机是否公开对应协议，目前这副耳机只提供整机电量。"
-            android:textSize="14sp" />
+            android:layout_marginTop="16dp"
+            android:text="说明\n• 悬浮窗权限必须手动授权，ADB 可辅助（见 adb/enable_protection.bat）。\n• 左右耳 / 充电盒独立电量取决于耳机是否向系统公开；拿不到就显示 --，不会编造。\n• HyperOS 还需在 设置 → 应用设置 → 应用管理 → EarPopup X 中允许「后台弹出界面」和「自启动」。"
+            android:textColor="#8A8A8A"
+            android:textSize="12sp"
+            android:lineSpacingExtra="3dp" />
 
     </LinearLayout>
-
 </ScrollView>
