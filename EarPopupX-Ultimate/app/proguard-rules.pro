@@ -1,1 +1,1 @@
-# No custom shrinking rules are required for the no-root build.
+IyBObyBjdXN0b20gc2hyaW5raW5nIHJ1bGVzIGFyZSByZXF1aXJlZCBmb3IgdGhlIG5vLXJvb3QgYnVpbGQuCg==
