@@ -1,16 +1,108 @@
 package com.earpopupx;
 
-import android.Manifest;import android.app.*;import android.content.*;import android.content.pm.PackageManager;import android.net.Uri;import android.os.*;import android.provider.Settings;import android.view.*;import android.widget.*;
+import android.Manifest;import android.app.*;import android.content.*;import android.content.pm.PackageManager;import android.net.Uri;import android.os.*;import android.provider.Settings;import android.view.*;import android.widget.*;import java.util.List;
 
 public final class MainActivity extends Activity{
- static final int REQ_BT=10,REQ_NOTIFY=11,REQ_MEDIA=12;TextView status,pos;SeekBar x,y,w,h,r,b,dim,dur;Switch auto,drag;
+ static final int REQ_BT=10,REQ_NOTIFY=11,REQ_MEDIA=12;TextView status,pos,diag;SeekBar x,y,w,h,r,b,dim,dur;Switch auto,drag;
  @Override public void onCreate(Bundle b0){super.onCreate(b0);setContentView(R.layout.activity_main);bind();}
- private void bind(){status=findViewById(R.id.status);pos=findViewById(R.id.posLabel);findViewById(R.id.overlay).setOnClickListener(v->overlay());findViewById(R.id.bluetooth).setOnClickListener(v->bt());findViewById(R.id.notifications).setOnClickListener(v->notifyPerm());findViewById(R.id.battery).setOnClickListener(v->batteryOpt());findViewById(R.id.start).setOnClickListener(v->startMonitor());findViewById(R.id.stop).setOnClickListener(v->stopMonitor());findViewById(R.id.test).setOnClickListener(v->test());findViewById(R.id.pick).setOnClickListener(v->pick());findViewById(R.id.resetMedia).setOnClickListener(v->{AppPrefs.setMedia(this,null);Toast.makeText(this,"已恢复默认素材",Toast.LENGTH_SHORT).show();});findViewById(R.id.resetPopup).setOnClickListener(v->{AppPrefs.resetPopup(this);sync();refreshPopup();});
-  auto=findViewById(R.id.autoSwitch);drag=findViewById(R.id.dragSwitch);auto.setChecked(AppPrefs.enabled(this));drag.setChecked(AppPrefs.dragMode(this));auto.setOnCheckedChangeListener((b0,c)->{AppPrefs.setEnabled(this,c);if(c)startMonitor();else stopMonitor();});drag.setOnCheckedChangeListener((b0,c)->{AppPrefs.setDragMode(this,c);refreshPopup();});
-  x=findViewById(R.id.xBar);y=findViewById(R.id.yBar);w=findViewById(R.id.widthBar);h=findViewById(R.id.heightBar);r=findViewById(R.id.radiusBar);b=findViewById(R.id.blurBar);dim=findViewById(R.id.dimBar);dur=findViewById(R.id.durationBar);x.setMax(600);y.setMax(1000);w.setMax(26);h.setMax(400);r.setMax(64);b.setMax(80);dim.setMax(40);dur.setMax(28);sync();
+ private void bind(){
+  status=findViewById(R.id.status);pos=findViewById(R.id.posLabel);
+  findViewById(R.id.overlay).setOnClickListener(v->overlay());
+  findViewById(R.id.bluetooth).setOnClickListener(v->bt());
+  findViewById(R.id.notifications).setOnClickListener(v->notifyPerm());
+  findViewById(R.id.battery).setOnClickListener(v->batteryOpt());
+  findViewById(R.id.start).setOnClickListener(v->startMonitor());
+  findViewById(R.id.stop).setOnClickListener(v->stopMonitor());
+  findViewById(R.id.test).setOnClickListener(v->{test();});
+  findViewById(R.id.pick).setOnClickListener(v->pick());
+  findViewById(R.id.resetMedia).setOnClickListener(v->{AppPrefs.setMedia(this,null);Toast.makeText(this,"已恢复默认素材",Toast.LENGTH_SHORT).show();});
+  findViewById(R.id.resetPopup).setOnClickListener(v->{AppPrefs.resetPopup(this);sync();refreshPopup();});
+  auto=findViewById(R.id.autoSwitch);drag=findViewById(R.id.dragSwitch);auto.setChecked(AppPrefs.enabled(this));drag.setChecked(AppPrefs.dragMode(this));
+  auto.setOnCheckedChangeListener((b0,c)->{AppPrefs.setEnabled(this,c);if(c)startMonitor();else stopMonitor();});
+  drag.setOnCheckedChangeListener((b0,c)->{AppPrefs.setDragMode(this,c);refreshPopup();});
+  x=findViewById(R.id.xBar);y=findViewById(R.id.yBar);w=findViewById(R.id.widthBar);h=findViewById(R.id.heightBar);r=findViewById(R.id.radiusBar);b=findViewById(R.id.blurBar);dim=findViewById(R.id.dimBar);dur=findViewById(R.id.durationBar);
+  x.setMax(600);y.setMax(1000);w.setMax(26);h.setMax(400);r.setMax(64);b.setMax(80);dim.setMax(40);dur.setMax(28);sync();
   x.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setX(this,p-300)));y.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setY(this,p-500)));w.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setWidthPercent(this,p+72)));h.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setHeightDp(this,p+280)));r.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setRadiusDp(this,p)));b.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setBlurDp(this,p)));dim.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setDimPercent(this,p)));dur.setOnSeekBarChangeListener(sl((p,f)->AppPrefs.setDurationSec(this,p+2)));
+  addAdbAndDiagnostics();
  }
- interface S{void set(int p,boolean f);}SeekBar.OnSeekBarChangeListener sl(S s){return new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar v,int p,boolean f){s.set(p,f);pos();if(f)refreshPopup();}public void onStartTrackingTouch(SeekBar v){}public void onStopTrackingTouch(SeekBar v){}};}
+
+ // ---------------------------------------------------------- ADB one button
+
+ private String adbScript(){
+  String p=getPackageName();
+  return "adb shell appops set "+p+" SYSTEM_ALERT_WINDOW allow\n"
+   +"adb shell appops set "+p+" RUN_IN_BACKGROUND allow\n"
+   +"adb shell appops set "+p+" RUN_ANY_IN_BACKGROUND allow\n"
+   +"adb shell appops set "+p+" START_FOREGROUND allow\n"
+   +"adb shell dumpsys deviceidle whitelist +"+p+"\n"
+   +"adb shell pm grant "+p+" android.permission.BLUETOOTH_CONNECT\n"
+   +"adb shell pm grant "+p+" android.permission.BLUETOOTH_SCAN\n"
+   +"adb shell pm grant "+p+" android.permission.POST_NOTIFICATIONS\n"
+   +"adb shell settings put global hidden_api_policy_p_apps 1\n"
+   +"adb shell settings put global hidden_api_policy_pre_p_apps 1\n"
+   +"adb shell settings put global hidden_api_policy 1\n";
+ }
+
+ /** Skips the adb shell prefix so it can be pasted straight into Stellar / a local shell. */
+ private String shellScript(){
+  String p=getPackageName();
+  return "appops set "+p+" SYSTEM_ALERT_WINDOW allow\n"
+   +"appops set "+p+" RUN_IN_BACKGROUND allow\n"
+   +"appops set "+p+" RUN_ANY_IN_BACKGROUND allow\n"
+   +"appops set "+p+" START_FOREGROUND allow\n"
+   +"dumpsys deviceidle whitelist +"+p+"\n"
+   +"pm grant "+p+" android.permission.BLUETOOTH_CONNECT\n"
+   +"pm grant "+p+" android.permission.BLUETOOTH_SCAN\n"
+   +"pm grant "+p+" android.permission.POST_NOTIFICATIONS\n"
+   +"settings put global hidden_api_policy_p_apps 1\n"
+   +"settings put global hidden_api_policy_pre_p_apps 1\n"
+   +"settings put global hidden_api_policy 1\n";
+ }
+
+ private void addAdbAndDiagnostics(){
+  try{
+   View host0=findViewById(R.id.status);
+   ViewGroup host=host0!=null&&host0.getParent() instanceof ViewGroup ? (ViewGroup)host0.getParent() : null;
+   if(host==null)return;
+   int pad=(int)(10*getResources().getDisplayMetrics().density+.5f);
+
+   TextView head=new TextView(this);head.setText("ADB 一键授权");head.setTextSize(15);head.setTypeface(null,1);
+   head.setPadding(pad,pad*2,pad,pad);host.addView(head);
+
+   Button pc=new Button(this);pc.setText("① 复制电脑版 ADB 命令");
+   pc.setOnClickListener(v->{ClipboardManager cm=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText("adb",adbScript()));Toast.makeText(this,"已复制，粘贴到电脑终端执行",Toast.LENGTH_LONG).show();});
+   host.addView(pc);
+
+   Button sh=new Button(this);sh.setText("② 复制 Stellar / 本地 Shell 命令");
+   sh.setOnClickListener(v->{ClipboardManager cm=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText("sh",shellScript()));Toast.makeText(this,"已复制，粘贴到 Stellar 执行",Toast.LENGTH_LONG).show();});
+   host.addView(sh);
+
+   TextView note=new TextView(this);note.setText("授权后重开一次监听。hidden_api_policy 用于解除隐藏 API 限制，系统蓝牙电量字段被拦时可放行。");
+   note.setTextSize(11);note.setPadding(pad,pad,pad,pad);host.addView(note);
+
+   TextView dh=new TextView(this);dh.setText("协议抓取（最近一次连接）");dh.setTextSize(15);dh.setTypeface(null,1);dh.setPadding(pad,pad*2,pad,pad);host.addView(dh);
+
+   diag=new TextView(this);diag.setTextSize(10);diag.setPadding(pad,pad,pad,pad);diag.setTypeface(android.graphics.Typeface.MONOSPACE);
+   diag.setTextIsSelectable(true);
+   host.addView(diag);
+
+   Button rd=new Button(this);rd.setText("刷新协议抓取");
+   rd.setOnClickListener(v->refreshDiag());
+   host.addView(rd);
+   refreshDiag();
+  }catch(Throwable ignored){}
+ }
+
+ private void refreshDiag(){
+  if(diag==null)return;
+  List<String> lines=BluetoothMonitorService.rawLog();
+  if(lines.isEmpty()){diag.setText("暂无数据。连接一次耳机后回来点刷新。\nAT= 耳机通过 HFP 上报的命令\nADV= 蓝牙广播里的厂商数据");return;}
+  StringBuilder sb=new StringBuilder();
+  for(String s:lines)sb.append(s).append('\n');
+  diag.setText(sb.toString().trim());
+ }
+
+ interface S{void set(int p);}SeekBar.OnSeekBarChangeListener sl(S s){return new SeekBar.OnSeekBarChangeListener(){public void onProgressChanged(SeekBar v,int p,boolean f){s.set(p);pos();if(f)refreshPopup();}public void onStartTrackingTouch(SeekBar v){}public void onStopTrackingTouch(SeekBar v){}};}
  void sync(){x.setProgress(AppPrefs.x(this)+300);y.setProgress(AppPrefs.y(this)+500);w.setProgress(AppPrefs.widthPercent(this)-72);h.setProgress(AppPrefs.heightDp(this)-280);r.setProgress(AppPrefs.radiusDp(this));b.setProgress(AppPrefs.blurDp(this));dim.setProgress(AppPrefs.dimPercent(this));dur.setProgress(AppPrefs.durationSec(this)-2);pos();}
  void pos(){pos.setText("X "+AppPrefs.x(this)+" · Y "+AppPrefs.y(this)+" · "+AppPrefs.widthPercent(this)+"% · "+AppPrefs.heightDp(this)+"dp · 圆角 "+AppPrefs.radiusDp(this)+"dp");}
  void overlay(){startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:"+getPackageName())));}
@@ -24,5 +116,5 @@ public final class MainActivity extends Activity{
  void test(){if(!Settings.canDrawOverlays(this)){overlay();return;}EarPopupWindow.shared(this).show("测试耳机 · EarPopup X",BatteryState.unknown("测试模式"));}
  void refreshPopup(){EarPopupWindow.shared(this).refreshLayout();}
  void status(){StringBuilder s=new StringBuilder();s.append(Settings.canDrawOverlays(this)?"● 悬浮窗已开启\n":"○ 悬浮窗未开启\n");if(Build.VERSION.SDK_INT>=31)s.append(checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED?"● 蓝牙权限已开启\n":"○ 蓝牙权限未开启\n");if(Build.VERSION.SDK_INT>=33)s.append(checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED?"● 通知权限已开启\n":"○ 通知权限未开启\n");s.append(AppPrefs.enabled(this)?"● 自动弹窗已启用":"○ 自动弹窗未启用");status.setText(s.toString());}
- @Override protected void onResume(){super.onResume();status();}
+ @Override protected void onResume(){super.onResume();status();refreshDiag();}
 }
