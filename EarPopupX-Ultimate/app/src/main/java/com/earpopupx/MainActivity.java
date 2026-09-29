@@ -77,6 +77,10 @@ public final class MainActivity extends Activity{
    sh.setOnClickListener(v->{ClipboardManager cm=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText("sh",shellScript()));Toast.makeText(this,"已复制，粘贴到 Stellar 执行",Toast.LENGTH_LONG).show();});
    host.addView(sh);
 
+   Button one=new Button(this);one.setText("③ 一键执行（Shizuku / Stellar，不用复制粘贴）");
+   one.setOnClickListener(v->runAdbOneClick());
+   host.addView(one);
+
    TextView note=new TextView(this);note.setText("授权后重开一次监听。hidden_api_policy 用于解除隐藏 API 限制，系统蓝牙电量字段被拦时可放行。");
    note.setTextSize(11);note.setPadding(pad,pad,pad,pad);host.addView(note);
 
@@ -91,6 +95,30 @@ public final class MainActivity extends Activity{
    host.addView(rd);
    refreshDiag();
   }catch(Throwable ignored){}
+ }
+
+
+ private void runAdbOneClick(){
+  if(!ShizukuHelper.isRunning()){
+   Toast.makeText(this,"未检测到 Shizuku / Stellar 在运行。请先打开 Stellar 并启动它的服务，再回来点这个按钮。",Toast.LENGTH_LONG).show();
+   return;
+  }
+  if(!ShizukuHelper.hasPermission()){
+   try{
+    ShizukuHelper.requestPermission(1001);
+   }catch(Throwable t){}
+   Toast.makeText(this,"已在 Stellar / Shizuku 弹出授权请求，允许后再回来点一次。",Toast.LENGTH_LONG).show();
+   return;
+  }
+  Toast.makeText(this,"正在执行…",Toast.LENGTH_SHORT).show();
+  final String script=shellScript();
+  new Thread(()->{
+   final String out=ShizukuHelper.run(script);
+   runOnUiThread(()->{
+    String msg=(out==null||out.trim().isEmpty())?"已执行（无输出，多数 appops 命令成功时就是静默的）":out;
+    Toast.makeText(this,"执行结果：\n"+msg,Toast.LENGTH_LONG).show();
+   });
+  }).start();
  }
 
  private void refreshDiag(){
