@@ -1,62 +1,83 @@
 package com.earpopupx;
 
-import android.content.pm.PackageManager;
-
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-
-import rikka.shizuku.Shizuku;
-import rikka.shizuku.ShizukuRemoteProcess;
+import java.lang.reflect.Method;
 
 /**
- * Shizuku / Stellar 封装。
+ * Shizuku / Stellar 封装（反射版）。
  *
- * Stellar 内置 Shizuku 兼容层（ShizukuServiceIntercept），所以这里用标准
- * Shizuku API 即可，Stellar 会自动接管。用途：让 App 自己把那几条授权命令
- * 跑掉，用户不用再复制粘贴。
+ * 这里刻意不引入 rikka.shizuku 编译依赖：Stellar 内置了 Shizuku 兼容层，
+ * 运行时如果它的类可用，就直接调用；不可用就降级提示，不影响其余功能。
  */
 public final class ShizukuHelper {
 
     private ShizukuHelper() {
     }
 
-    /** Shizuku / Stellar 服务是否在运行 */
+    private static Class<?> cls() {
+        try {
+            return Class.forName("rikka.shizuku.Shizuku");
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     public static boolean isRunning() {
         try {
-            return Shizuku.pingBinder();
+            Class<?> c = cls();
+            if (c == null) {
+                return false;
+            }
+            Method m = c.getMethod("pingBinder");
+            Object r = m.invoke(null);
+            return r instanceof Boolean && (Boolean) r;
         } catch (Throwable t) {
             return false;
         }
     }
 
-    /** 是否已被授予 Shizuku 权限 */
     public static boolean hasPermission() {
         try {
-            return Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED;
+            Class<?> c = cls();
+            if (c == null) {
+                return false;
+            }
+            Method m = c.getMethod("checkSelfPermission");
+            Object r = m.invoke(null);
+            return r instanceof Integer && ((Integer) r) == 0;
         } catch (Throwable t) {
             return false;
         }
     }
 
-    /** 发起授权请求 */
     public static void requestPermission(int code) {
         try {
-            Shizuku.requestPermission(code);
+            Class<?> c = cls();
+            if (c == null) {
+                return;
+            }
+            Method m = c.getMethod("requestPermission", int.class);
+            m.invoke(null, code);
         } catch (Throwable t) {
             // ignore
         }
     }
 
-    /** 以 adb 权限执行一段 shell 脚本，返回合并后的输出 */
+    /** 以 adb 权限执行 shell 脚本；不可用时返回 null */
     public static String run(String script) {
         try {
-            ShizukuRemoteProcess proc =
-                    Shizuku.newProcess(new String[]{"sh", "-c", script}, null, null);
-            String out = readAll(proc.getInputStream());
-            String err = readAll(proc.getErrorStream());
+            Class<?> c = cls();
+            if (c == null) {
+                return null;
+            }
+            Method m = c.getMethod("newProcess", String[].class, String[].class, String.class);
+            Object proc = m.invoke(null, new String[]{"sh", "-c", script}, null, null);
+            String out = readAll((InputStream) proc.getClass().getMethod("getInputStream").invoke(proc));
+            String err = readAll((InputStream) proc.getClass().getMethod("getErrorStream").invoke(proc));
             try {
-                proc.waitFor();
+                proc.getClass().getMethod("waitFor").invoke(proc);
             } catch (Throwable t) {
                 // ignore
             }
@@ -65,7 +86,7 @@ public final class ShizukuHelper {
             }
             return out;
         } catch (Throwable t) {
-            return "执行失败: " + t;
+            return null;
         }
     }
 
