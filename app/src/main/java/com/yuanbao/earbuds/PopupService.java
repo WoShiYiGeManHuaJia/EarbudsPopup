@@ -254,6 +254,8 @@ public class PopupService extends Service {
         // 这是最实时的电量来源：耳机一上报新电量，我们立刻更新缓存。
         // 之前完全没监听它，所以电量只能靠手动探测——这就是「录死」的根因。
         f.addAction(ACTION_BATTERY_CHANGED);
+        // v1.4：系统弹窗上抓到的三项真实电量
+        f.addAction(BatteryCaptorService.ACTION_CAPTURED);
         if (prefs.powerSave()) {
             f.addAction(Intent.ACTION_SCREEN_ON);
             f.addAction(Intent.ACTION_SCREEN_OFF);
@@ -384,6 +386,23 @@ public class PopupService extends Service {
             return;
         }
 
+        // v1.4：系统弹窗上的三项真实电量到了 —— 立刻原地刷新当前弹窗。
+        //
+        // 这是目前唯一能在连接瞬间拿到「左 / 右 / 盒」三个真实值的通道：
+        // 数字由耳机上报、经系统弹窗显示，本 App 读取同一组数，不做任何估算。
+        // 系统弹窗比蓝牙 ACL 广播略晚一点（几十到几百毫秒），所以它通常
+        // 是「弹窗刚出来、数字跟着补上」，而不是一开始就空白。
+        if (BatteryCaptorService.ACTION_CAPTURED.equals(action)) {
+            int l = i.getIntExtra(BatteryCaptorService.EXTRA_LEFT, -1);
+            int r = i.getIntExtra(BatteryCaptorService.EXTRA_RIGHT, -1);
+            int c = i.getIntExtra(BatteryCaptorService.EXTRA_CASE, -1);
+            if (BatteryLevels.valid(l) && BatteryLevels.valid(r)
+                    && BatteryLevels.valid(c)) {
+                applyCaptured(l, r, c, i.getStringExtra(BatteryCaptorService.EXTRA_SOURCE));
+            }
+            return;
+        }
+
         // 电量变化广播：立刻写入缓存，下次弹窗就是最新值
         if (ACTION_BATTERY_CHANGED.equals(action)) {
             BluetoothDevice bd = i.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
@@ -497,6 +516,20 @@ public class PopupService extends Service {
             cached.caseBox = -1;
             cached.overall = -1;
             cached.source = "stale";
+        }
+        // v1.4：如果本次连接期间已经从系统弹窗抓到三项真实电量，首帧直接用。
+        // 数字来源是系统弹窗显示的那三个值，与官方完全一致，不做任何估算。
+        if (BatteryCaptorService.hasFresh()) {
+            cached.left = BatteryCaptorService.lastLeft;
+            cached.right = BatteryCaptorService.lastRight;
+            cached.caseBox = BatteryCaptorService.lastCase;
+            if (!BatteryLevels.valid(cached.overall)) {
+                cached.overall = Math.min(cached.left,
+                        Math.min(cached.right, cached.caseBox));
+            }
+            cached.sanitize();
+            cached.timestamp = System.currentTimeMillis();
+            cached.source = "sys-popup";
         }
         currentAddress = addr;
         show(name, addr, cached, dev);
@@ -960,6 +993,46 @@ public class PopupService extends Service {
         if (currentRoot != null && addr.equals(currentAddress)) {
             PopupRenderer.updateInfo(currentRoot, currentName, b, prefs);
         }
+    }
+
+    /**
+     * v1.4：把系统弹窗上抓到的三项真实电量写进缓存并刷新当前弹窗。
+     *
+     * 与 applyMeasuredLevels 的区别：这里不校验 job 序号。
+     * 抓取值来自外部（系统弹窗），不是某条探测任务的产物，
+     * 只要弹窗还开着就应当立刻反映出来 —— 用户要的就是「那一瞬间的真值」。
+     */
+    private void applyCaptured(int left, int right, int caseBox, String source) {
+        cancelPendingOverall();
+        String addr = currentAddress;
+        if (addr == null || addr.isEmpty()) {
+            addr = prefs.lastAddress();
+        }
+        if (addr == null || addr.isEmpty()) return;
+
+        BatteryStore st = new BatteryStore(this);
+        BatteryLevels b = st.load(addr);
+        b.left = left;
+        b.right = right;
+        b.caseBox = caseBox;
+        if (!BatteryLevels.valid(b.overall)) {
+            b.overall = Math.min(left, Math.min(right, caseBox));
+        }
+        b.sanitize();
+        b.timestamp = System.currentTimeMillis();
+        b.source = "sys-popup" + (source == null ? "" : "/" + source);
+        st.save(addr, b);
+
+        if (currentRoot != null && addr.equals(currentAddress)) {
+            PopupRenderer.updateInfo(currentRoot, currentName, b, prefs);
+        }
+        // 悬浮窗与 Activity 两条引擎都要刷新
+        if (currentRoot == null) {
+            // 弹窗尚未创建（还在等 Activity 启动），值已入缓存，
+            // 弹窗创建时会自行读取，无需额外处理
+        }
+        android.util.Log.i("Battery",
+                "抓到三项真值 左" + left + " 右" + right + " 盒" + caseBox + " (" + b.source + ")");
     }
 
     /** 写入实测值并刷新当前弹窗 */

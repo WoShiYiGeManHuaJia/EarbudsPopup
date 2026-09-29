@@ -79,6 +79,16 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <TextView style="@style/TextSectionTitle" android:layout_marginTop="30dp" android:text="左右耳 + 充电盒真实电量（v1.4）" />
+        <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" app:cardBackgroundColor="#FFEAF6FF" app:cardCornerRadius="26dp" app:cardElevation="3dp" app:strokeColor="#40000000" app:strokeWidth="1dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                <LinearLayout android:id="@+id/rowCaptorEnable" style="@style/AppRow"><ImageView style="@style/AppRowIcon" android:src="@drawable/ic_battery" android:contentDescription="抓取"/><LinearLayout style="@style/AppRowText"><TextView style="@style/TextRowTitle" android:text="开启三项电量抓取"/><TextView android:id="@+id/tvCaptorState" style="@style/TextRowSub" android:text="未开启"/></LinearLayout><ImageView style="@style/AppRowIcon" android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chevron" android:contentDescription="前往"/></LinearLayout>
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="57dp" android:background="@color/ui_divider" />
+                <LinearLayout android:id="@+id/rowCaptorTest" style="@style/AppRow"><ImageView style="@style/AppRowIcon" android:src="@drawable/ic_preview" android:contentDescription="测试"/><LinearLayout style="@style/AppRowText"><TextView style="@style/TextRowTitle" android:text="立即测试弹窗（看三项）"/><TextView style="@style/TextRowSub" android:text="用最近抓到的真实值弹一次"/></LinearLayout><ImageView style="@style/AppRowIcon" android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chevron" android:contentDescription="前往"/></LinearLayout>
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:lineSpacingExtra="3dp" android:padding="16dp" android:text="原理：系统耳机弹窗上显示的「左耳 / 右耳 / 充电盒」三个数字，本身就是耳机真实上报的值。本功能读取那三个数字，用在自己的弹窗上——数字是真的，与官方显示完全一致。\n\n代价要说清：数据来自系统弹窗，所以系统弹窗不出现时这里也没有数；官方弹窗改版或系统大版本升级后可能需要重新适配。\n\n开启后请同时把本 App 加入无障碍白名单与后台自启动，否则系统会在几分钟后回收该服务。" android:textColor="@color/ui_text_secondary" android:textSize="11sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <TextView style="@style/TextSectionTitle" android:layout_marginTop="30dp" android:text="横屏与小窗（v1.2）" />
         <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" app:cardBackgroundColor="#F5FFFFFF" app:cardCornerRadius="26dp" app:cardElevation="3dp" app:strokeColor="#30000000" app:strokeWidth="1dp">
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">

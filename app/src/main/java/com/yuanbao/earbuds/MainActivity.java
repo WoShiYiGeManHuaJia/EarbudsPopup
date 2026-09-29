@@ -431,6 +431,17 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.rowBlockMi).setOnClickListener(v -> showMiPopupGuide());
         findViewById(R.id.rowAdb).setOnClickListener(v -> copyAdbCommands());
 
+        // v1.4：三项真实电量抓取（读系统弹窗上已有的那三个数字）
+        View rowCaptor = findViewById(R.id.rowCaptorEnable);
+        if (rowCaptor != null) {
+            rowCaptor.setOnClickListener(v -> openAccessibilitySettings());
+        }
+        View rowCaptorTest = findViewById(R.id.rowCaptorTest);
+        if (rowCaptorTest != null) {
+            rowCaptorTest.setOnClickListener(v -> testPopupWithCaptured());
+        }
+        refreshCaptorState();
+
         // v1.3：HCI 抓包助手（拿左右耳真实电量的唯一前置步骤）
         View rowHciDial = findViewById(R.id.rowHciDial);
         if (rowHciDial != null) {
@@ -1941,6 +1952,68 @@ public class MainActivity extends AppCompatActivity {
                 && data != null && data.getData() != null) {
             HciLogHelper.shareLogFile(this, data.getData());
         }
+    }
+
+    /**
+     * v1.4：跳到系统无障碍设置页，由用户手动开启电量抓取服务。
+     * Android 不允许 App 自行授予无障碍权限，只能引导用户去开。
+     */
+    private void openAccessibilitySettings() {
+        try {
+            Intent i = new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+            Toast.makeText(this,
+                    "在列表里找到「耳机弹窗」→ 打开开关。这是拿到左右耳 + 充电盒三个真实电量的唯一方式。",
+                    Toast.LENGTH_LONG).show();
+        } catch (Exception e) {
+            Toast.makeText(this, "无法打开无障碍设置，请手动进入系统设置", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** 刷新抓取服务状态显示 */
+    private void refreshCaptorState() {
+        TextView tv = findViewById(R.id.tvCaptorState);
+        if (tv == null) return;
+        if (BatteryCaptorService.running) {
+            if (BatteryCaptorService.hasFresh()) {
+                tv.setText("已开启 · 左" + BatteryCaptorService.lastLeft
+                        + " 右" + BatteryCaptorService.lastRight
+                        + " 盒" + BatteryCaptorService.lastCase);
+            } else {
+                tv.setText("已开启 · 等待下次开盖弹窗");
+            }
+        } else {
+            tv.setText("未开启 · 点此前往无障碍设置");
+        }
+    }
+
+    /** 用最近抓到的真实三项弹一次窗，方便验证 */
+    private void testPopupWithCaptured() {
+        if (!BatteryCaptorService.hasFresh()) {
+            Toast.makeText(this,
+                    "还没抓到三项电量。请开一次盖、让系统弹窗出现，再回来点这里。",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        Intent i = new Intent(PopupService.ACTION_SHOW);
+        i.setPackage(getPackageName());
+        i.putExtra(PopupService.EXTRA_NAME, "耳机已连接");
+        i.putExtra(PopupService.EXTRA_LEFT, BatteryCaptorService.lastLeft);
+        i.putExtra(PopupService.EXTRA_BATTERY, BatteryCaptorService.lastRight);
+        i.putExtra(PopupService.EXTRA_CASE, BatteryCaptorService.lastCase);
+        i.putExtra(PopupService.EXTRA_OVERALL, Math.min(BatteryCaptorService.lastLeft,
+                BatteryCaptorService.lastRight));
+        try {
+            startService(i);
+        } catch (Exception ignored) {
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        refreshCaptorState();
     }
 
     private void copyAdbCommands() {
