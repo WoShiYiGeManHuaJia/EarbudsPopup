@@ -235,10 +235,64 @@ public final class ShizukuHelper {
         };
     }
 
-    /** 屏蔽小米原生快连弹窗（只禁悬浮窗，不影响蓝牙连接） */
+    /**
+     * 屏蔽小米原生快连弹窗 —— 温和手段。
+     *
+     * 重要认知修正：小米快连弹窗不是悬浮窗，而是【系统进程启动的 Activity】。
+     * 所以单禁 SYSTEM_ALERT_WINDOW 常常压不住它（实测印证：执行后弹窗照弹）。
+     * 这里同时禁 MIUI 私有的「后台弹出界面」op（10021），
+     * 它管的才是「后台启动界面」这类行为，比前者更对口。
+     */
     public static String[] blockMiuiCommands() {
         return new String[]{
                 "appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW ignore",
+                // MIUI 扩展 op：后台弹出界面
+                "appops set com.xiaomi.bluetooth 10021 ignore",
+                // 部分版本快连弹窗挂在蓝牙扩展的另一个包上，一并处理
+                "appops set com.milink.service SYSTEM_ALERT_WINDOW ignore",
+        };
+    }
+
+    /**
+     * 屏蔽 —— 强力手段：直接冻结小米蓝牙扩展组件。
+     *
+     * 这是目前第三方唯一可能真正压住快连弹窗的办法：
+     * 弹窗的代码就在这个组件里，组件被禁用就没人能弹。
+     *
+     * 代价必须说清：
+     *   · 小米「快连」（开盖即连、弹窗配对）会失效
+     *   · 普通蓝牙配对与音频连接不受影响（那是 com.android.bluetooth 管的）
+     *   · 想恢复就执行 restoreMiuiCommands()，或到系统设置里重新启用
+     */
+    public static String[] blockMiuiStrongCommands() {
+        return new String[]{
+                "pm disable-user --user 0 com.xiaomi.bluetooth",
+        };
+    }
+
+    /** 恢复：重新启用小米蓝牙扩展 */
+    public static String[] restoreMiuiCommands() {
+        return new String[]{
+                "pm enable com.xiaomi.bluetooth",
+                "appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW allow",
+                "appops set com.xiaomi.bluetooth 10021 allow",
+        };
+    }
+
+    /**
+     * 回读小米蓝牙扩展的真实状态，用来判断屏蔽到底生效没有。
+     * 不能只看命令有没有报错 —— 必须读回来验证。
+     */
+    public static String[] verifyBlockState() {
+        String disabled = exec("pm list packages -d com.xiaomi.bluetooth");
+        boolean frozen = disabled != null && disabled.contains("com.xiaomi.bluetooth");
+        String sa = trim(exec("appops get com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW"));
+        String bg = trim(exec("appops get com.xiaomi.bluetooth 10021"));
+        return new String[]{
+                "组件是否已被冻结: " + (frozen ? "是 ✓（弹窗应当已消失）" : "否 ✗（弹窗可能照弹）"),
+                "  pm list packages -d → " + trim(disabled),
+                "  SYSTEM_ALERT_WINDOW → " + sa,
+                "  10021 后台弹出界面 → " + bg,
         };
     }
 

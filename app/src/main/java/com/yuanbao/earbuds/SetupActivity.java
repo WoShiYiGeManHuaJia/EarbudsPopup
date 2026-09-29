@@ -116,8 +116,28 @@ public class SetupActivity extends AppCompatActivity {
                     }
                 }
 
-                append("\n=== ④ 屏蔽小米原生弹窗 ===");
+                // 只点「屏蔽」时也必须先把自身权限补上。
+                // 之前只跑屏蔽命令、不跑授权命令，结果本 App 自己的
+                // SYSTEM_ALERT_WINDOW 一直是 ignore —— 悬浮窗引擎根本弹不出来，
+                // 用户会以为「装了 App 反而没弹窗」。
+                if (!grant) {
+                    append("=== ① 先补上本 App 自身权限 ===");
+                    runCmds(ShizukuHelper.grantSelfCommands());
+                    for (String v : ShizukuHelper.verifyKeyPerms()) {
+                        append(v);
+                        if (v.contains("ignore") || v.contains("deny")
+                                || v.contains("default")) {
+                            append("   ⚠ 这项没生效，弹窗可能因此无法显示");
+                        }
+                    }
+                }
+
+                append("\n=== ④ 屏蔽小米原生弹窗（温和） ===");
                 runCmds(ShizukuHelper.blockMiuiCommands());
+                append("\n--- 回读验证 ---");
+                for (String v : ShizukuHelper.verifyBlockState()) {
+                    append(v);
+                }
 
                 append("\n=== 完成 ===");
                 append("建议：强制停止本 App 后重新打开，或直接重启手机，让权限生效。");
@@ -125,10 +145,66 @@ public class SetupActivity extends AppCompatActivity {
                 main.post(() -> {
                     busy(false);
                     refreshStatus();
-                    Toast.makeText(this, "执行完成", Toast.LENGTH_SHORT).show();
+                    askStrongBlock();
                 });
             });
         });
+    }
+
+    /**
+     * 温和屏蔽通常压不住，因为小米快连弹窗是系统 Activity 而非悬浮窗。
+     * 这里把唯一可能真正生效的手段（冻结组件）摆出来，让用户自己决定。
+     */
+    private void askStrongBlock() {
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle("温和手段可能无效，要不要用强力屏蔽？")
+                .setMessage("小米快连弹窗是系统进程启动的 Activity，不是悬浮窗，"
+                        + "所以禁权限往往压不住它。\n\n"
+                        + "唯一可能真正生效的办法是直接冻结「小米蓝牙扩展」组件。\n\n"
+                        + "代价：开盖快连弹窗失效（普通蓝牙连接与音频不受影响）。\n"
+                        + "随时可以再执行一次恢复。\n\n"
+                        + "要用吗？")
+                .setNegativeButton("先不用", (d, w) ->
+                        Toast.makeText(this, "执行完成", Toast.LENGTH_SHORT).show())
+                .setPositiveButton("冻结组件", (d, w) -> {
+                    if (!ShizukuHelper.hasPermission()) {
+                        Toast.makeText(this, "未获得授权", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    busy(true);
+                    pool.execute(() -> {
+                        append("\n=== ⑤ 强力屏蔽：冻结小米蓝牙扩展 ===");
+                        runCmds(ShizukuHelper.blockMiuiStrongCommands());
+                        append("\n--- 回读验证 ---");
+                        for (String v : ShizukuHelper.verifyBlockState()) {
+                            append(v);
+                        }
+                        main.post(() -> {
+                            busy(false);
+                            Toast.makeText(this, "已执行，建议重启手机后验证",
+                                    Toast.LENGTH_LONG).show();
+                        });
+                    });
+                })
+                .setNeutralButton("恢复组件", (d, w) -> {
+                    if (!ShizukuHelper.hasPermission()) {
+                        Toast.makeText(this, "未获得授权", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    busy(true);
+                    pool.execute(() -> {
+                        append("\n=== ⑤ 恢复小米蓝牙扩展 ===");
+                        runCmds(ShizukuHelper.restoreMiuiCommands());
+                        for (String v : ShizukuHelper.verifyBlockState()) {
+                            append(v);
+                        }
+                        main.post(() -> {
+                            busy(false);
+                            Toast.makeText(this, "已恢复", Toast.LENGTH_SHORT).show();
+                        });
+                    });
+                })
+                .show();
     }
 
     private void runCmds(String[] cmds) {
