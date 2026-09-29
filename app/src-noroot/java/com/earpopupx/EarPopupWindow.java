@@ -5,276 +5,247 @@ import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.ImageDecoder;
-import android.graphics.PixelFormat;
 import android.graphics.drawable.AnimatedImageDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.Outline;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.view.Gravity;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 import android.view.WindowManager;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 /**
  * 悬浮窗弹窗。
- * 窗口尺寸 = 卡片尺寸，卡片本身就是圆角背景，
- * 不使用 FLAG_DIM_BEHIND，因此不存在「圆角外露出黑色直角」的问题。
+ *
+ * 结构：全屏透明窗口 → 全屏压暗层（点击关闭）→ 居中的圆角卡片。
+ * 全屏窗口是为了让"压暗"和"系统实时模糊"覆盖整屏，
+ * 这样圆角之外不会出现任何直角矩形（旧的直角黑边就是窗口矩形边界露出来的）。
  */
 public final class EarPopupWindow {
-
-    private static final long AUTO_DISMISS_MS = 6500L;
-
     private final Context context;
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final Runnable dismissRun = new Runnable() {
-        @Override
-        public void run() {
-            dismiss();
-        }
-    };
-
     private WindowManager wm;
     private View root;
-    private String shownName;
-    private TextView tvLeft, tvRight, tvCase, tvAggregate, tvSource;
+    private boolean dismissing = false;
 
-    public EarPopupWindow(Context c) {
-        context = c.getApplicationContext();
-    }
+    private TextView nameView, valLeft, valRight, valCase, valAggregate, sourceView;
 
-    public synchronized void show(String name, BatteryState state) {
+    public EarPopupWindow(Context c) { context = c.getApplicationContext(); }
+
+    public boolean isShowing() { return root != null && !dismissing; }
+
+    /** 显示弹窗。已显示时只刷新内容，不重建（避免闪烁）。 */
+    public void show(String name, BatteryState state) {
         if (!Settings.canDrawOverlays(context)) return;
-        if (root != null && name != null && name.equals(shownName)) {
-            update(state);
+        if (root != null && !dismissing) {
+            bind(name, state);
+            scheduleDismiss();
             return;
         }
-        dismiss();
-        shownName = name;
-
-        wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
-        if (wm == null) return;
-
-        root = buildCard(name);
-
-        WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
-        lp.width = (int) (context.getResources().getDisplayMetrics().widthPixels * 0.94f);
-        lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
-        lp.gravity = Gravity.CENTER;
-        lp.format = PixelFormat.TRANSLUCENT;
-        lp.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-        lp.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
-        lp.windowAnimations = android.R.style.Animation_Dialog;
-        if (Build.VERSION.SDK_INT >= 31) {
-            try {
-                lp.setBlurBehindRadius(dp(30));
-                lp.flags |= WindowManager.LayoutParams.FLAG_BLUR_BEHIND;
-            } catch (Throwable ignored) {
-            }
-        }
-
         try {
+            wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+            if (wm == null) return;
+
+            LayoutInflater inf = LayoutInflater.from(context);
+            root = inf.inflate(R.layout.popup_card, null);
+
+            nameView     = root.findViewById(R.id.name);
+            valLeft      = root.findViewById(R.id.valLeft);
+            valRight     = root.findViewById(R.id.valRight);
+            valCase      = root.findViewById(R.id.valCase);
+            valAggregate = root.findViewById(R.id.valAggregate);
+            sourceView   = root.findViewById(R.id.source);
+
+            View card = root.findViewById(R.id.card);
+            View dim  = root.findViewById(R.id.dimLayer);
+            TextView close = root.findViewById(R.id.close);
+            ImageView media = root.findViewById(R.id.media);
+
+            applyCardStyle(card);
+            applyMediaHeight(media);
+            loadMedia(media);
+
+            dim.setAlpha(AppPrefs.dimPct(context) / 100f);
+            dim.setOnClickListener(v -> dismiss());
+
+            close.setOnClickListener(v -> dismiss());
+
+            bind(name, state);
+
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams();
+            lp.width  = ViewGroup.LayoutParams.MATCH_PARENT;
+            lp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+            lp.gravity = Gravity.CENTER;
+            lp.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+            lp.format = android.graphics.PixelFormat.TRANSLUCENT;
+            lp.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                     | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                     | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+            if (AppPrefs.blur(context) && Build.VERSION.SDK_INT >= 31) {
+                try {
+                    lp.flags |= WindowManager.LayoutParams.FLAG_BLUR_BEHIND;
+                    lp.setBlurBehindRadius(dp(30));
+                } catch (Throwable ignored) {}
+            }
+            lp.windowAnimations = android.R.style.Animation_Dialog;
+
             wm.addView(root, lp);
+            dismissing = false;
+            animateIn(card);
+            scheduleDismiss();
         } catch (Throwable t) {
             root = null;
-            return;
         }
-        animateIn(root);
-        update(state);
-        postDismiss();
     }
 
-    /** 弹窗已经显示且设备未变时，原地更新数值，不重建、不闪烁。 */
-    public synchronized void updateIfVisible(String name, BatteryState state) {
+    /** 原地刷新电量文字，不重建窗口 */
+    public void updateState(BatteryState state) {
+        if (root == null || dismissing) return;
+        handler.post(() -> bind(null, state));
+    }
+
+    private void bind(String name, BatteryState s) {
         if (root == null) return;
-        if (name != null && shownName != null && !name.equals(shownName)) return;
-        update(state);
-        postDismiss();
-    }
+        if (name != null && nameView != null) nameView.setText(name);
+        if (s == null) return;
 
-    public synchronized void dismiss() {
-        handler.removeCallbacks(dismissRun);
-        if (wm != null && root != null) {
-            try {
-                wm.removeView(root);
-            } catch (Throwable ignored) {
+        if (valLeft != null)  valLeft.setText(fmt(s.left));
+        if (valRight != null) valRight.setText(fmt(s.right));
+        if (valCase != null)  valCase.setText(fmt(s.caseLevel));
+
+        if (valAggregate != null) {
+            if (s.hasDetail()) {
+                valAggregate.setVisibility(View.GONE);
+            } else {
+                valAggregate.setVisibility(View.VISIBLE);
+                valAggregate.setText(s.aggregate >= 0 ? ("整机 " + s.aggregate + "%") : "整机 未知");
             }
         }
-        root = null;
-        shownName = null;
+        if (sourceView != null) sourceView.setText("数据来源：" + s.source);
     }
 
-    private void postDismiss() {
-        handler.removeCallbacks(dismissRun);
-        handler.postDelayed(dismissRun, AUTO_DISMISS_MS);
-    }
+    private static String fmt(int v) { return v >= 0 ? (v + "%") : "--"; }
 
-    private View buildCard(String name) {
-        LinearLayout card = new LinearLayout(context);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setGravity(Gravity.CENTER_HORIZONTAL);
-        int pad = dp(20);
-        card.setPadding(pad, pad, pad, dp(16));
+    private void applyCardStyle(View card) {
+        if (card == null) return;
+        int r = dp(AppPrefs.cornerDp(context));
+        int w = (int) (screenWidth() * AppPrefs.widthPct(context) / 100f);
 
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.argb(232, 250, 250, 252));
-        bg.setCornerRadius(dp(30));
-        card.setBackground(bg);
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(Color.parseColor("#F7F7F9"));
+        g.setCornerRadius(r);
+        card.setBackground(g);
 
-        // 关键：把所有子 View（尤其是顶部图片）裁进圆角里，
-        // 否则图片的方角会盖住卡片的圆角，看起来就是「直角边」。
-        final float radius = dp(30);
-        card.setOutlineProvider(new android.view.ViewOutlineProvider() {
-            @Override
-            public void getOutline(View view, android.graphics.Outline outline) {
-                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
+        // 关键：把圆角做成真实裁剪，顶部图片会被裁出同样的圆角
+        card.setClipToOutline(true);
+        card.setOutlineProvider(new ViewOutlineProvider() {
+            @Override public void getOutline(View v, Outline o) {
+                o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), r);
             }
         });
-        card.setClipToOutline(true);
 
-        ImageView media = new ImageView(context);
-        media.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        boolean hasMedia = loadMedia(media);
-        if (!hasMedia) {
-            media.setVisibility(View.GONE);
-        } else {
-            card.addView(media, new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, dp(240)));
-        }
-
-        TextView title = new TextView(context);
-        title.setText(name == null ? "蓝牙耳机" : name);
-        title.setTextSize(20f);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        title.setTextColor(Color.rgb(15, 15, 15));
-        title.setGravity(Gravity.CENTER);
-        title.setPadding(0, dp(14), 0, dp(4));
-        card.addView(title, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        LinearLayout row = new LinearLayout(context);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setWeightSum(3f);
-        row.setPadding(0, dp(6), 0, dp(6));
-        row.addView(slot("左耳", true));
-        row.addView(slot("右耳", false));
-        row.addView(slot("充电盒", false));
-        card.addView(row, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        tvAggregate = new TextView(context);
-        tvAggregate.setTextSize(15f);
-        tvAggregate.setTextColor(Color.rgb(70, 70, 70));
-        tvAggregate.setGravity(Gravity.CENTER);
-        tvAggregate.setVisibility(View.GONE);
-        card.addView(tvAggregate, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        tvSource = new TextView(context);
-        tvSource.setTextSize(11f);
-        tvSource.setTextColor(Color.rgb(140, 140, 140));
-        tvSource.setGravity(Gravity.CENTER);
-        tvSource.setPadding(0, dp(6), 0, 0);
-        card.addView(tvSource, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-
-        return card;
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) card.getLayoutParams();
+        if (lp == null) lp = new FrameLayout.LayoutParams(w, FrameLayout.LayoutParams.WRAP_CONTENT);
+        lp.width = w;
+        lp.height = FrameLayout.LayoutParams.WRAP_CONTENT;
+        lp.gravity = Gravity.CENTER;
+        lp.topMargin = dp(AppPrefs.offsetDp(context));   // 负 = 上移
+        card.setLayoutParams(lp);
     }
 
-    private LinearLayout slot(String label, boolean isLeft) {
-        LinearLayout col = new LinearLayout(context);
-        col.setOrientation(LinearLayout.VERTICAL);
-        col.setGravity(Gravity.CENTER_HORIZONTAL);
-        col.setLayoutParams(new LinearLayout.LayoutParams(0,
-                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-
-        TextView value = new TextView(context);
-        value.setText("--");
-        value.setTextSize(23f);
-        value.setTypeface(null, android.graphics.Typeface.BOLD);
-        value.setTextColor(Color.rgb(20, 20, 20));
-        value.setGravity(Gravity.CENTER);
-        col.addView(value);
-
-        TextView lab = new TextView(context);
-        lab.setText(label);
-        lab.setTextSize(12f);
-        lab.setTextColor(Color.rgb(120, 120, 120));
-        lab.setGravity(Gravity.CENTER);
-        lab.setPadding(0, dp(2), 0, 0);
-        col.addView(lab);
-
-        if (isLeft) {
-            tvLeft = value;
-        } else if ("右耳".equals(label)) {
-            tvRight = value;
-        } else {
-            tvCase = value;
-        }
-        return col;
-    }
-
-    private void update(BatteryState s) {
-        if (root == null || s == null) return;
-        if (tvLeft != null) tvLeft.setText(s.left >= 0 ? s.left + "%" : "--");
-        if (tvRight != null) tvRight.setText(s.right >= 0 ? s.right + "%" : "--");
-        if (tvCase != null) tvCase.setText(s.caseLevel >= 0 ? s.caseLevel + "%" : "--");
-
-        if (tvAggregate != null) {
-            if (!s.hasParts() && s.aggregate >= 0) {
-                tvAggregate.setText("整机 " + s.aggregate + "%");
-                tvAggregate.setVisibility(View.VISIBLE);
-            } else {
-                tvAggregate.setVisibility(View.GONE);
-            }
-        }
-        if (tvSource != null) {
-            tvSource.setText(s.source == null ? "" : ("数据来源：" + s.source));
+    private void applyMediaHeight(ImageView media) {
+        if (media == null) return;
+        ViewGroup.LayoutParams lp = media.getLayoutParams();
+        if (lp == null) lp = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(240));
+        lp.height = dp(AppPrefs.mediaHDp(context));
+        media.setLayoutParams(lp);
+        View frame = root == null ? null : root.findViewById(R.id.mediaFrame);
+        if (frame != null) {
+            ViewGroup.LayoutParams fl = frame.getLayoutParams();
+            if (fl != null) { fl.height = lp.height; frame.setLayoutParams(fl); }
         }
     }
 
-    private boolean loadMedia(ImageView v) {
+    private void loadMedia(ImageView v) {
+        if (v == null) return;
         String raw = AppPrefs.media(context);
-        if (raw == null) return false;
+        if (raw == null) return;
         try {
             Uri u = Uri.parse(raw);
             ImageDecoder.Source src = ImageDecoder.createSource(context.getContentResolver(), u);
             Drawable d = ImageDecoder.decodeDrawable(src);
             v.setImageDrawable(d);
-            if (d instanceof AnimatedImageDrawable) {
-                ((AnimatedImageDrawable) d).start();
-            }
-            return true;
-        } catch (Throwable ignored) {
-            return false;
+            if (d instanceof AnimatedImageDrawable) ((AnimatedImageDrawable) d).start();
+        } catch (Throwable ignored) {}
+    }
+
+    private void animateIn(View card) {
+        if (card == null) return;
+        card.setAlpha(0f);
+        card.setScaleX(0.94f);
+        card.setScaleY(0.94f);
+        AnimatorSet s = new AnimatorSet();
+        s.playTogether(
+                ObjectAnimator.ofFloat(card, "alpha", 0f, 1f),
+                ObjectAnimator.ofFloat(card, "scaleX", 0.94f, 1f),
+                ObjectAnimator.ofFloat(card, "scaleY", 0.94f, 1f));
+        s.setDuration(240);
+        s.start();
+
+        View dim = root == null ? null : root.findViewById(R.id.dimLayer);
+        if (dim != null) {
+            dim.setAlpha(0f);
+            dim.animate().alpha(AppPrefs.dimPct(context) / 100f).setDuration(240).start();
         }
     }
 
-    private void animateIn(View v) {
-        v.setAlpha(0f);
-        v.setScaleX(0.94f);
-        v.setScaleY(0.94f);
-        AnimatorSet set = new AnimatorSet();
-        set.playTogether(
-                ObjectAnimator.ofFloat(v, "alpha", 0f, 1f),
-                ObjectAnimator.ofFloat(v, "scaleX", 0.94f, 1f),
-                ObjectAnimator.ofFloat(v, "scaleY", 0.94f, 1f));
-        set.setDuration(240);
-        set.start();
+    private void scheduleDismiss() {
+        handler.removeCallbacks(dismissRunnable);
+        handler.postDelayed(dismissRunnable, AppPrefs.durationMs(context));
+    }
+
+    private final Runnable dismissRunnable = new Runnable() { @Override public void run() { dismiss(); } };
+
+    public void dismiss() {
+        if (root == null || dismissing) return;
+        dismissing = true;
+        handler.removeCallbacks(dismissRunnable);
+        final View r = root;
+        final WindowManager w = wm;
+        root = null;
+        if (r != null) {
+            View card = r.findViewById(R.id.card);
+            if (card != null) {
+                card.animate().alpha(0f).scaleX(0.96f).scaleY(0.96f).setDuration(140)
+                        .withEndAction(() -> removeNow(w, r)).start();
+            } else {
+                removeNow(w, r);
+            }
+        }
+        dismissing = false;
+    }
+
+    private static void removeNow(WindowManager w, View r) {
+        if (w == null) return;
+        try { w.removeView(r); } catch (Throwable ignored) {}
     }
 
     private int dp(int n) {
         return (int) (n * context.getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private int screenWidth() {
+        return context.getResources().getDisplayMetrics().widthPixels;
     }
 }
