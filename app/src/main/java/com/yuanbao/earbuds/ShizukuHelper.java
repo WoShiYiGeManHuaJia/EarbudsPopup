@@ -297,6 +297,46 @@ public final class ShizukuHelper {
     }
 
     /**
+     * 列出小米蓝牙扩展里的组件，用来定位「快连弹窗」到底是哪个 Activity。
+     *
+     * 为什么要找具体组件：冻结整个 com.xiaomi.bluetooth 会连「开盖快连」
+     * 一起干掉，代价偏大。如果能定位到弹窗那个 Activity，
+     * 就能只禁它、保留蓝牙功能。
+     *
+     * dumpsys package 输出动辄几万行，这里只抽取含包名的组件行，
+     * 并优先列出名字里带 popup / dialog / fastconnect / ui 的（弹窗嫌疑最大）。
+     */
+    public static String dumpMiuiComponents() {
+        String out = exec("dumpsys package com.xiaomi.bluetooth");
+        if (out == null || out.trim().isEmpty()) return "  (无输出)";
+        String[] lines = out.split("\n");
+        java.util.LinkedHashSet<String> all = new java.util.LinkedHashSet<>();
+        java.util.LinkedHashSet<String> suspect = new java.util.LinkedHashSet<>();
+        String lower = out.toLowerCase();
+        for (String ln : lines) {
+            String t = ln.trim();
+            if (!t.contains("com.xiaomi.bluetooth")) continue;
+            // 只保留组件声明行（形如 com.xiaomi.bluetooth/.xxxActivity）
+            if (!t.contains("/")) continue;
+            if (all.size() < 120) all.add(t);
+            String tl = t.toLowerCase();
+            if (tl.contains("popup") || tl.contains("dialog")
+                    || tl.contains("fastconnect") || tl.contains("fast")
+                    || tl.contains("ui") || tl.contains("activity")
+                    || tl.contains("connect")) {
+                if (suspect.size() < 40) suspect.add(t);
+            }
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("  嫌疑最大（弹窗/连接/界面相关），共 ").append(suspect.size()).append(" 条：\n");
+        for (String s : suspect) sb.append("    ").append(s).append('\n');
+        sb.append("\n  全部组件行（最多120条）：\n");
+        for (String s : all) sb.append("    ").append(s).append('\n');
+        if (lower.contains("enabled=true")) sb.append("\n  (含 enabled 状态字段，可据此判断组件当前是否启用)\n");
+        return sb.toString();
+    }
+
+    /**
      * 自动探测 MIUI 扩展 AppOps：逐个尝试 set allow，
      * 不报错的即为有效编号，会被记录下来供后续硬编码。
      */

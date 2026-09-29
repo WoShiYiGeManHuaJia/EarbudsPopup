@@ -240,10 +240,50 @@ public class SetupActivity extends AppCompatActivity {
                 sb.append("   get → ").append(r[3]).append('\n');
             }
 
+            // 屏蔽到底生效没有，必须回读，不能只看命令有没有报错
+            sb.append("\n【小米弹窗屏蔽状态】\n");
+            for (String v : ShizukuHelper.verifyBlockState()) {
+                sb.append(v).append('\n');
+            }
+
+            // 列出小米蓝牙扩展的全部组件，用于定位弹窗到底是哪个 Activity。
+            // 冻整个包会连快连一起干掉；找到具体组件就能只禁弹窗、保留蓝牙。
+            sb.append("\n【小米蓝牙扩展 · 组件清单】\n");
+            sb.append("$ dumpsys package com.xiaomi.bluetooth\n");
+            sb.append(ShizukuHelper.dumpMiuiComponents()).append('\n');
+
             sb.append("\n========== 报告结束 ==========");
-            String report = sb.toString();
+            final String report = sb.toString();
             main.post(() -> {
                 busy(false);
+                // 报告越来越大，直接塞进 Intent 有大小上限（Binder 事务约 1MB，
+                // 不少 App 限制更小）。超阈值就落盘成文件再分享，更稳。
+                if (report.length() > 60000) {
+                    try {
+                        java.io.File dir = new java.io.File(
+                                getExternalFilesDir(null), "report");
+                        if (!dir.exists()) dir.mkdirs();
+                        java.io.File f = new java.io.File(dir, "诊断报告.txt");
+                        java.io.FileOutputStream fos =
+                                new java.io.FileOutputStream(f, false);
+                        fos.write(report.getBytes("UTF-8"));
+                        fos.close();
+                        android.net.Uri uri = androidx.core.content.FileProvider
+                                .getUriForFile(this, getPackageName() + ".files", f);
+                        Intent share = new Intent(Intent.ACTION_SEND);
+                        share.setType("text/plain");
+                        share.putExtra(Intent.EXTRA_STREAM, uri);
+                        share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivity(Intent.createChooser(share,
+                                "报告较长，已存成文件，发送这个"));
+                        Toast.makeText(this,
+                                "报告约 " + (report.length() / 1024) + " KB，已存成文件分享",
+                                Toast.LENGTH_LONG).show();
+                        return;
+                    } catch (Throwable e) {
+                        // 落盘失败就退回文本分享
+                    }
+                }
                 ClipboardManager cm =
                         (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                 if (cm != null) {
