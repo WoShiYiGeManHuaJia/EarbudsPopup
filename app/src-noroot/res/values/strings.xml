@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">EarPopup X</string>
+    <string name="notification_channel">耳机连接监控</string>
+</resources>

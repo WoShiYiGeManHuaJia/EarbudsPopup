@@ -3,18 +3,26 @@ plugins {
 }
 
 android {
-    namespace 'com.yuanbao.earbuds'
+    namespace 'com.earpopupx'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.yuanbao.earbuds"
-        minSdk 26
-        targetSdk 33
-        versionCode 2
-        versionName "1.1"
+        applicationId "com.earpopupx"
+        minSdk 29
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
     }
 
-    // 发布签名：密钥库由 CI 注入，本地没有时自动退回未签名配置
+    // 新架构源码放在 src-noroot，旧的 src/main 不再参与编译
+    sourceSets {
+        main {
+            manifest.srcFile 'src-noroot/AndroidManifest.xml'
+            java.srcDirs = ['src-noroot/java']
+            res.srcDirs = ['src-noroot/res']
+        }
+    }
+
     signingConfigs {
         release {
             def ksPath = System.getenv("KEYSTORE_FILE")
@@ -30,12 +38,12 @@ android {
     buildTypes {
         release {
             minifyEnabled false
+            shrinkResources false
             if (System.getenv("KEYSTORE_FILE")) {
                 signingConfig signingConfigs.release
             }
         }
         debug {
-            // debug 也用同一把密钥，保证 debug 与 release 可以互相覆盖安装
             if (System.getenv("KEYSTORE_FILE")) {
                 signingConfig signingConfigs.release
             }
@@ -51,16 +59,4 @@ android {
         abortOnError false
         checkReleaseBuilds false
     }
-}
-
-dependencies {
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'com.google.android.material:material:1.11.0'
-    implementation 'androidx.core:core:1.12.0'
-    implementation 'androidx.palette:palette:1.0.0'
-    implementation 'com.github.bumptech.glide:glide:4.16.0'
-
-    // Shizuku / Stellar：用于 App 内直接执行 shell 命令（免 Root 授权自身）
-    implementation 'dev.rikka.shizuku:api:13.1.5'
-    implementation 'dev.rikka.shizuku:provider:13.1.5'
 }
