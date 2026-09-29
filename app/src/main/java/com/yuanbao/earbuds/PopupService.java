@@ -641,28 +641,46 @@ public class PopupService extends Service {
         lastOverlayShownAt = System.currentTimeMillis();
         if (!android.provider.Settings.canDrawOverlays(this)) return;
 
-        // 横屏与竖屏共用 popup_card，不做单独的迷你窗：
-        // 横屏时把卡片整体等比缩小（宽度乘系数，高度随宽度按同一公式变小），
-        // 图片、设备名、左右耳电量全都保留。
+        // 横屏与竖屏共用 popup_card，横屏时做【整体视觉缩放】：
+        // 卡片内部完全按竖屏原始尺寸排版，再对整张卡 setScale()，
+        // 图片、设备名、左右耳电量全部同比例缩小，就是「等比缩小版」。
+        // （直接改卡片宽高会导致内部固定 dp 的字号/padding 不跟着缩，挤成一团。）
         final boolean scaled = (prefs.landscapeMode() == 2) && isLandscape(this);
-        View v = LayoutInflater.from(this).inflate(R.layout.popup_card, null);
-        PopupRenderer.bind(this, v, name, levels, prefs, this::dismiss);
         float dens = getResources().getDisplayMetrics().density;
-        // 高度必须写死：媒体区子 View 是 match_parent，
-        // 用 WRAP_CONTENT 会让卡片高度失控（表现为比例奇怪）。
-        // 算法与 PopupRenderer / PopupActivity 保持一致。
-        float scale = scaled ? prefs.landscapeScale() : 1f;
+        // 基准尺寸（竖屏原始值）
         float r = Math.max(0.40f, Math.min(0.94f, prefs.imageRatio()));
-        int widthPx = (int) (dp(prefs.widthDp()) * scale);
-        int heightPx = (int) (widthPx * (0.45f + r * 0.33f));
-        // 兜底：横屏屏幕高度小，卡片不能超过可视高度 80%，否则顶出屏幕
+        int baseW = (int) dp(prefs.widthDp());
+        int baseH = (int) (baseW * (0.45f + r * 0.33f));
+
+        float scale = scaled ? prefs.landscapeScale() : 1f;
         int screenH0 = getResources().getDisplayMetrics().heightPixels;
-        int maxH = (int) (screenH0 * 0.80f);
-        if (heightPx > maxH && heightPx > 0) {
-            float k = maxH / (float) heightPx;
-            widthPx = (int) (widthPx * k);
-            heightPx = maxH;
+        float visH = baseH * scale;
+        float maxVis = screenH0 * 0.85f;
+        if (visH > maxVis && visH > 0) {
+            scale = scale * (maxVis / visH);
+            visH = maxVis;
         }
+        float visW = baseW * scale;
+
+        View v = LayoutInflater.from(this).inflate(R.layout.popup_card, null);
+        // 必须在 bind 之前：bind 内部的入场动画会把 scale 收到这个值上
+        PopupRenderer.cardScale = scale;
+        PopupRenderer.bind(this, v, name, levels, prefs, this::dismiss);
+        v.setPivotX(0f);
+        v.setPivotY(0f);
+        v.setScaleX(scale);
+        v.setScaleY(scale);
+
+        // 窗口只占【缩放后】的区域，避免透明占位吞掉触摸；
+        // 内层卡片仍按原始尺寸排版后整体缩放，保证排版比例不变。
+        android.widget.FrameLayout outer = new android.widget.FrameLayout(this);
+        android.widget.FrameLayout.LayoutParams inner =
+                new android.widget.FrameLayout.LayoutParams(baseW, baseH);
+        inner.gravity = Gravity.TOP | Gravity.START;
+        outer.addView(v, inner);
+
+        int widthPx = (int) visW;
+        int heightPx = (int) visH;
         currentRoot = v;
         currentName = name;
 
@@ -687,12 +705,12 @@ public class PopupService extends Service {
         p.y = topOffsetForVPos(vpos, heightPx, screenH, dens, prefs.bottomPadDp());
 
         try {
-            wm.addView(v, p);
+            wm.addView(outer, p);
         } catch (Exception e) {
             Toast.makeText(this, "弹窗显示失败，请检查悬浮窗权限", Toast.LENGTH_SHORT).show();
             return;
         }
-        current = v;
+        current = outer;
 
         // 注意：这里【不能】再调 applyEnter。
         // PopupRenderer.bind() 内部已经执行过入场动画；

@@ -474,22 +474,33 @@ public final class PopupRenderer {
         }
     }
 
+    /**
+     * 卡片当前的目标缩放（横屏缩小弹窗用，竖屏恒为 1）。
+     *
+     * 入场 / 出场动画里原本写死把 scale 拉回 1f —— 横屏缩放下会把用户设的
+     * 缩放系数直接抹掉，表现就是「调了缩放比例没反应」。
+     * 动画必须收在这个目标值上，而不是 1。
+     */
+    public static volatile float cardScale = 1f;
+
     public static void applyEnter(View card, int style) {
         if (card == null) return;
         float d = card.getResources().getDisplayMetrics().density;
         card.animate().cancel();
         card.setTranslationY(140 * d);
         card.setAlpha(0.15f);
+        // 收在 cardScale（横屏缩小值）上，而不是写死的 1f
+        float ts = cardScale;
         if (style == ANIM_SCALE) {
-            card.setScaleX(0.94f);
-            card.setScaleY(0.94f);
-            card.animate().translationY(0).scaleX(1f).scaleY(1f).alpha(1f)
+            card.setScaleX(ts * 0.94f);
+            card.setScaleY(ts * 0.94f);
+            card.animate().translationY(0).scaleX(ts).scaleY(ts).alpha(1f)
                     .setDuration(340)
                     .setInterpolator(new DecelerateInterpolator())
                     .start();
         } else {
-            card.setScaleX(1f);
-            card.setScaleY(1f);
+            card.setScaleX(ts);
+            card.setScaleY(ts);
             card.animate().translationY(0).alpha(1f)
                     .setDuration(340)
                     .setInterpolator(new DecelerateInterpolator())
@@ -509,7 +520,7 @@ public final class PopupRenderer {
                 .setInterpolator(new android.view.animation.AccelerateInterpolator())
                 .alpha(0f)
                 .translationY(80 * d);
-        if (style == ANIM_SCALE) a.scaleX(0.94f).scaleY(0.94f);
+        if (style == ANIM_SCALE) a.scaleX(cardScale * 0.94f).scaleY(cardScale * 0.94f);
         if (after != null) a.withEndAction(after);
         a.start();
     }

@@ -176,39 +176,53 @@ public class PopupActivity extends AppCompatActivity {
         View card = findViewById(R.id.card);
         if (card != null) {
             float dens = getResources().getDisplayMetrics().density;
-            // 横屏缩放：宽度乘系数，高度由宽度按同一公式推出，
-            // 于是整张卡等比缩小（图片、设备名、左右耳电量全保留）。
-            float scale = useLandscapeScale() ? prefs.landscapeScale() : 1f;
-            int w = (int) (prefs.widthDp() * dens * scale);
+            // 卡片【按竖屏原始尺寸排版】，横屏时再做整体视觉缩放。
+            //
+            // 之前是直接把宽度乘系数、让高度跟着变小 —— 结果卡片变小了，
+            // 但内部的字号、padding、图标仍是固定 dp，不会跟着缩，
+            // 于是在小卡片里被挤成一团（用户看到的「位置错乱」）。
+            //
+            // 正确做法：内部完全按原尺寸排版，再对整张卡做 setScale()，
+            // 这样图片、设备名、左右耳电量全部同比例缩小，就是「等比缩小版」。
+            int w = (int) (prefs.widthDp() * dens);
             // 必须用固定高度：媒体区子 View 是 match_parent，
             // 若这里给 WRAP_CONTENT，卡片高度会失控（表现为比例奇怪）。
             // 高度算法与 PopupRenderer 保持一致。
             float r = Math.max(0.40f, Math.min(0.94f, prefs.imageRatio()));
             int h = (int) (w * (0.45f + r * 0.33f));
-            // 兜底：横屏时屏幕高度小，卡片再怎么缩也不能超过可视高度的 80%，
-            // 否则会顶出屏幕外。按高度反推宽度，保持宽高比不变。
+
+            float scale = useLandscapeScale() ? prefs.landscapeScale() : 1f;
+            // 横屏屏幕高度小，缩放后仍可能超出可视区域，再兜一层：
+            // 若视觉高度超过屏幕 85%，继续缩小直到放得下。
             int screenH0 = getResources().getDisplayMetrics().heightPixels;
-            int maxH = (int) (screenH0 * 0.80f);
-            if (h > maxH && h > 0) {
-                float k = maxH / (float) h;
-                w = (int) (w * k);
-                h = maxH;
+            float visH = h * scale;
+            float maxVis = screenH0 * 0.85f;
+            if (visH > maxVis && visH > 0) {
+                scale = scale * (maxVis / visH);
+                visH = maxVis;
             }
             android.widget.FrameLayout.LayoutParams lp =
                     new android.widget.FrameLayout.LayoutParams(w, h);
             // 与悬浮窗引擎一致：连续垂直位置（0=贴顶 100=贴底）
             lp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
             int screenH = getResources().getDisplayMetrics().heightPixels;
+            // 关键：定位必须用【缩放后的视觉高度】，否则贴底时会留出一大截空白
             lp.topMargin = PopupService.topOffsetForVPos(
-                    prefs.verticalPos(), h, screenH, dens, prefs.bottomPadDp());
+                    prefs.verticalPos(), (int) visH, screenH, dens, prefs.bottomPadDp());
             lp.bottomMargin = 0;
             card.setLayoutParams(lp);
-            // 复用时残留的位移/透明度/缩放要清掉，否则第二次弹窗位置会飘
+            // 复用时残留的位移/透明度要清掉，否则第二次弹窗位置会飘
             card.setTranslationX(0);
             card.setTranslationY(0);
-            card.setScaleX(1f);
-            card.setScaleY(1f);
             card.setAlpha(1f);
+            // 缩放必须放在最后：上面刚清过状态，若在此之前设置会被覆盖成 1.0，
+            // 表现就是「调缩放比例没有任何反应」。
+            card.setPivotX(w / 2f);   // 以顶部中心为基准，保证水平居中不变
+            card.setPivotY(0f);
+            card.setScaleX(scale);
+            card.setScaleY(scale);
+            // 入场动画会重置 scale，必须让它收在这个值上，否则缩放被抹平
+            PopupRenderer.cardScale = scale;
             card.animate().cancel();
         }
 

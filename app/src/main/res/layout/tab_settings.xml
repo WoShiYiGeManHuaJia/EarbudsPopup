@@ -613,6 +613,39 @@
                     android:src="@drawable/ic_chevron" />
             </LinearLayout>
 
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginStart="56dp"
+                android:background="@color/ui_divider" />
+
+            <LinearLayout
+                android:id="@+id/rowHciFilter"
+                style="@style/AppRow">
+
+                <ImageView
+                    style="@style/AppRowIcon"
+                    android:contentDescription="精简"
+                    android:src="@drawable/ic_tune" />
+
+                <LinearLayout style="@style/AppRowText">
+                    <TextView
+                        style="@style/TextRowTitle"
+                        android:text="精简日志（只留本耳机数据）" />
+
+                    <TextView
+                        style="@style/TextRowSub"
+                        android:text="几十 MB 压到几 MB，直接选 bugreport 压缩包" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/AppRowIcon"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription="前往"
+                    android:src="@drawable/ic_chevron" />
+            </LinearLayout>
+
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -621,7 +654,7 @@
                 android:paddingTop="10dp"
                 android:paddingBottom="14dp"
                 android:lineSpacingExtra="3dp"
-                android:text="操作顺序：① 点第一项拨出代码开始记录 ② 关盖再开盖、连上耳机、打开系统弹窗和「小米耳机」App 各看一次电量 ③ 再拨一次代码停止 ④ 等 30 秒，到 MIUI/debug_log 取出 bugreport 压缩包，用第三项发出来。日志里只要有目标耳机的 ACL 数据，就能按真实字节反推左右耳与充电盒电量。这一步不需要 Root，也不需要电脑。"
+                android:text="操作顺序：① 点第一项拨出代码开始记录 ② 关盖再开盖、连上耳机、打开系统弹窗和「小米耳机」App 各看一次电量 ③ 再拨一次代码停止 ④ 等 30 秒，到 MIUI/debug_log 取出 bugreport 压缩包 ⑤ 用「精简日志」选中它，会自动解压并按耳机 MAC 过滤，只留与该耳机相关的数据包，通常能压到原来的百分之几 ⑥ 分享出来。全程不需要 Root，也不需要电脑。"
                 android:textColor="@color/ui_text_secondary"
                 android:textSize="11.5sp" />
         </LinearLayout>

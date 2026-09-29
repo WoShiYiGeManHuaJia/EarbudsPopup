@@ -75,6 +75,9 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvBg, tvTextColor, tvAccent;
     private TextView tvWidth, tvRadius, tvImgH, tvDuration, tvPos, tvAnim;
     private TextView tvLandscapeScale;
+
+    /** 挑选 HCI 日志做精简的请求码 */
+    private static final int REQ_PICK_HCI_FILTER = 9912;
     private SwitchMaterial swAutoColor;
 
     // 设置
@@ -333,6 +336,10 @@ public class MainActivity extends AppCompatActivity {
         if (rowHciExport != null) {
             rowHciExport.setOnClickListener(v -> HciLogHelper.pickLogFile(this));
         }
+        View rowHciFilter = findViewById(R.id.rowHciFilter);
+        if (rowHciFilter != null) {
+            rowHciFilter.setOnClickListener(v -> pickHciForFilter());
+        }
 
         // 崩溃日志查看 / 导出
         View rowCrash = findViewById(R.id.rowCrashLog);
@@ -574,6 +581,99 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /** 挑选要精简的 HCI 日志（btsnoop_hci.log 或 bugreport 压缩包） */
+    private void pickHciForFilter() {
+        String mac = prefs != null ? prefs.lastAddress() : null;
+        if (mac == null || mac.isEmpty()) {
+            Toast.makeText(this, "还没连过耳机，先连一次再回来（需要它的 MAC 来过滤）",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        try {
+            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.setType("*/*");
+            startActivityForResult(i, REQ_PICK_HCI_FILTER);
+        } catch (Exception e) {
+            Toast.makeText(this, "无法打开文件选择器", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** 后台执行精简，避免大文件卡住主线程 */
+    private void runHciFilter(Uri uri, String mac) {
+        final android.app.ProgressDialog pd = new android.app.ProgressDialog(this);
+        pd.setMessage("正在精简日志…\n这一步在本地完成，不联网");
+        pd.setCancelable(false);
+        pd.show();
+        final File outDir = new File(getExternalFilesDir(null), "hci");
+        new Thread(() -> {
+            final HciFilter.Result r = HciFilter.filter(
+                    getApplicationContext(), uri, mac, outDir);
+            runOnUiThread(() -> {
+                try { pd.dismiss(); } catch (Throwable ignored) { }
+                showHciFilterResult(r);
+            });
+        }).start();
+    }
+
+    private void showHciFilterResult(HciFilter.Result r) {
+        StringBuilder sb = new StringBuilder();
+        if (r.handles != null && !r.handles.isEmpty()) {
+            sb.append("匹配到的连接 handle：").append(String.join(", ", r.handles)).append("\n\n");
+        }
+        sb.append("原始大小：").append(mb(r.inBytes)).append("\n");
+        sb.append("精简后：").append(mb(r.outBytes)).append("\n");
+        sb.append("数据包：").append(r.keptRecords).append(" / ").append(r.totalRecords).append("\n");
+        if (r.seenMacs != null && !r.seenMacs.isEmpty()) {
+            sb.append("\n日志里出现过的设备：\n");
+            int n = Math.min(r.seenMacs.size(), 12);
+            for (int i = 0; i < n; i++) sb.append("  ").append(r.seenMacs.get(i)).append("\n");
+            if (r.seenMacs.size() > n) sb.append("  …共 ").append(r.seenMacs.size()).append(" 个\n");
+        }
+        if (r.message != null && !r.message.isEmpty()) {
+            sb.append("\n").append(r.message);
+        }
+
+        TextView tv = new TextView(this);
+        tv.setText(sb.toString());
+        tv.setTextIsSelectable(true);
+        tv.setTextSize(12f);
+        tv.setTypeface(android.graphics.Typeface.MONOSPACE);
+        int pad = (int) (18 * getResources().getDisplayMetrics().density);
+        tv.setPadding(pad, pad, pad, pad);
+
+        com.google.android.material.dialog.MaterialAlertDialogBuilder b =
+                new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                        .setTitle(r.ok ? "日志已精简" : "精简失败")
+                        .setView(tv)
+                        .setNegativeButton("关闭", null);
+        if (r.ok && r.out != null && r.out.exists()) {
+            b.setPositiveButton("分享", (d, w) -> shareFile(r.out, "text/plain"));
+        }
+        b.show();
+    }
+
+    private static String mb(long bytes) {
+        if (bytes <= 0) return "0 KB";
+        if (bytes < 1024 * 1024) return (bytes / 1024 + 1) + " KB";
+        return String.format(java.util.Locale.US, "%.2f MB", bytes / 1048576.0);
+    }
+
+    /** 分享任意私有目录下的文件 */
+    private void shareFile(File f, String mime) {
+        try {
+            android.net.Uri uri = androidx.core.content.FileProvider
+                    .getUriForFile(this, getPackageName() + ".files", f);
+            Intent i = new Intent(Intent.ACTION_SEND);
+            i.setType(mime);
+            i.putExtra(Intent.EXTRA_STREAM, uri);
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(i, "导出"));
+        } catch (Throwable e) {
+            Toast.makeText(this, "导出失败：" + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+
     /**
      * 转发 HCI 日志文件的选择结果。
      * 挑到文件后立刻转成分享 Intent，用户可以发到自己电脑或网盘。
@@ -581,9 +681,12 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == HciLogHelper.REQ_PICK_LOG && resultCode == RESULT_OK
-                && data != null && data.getData() != null) {
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        if (requestCode == HciLogHelper.REQ_PICK_LOG) {
             HciLogHelper.shareLogFile(this, data.getData());
+        } else if (requestCode == REQ_PICK_HCI_FILTER) {
+            String mac = prefs != null ? prefs.lastAddress() : null;
+            if (mac != null && !mac.isEmpty()) runHciFilter(data.getData(), mac);
         }
     }
 
@@ -1146,6 +1249,13 @@ public class MainActivity extends AppCompatActivity {
         float pvw = prefs.widthDp() * d;
         // 预览缩放系数：卡片变宽后要留足边距，取 0.82
         int w = (int) (pvw * 0.82f);
+        // 上限保护：宽度滑块拉到最大时，预览卡会撑破容器（外层 NestedScrollView
+        // 18dp + 分组卡内边距 + 预览舞台 16dp 层层叠加），表现为页面横向溢出、
+        // 元素错位。这里按屏幕宽减去各级 padding 估算可用宽度并夹住。
+        int screenW = getResources().getDisplayMetrics().widthPixels;
+        int reserved = (int) (104 * d);   // 各级容器横向 padding 合计约 104dp
+        int maxW = Math.max((int) (120 * d), screenW - reserved);
+        if (w > maxW) w = maxW;
         float ratio = Math.max(0.40f, Math.min(0.94f, prefs.imageRatio()));
         float cardRatio = 0.45f + ratio * 0.33f;
         int h = (int) (w * cardRatio);
@@ -1341,10 +1451,21 @@ public class MainActivity extends AppCompatActivity {
         updatePreview();
     }
 
-    /** 给相框和首页预览都挂上双指缩放 / 单指拖动 */
+    /**
+     * 只给【外观页的相框】挂双指缩放 / 单指拖动。
+     *
+     * 首页那个「实时预览」是只读展示：它按屏幕比例缩小过，
+     * 在上面拖动算出来的偏移会被 0.82 的预览系数放大/缩小，
+     * 与实际弹窗对不上，而且用户在首页随手一划就把设置改了。
+     * 要调图片缩放与位置，请到「外观」页的相框里调。
+     */
     private void setupImageGesture() {
         attachGesture(pvFrameImage);
-        attachGesture(pvImage);
+        // pvImage（首页预览）刻意不挂手势
+        if (pvImage != null) {
+            pvImage.setOnTouchListener(null);
+            pvImage.setClickable(false);
+        }
     }
 
     /**
