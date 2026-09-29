@@ -431,6 +431,20 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.rowBlockMi).setOnClickListener(v -> showMiPopupGuide());
         findViewById(R.id.rowAdb).setOnClickListener(v -> copyAdbCommands());
 
+        // v1.3：HCI 抓包助手（拿左右耳真实电量的唯一前置步骤）
+        View rowHciDial = findViewById(R.id.rowHciDial);
+        if (rowHciDial != null) {
+            rowHciDial.setOnClickListener(v -> HciLogHelper.startLogCapture(this));
+        }
+        View rowHciDev = findViewById(R.id.rowHciDev);
+        if (rowHciDev != null) {
+            rowHciDev.setOnClickListener(v -> HciLogHelper.openDeveloperOptions(this));
+        }
+        View rowHciExport = findViewById(R.id.rowHciExport);
+        if (rowHciExport != null) {
+            rowHciExport.setOnClickListener(v -> HciLogHelper.pickLogFile(this));
+        }
+
         // 设置页
         findViewById(R.id.btnRefresh).setOnClickListener(v -> refreshDevices());
         findViewById(R.id.btnNotiSettings).setOnClickListener(v -> openNotificationSettings());
@@ -1914,6 +1928,19 @@ public class MainActivity extends AppCompatActivity {
                 + "pm grant com.yuanbao.earbuds android.permission.POST_NOTIFICATIONS\n"
                 + "dumpsys deviceidle whitelist +com.yuanbao.earbuds",
                 "已复制，在 Stellar 命令页粘贴执行");
+    }
+
+    /**
+     * v1.3：转发 HCI 日志文件的选择结果。
+     * 挑到文件后立刻转成分享 Intent，用户可以发到自己电脑或网盘。
+     */
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == HciLogHelper.REQ_PICK_LOG && resultCode == RESULT_OK
+                && data != null && data.getData() != null) {
+            HciLogHelper.shareLogFile(this, data.getData());
+        }
     }
 
     private void copyAdbCommands() {

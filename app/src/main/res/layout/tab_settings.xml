@@ -89,6 +89,18 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
+        <TextView style="@style/TextSectionTitle" android:layout_marginTop="30dp" android:text="左右耳电量 · HCI 抓包（v1.3）" />
+        <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" app:cardBackgroundColor="#FFF6F1FF" app:cardCornerRadius="26dp" app:cardElevation="3dp" app:strokeColor="#40000000" app:strokeWidth="1dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                <LinearLayout android:id="@+id/rowHciDial" style="@style/AppRow"><ImageView style="@style/AppRowIcon" android:src="@drawable/ic_bluetooth" android:contentDescription="抓包"/><LinearLayout style="@style/AppRowText"><TextView style="@style/TextRowTitle" android:text="开始 / 停止蓝牙日志（免 Root）"/><TextView style="@style/TextRowSub" android:text="复制 *#*#5959#*#* 并打开拨号盘"/></LinearLayout><ImageView style="@style/AppRowIcon" android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chevron" android:contentDescription="前往"/></LinearLayout>
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="57dp" android:background="@color/ui_divider" />
+                <LinearLayout android:id="@+id/rowHciDev" style="@style/AppRow"><ImageView style="@style/AppRowIcon" android:src="@drawable/ic_info" android:contentDescription="开发者"/><LinearLayout style="@style/AppRowText"><TextView style="@style/TextRowTitle" android:text="打开开发者选项"/><TextView style="@style/TextRowSub" android:text="手动开启「蓝牙 HCI 信息收集日志」"/></LinearLayout><ImageView style="@style/AppRowIcon" android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chevron" android:contentDescription="前往"/></LinearLayout>
+                <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginStart="57dp" android:background="@color/ui_divider" />
+                <LinearLayout android:id="@+id/rowHciExport" style="@style/AppRow"><ImageView style="@style/AppRowIcon" android:src="@drawable/ic_refresh" android:contentDescription="导出"/><LinearLayout style="@style/AppRowText"><TextView style="@style/TextRowTitle" android:text="导出日志文件"/><TextView style="@style/TextRowSub" android:text="挑选 btsnoop_hci.log 或 bugreport zip 发出去"/></LinearLayout><ImageView style="@style/AppRowIcon" android:layout_width="20dp" android:layout_height="20dp" android:src="@drawable/ic_chevron" android:contentDescription="前往"/></LinearLayout>
+                <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:lineSpacingExtra="3dp" android:padding="16dp" android:text="操作顺序：① 点第一项拨出代码开始记录 ② 关盖再开盖、连上耳机、打开系统弹窗和「小米耳机」App 各看一次三项电量 ③ 再拨一次代码停止 ④ 等 30 秒，到 MIUI/debug_log 取出 bugreport 压缩包，用第四项发出来。日志里只要有目标耳机的 ACL 数据，就能按真实字节反推左右耳与充电盒电量。这一步不需要 Root，也不需要电脑。" android:textColor="@color/ui_text_secondary" android:textSize="11sp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <TextView style="@style/TextSectionTitle" android:layout_marginTop="30dp" android:text="后台与省电" />
         <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" app:cardBackgroundColor="#F5FFFFFF" app:cardCornerRadius="26dp" app:cardElevation="3dp" app:strokeColor="#30000000" app:strokeWidth="1dp">
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
