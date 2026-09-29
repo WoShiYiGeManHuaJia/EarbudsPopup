@@ -19,6 +19,7 @@ public final class BluetoothBatteryReader {
     private static final UUID BATTERY_SERVICE = UUID.fromString("0000180F-0000-1000-8000-00805F9B34FB");
     private static final UUID BATTERY_LEVEL = UUID.fromString("00002A19-0000-1000-8000-00805F9B34FB");
     private final Context context;
+    private volatile BluetoothGatt lastGatt;
     public BluetoothBatteryReader(Context c) { context=c.getApplicationContext(); }
 
     public void read(BluetoothDevice d, Callback cb) {
@@ -84,9 +85,20 @@ public final class BluetoothBatteryReader {
                     finishGatt();
                 }
             });
+            lastGatt = holder[0];
             timeoutHandler.postDelayed(timeout, 9000L);
         } catch (Throwable t) {
             safe.onState(BatteryState.unknown("Bluetooth read unavailable"));
+        }
+    }
+
+    /** Releases any GATT connection still held, so the monitor service can shut down cleanly. */
+    public void close() {
+        BluetoothGatt g = lastGatt;
+        lastGatt = null;
+        if (g != null) {
+            try { g.disconnect(); } catch (Throwable ignored) {}
+            try { g.close(); } catch (Throwable ignored) {}
         }
     }
 
