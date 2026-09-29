@@ -605,7 +605,7 @@ public class MainActivity extends AppCompatActivity {
         pd.setMessage("正在精简日志…\n这一步在本地完成，不联网");
         pd.setCancelable(false);
         pd.show();
-        final File outDir = new File(getExternalFilesDir(null), "hci");
+        final java.io.File outDir = new java.io.File(getExternalFilesDir(null), "hci");
         new Thread(() -> {
             final HciFilter.Result r = HciFilter.filter(
                     getApplicationContext(), uri, mac, outDir);
@@ -660,7 +660,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /** 分享任意私有目录下的文件 */
-    private void shareFile(File f, String mime) {
+    private void shareFile(java.io.File f, String mime) {
         try {
             android.net.Uri uri = androidx.core.content.FileProvider
                     .getUriForFile(this, getPackageName() + ".files", f);
