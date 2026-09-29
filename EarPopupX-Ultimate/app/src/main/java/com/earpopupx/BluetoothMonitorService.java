@@ -14,6 +14,11 @@ public final class BluetoothMonitorService extends Service {
     private static final String CHANNEL="earpopupx_monitor";
     private static final int RAW_MAX = 60;
 
+    /** HyperOS re-delivers a stale "connected" broadcast right after a real
+     *  disconnect. Ignore connect events for this long after a disconnect so the
+     *  popup does not reappear when the headset is switched off. */
+    private static final long DISCONNECT_SUPPRESS_MS = 9000L;
+
     private static final List<String> RAW_LOG = Collections.synchronizedList(new ArrayList<String>());
     public static List<String> rawLog(){ return new ArrayList<String>(RAW_LOG); }
     public static void record(String line){
@@ -31,6 +36,15 @@ public final class BluetoothMonitorService extends Service {
     private String currentAddress;
     private boolean started;
     private boolean gotValue;
+    private long lastDisconnectAt;
+
+    private final Runnable pollTask = new Runnable() {
+        @Override public void run() {
+            if(!started) return;
+            detectAlreadyConnected();
+            main.postDelayed(this, 2500L);
+        }
+    };
 
     @Override public void onCreate(){
         super.onCreate();
@@ -47,6 +61,8 @@ public final class BluetoothMonitorService extends Service {
         startAsForeground();
         started=true;
         main.post(this::detectAlreadyConnected);
+        main.removeCallbacks(pollTask);
+        main.postDelayed(pollTask, 2500L);
         return START_STICKY;
     }
 
@@ -83,7 +99,12 @@ public final class BluetoothMonitorService extends Service {
                     main.post(()->handleConnected(d));
                 } else if(BluetoothDevice.ACTION_ACL_DISCONNECTED.equals(a)){
                     main.post(()->{
-                        if(same(d)){ currentAddress=null; popup.dismiss(); }
+                        if(same(d)){
+                            currentAddress=null;
+                            lastDisconnectAt=System.currentTimeMillis();
+                            record("断开 "+safeName(d));
+                            popup.dismiss();
+                        }
                     });
                 } else if("android.bluetooth.device.action.BATTERY_LEVEL_CHANGED".equals(a)){
                     int v=i.getIntExtra("android.bluetooth.device.extra.BATTERY_LEVEL",-1);
@@ -110,16 +131,21 @@ public final class BluetoothMonitorService extends Service {
         String addr;
         try{ addr=d.getAddress(); }catch(Throwable t){ return; }
         if(addr==null) return;
+        if(addr.equals(currentAddress)) return;
+        if(System.currentTimeMillis()-lastDisconnectAt < DISCONNECT_SUPPRESS_MS){
+            record("抑制补发的连接广播 "+addr);
+            return;
+        }
         currentAddress=addr;
         gotValue=false;
         synchronized(RAW_LOG){ RAW_LOG.clear(); }
-        record("连接 "+safeName(d));
+        record("连接 "+safeName(d)+" ("+addr+")");
         popup.show(safeName(d),BatteryState.unknown("正在读取真实电量…"));
 
         sniffer.setSink(new VendorBatterySniffer.Sink(){
             public void onBattery(BatteryState s){
                 main.post(()->{
-                    if(same(d)&&!gotValue&&AppPrefs.enabled(BluetoothMonitorService.this)){
+                    if(same(d)&&AppPrefs.enabled(BluetoothMonitorService.this)){
                         gotValue=true;
                         popup.update(safeName(d),s);
                     }
@@ -131,8 +157,8 @@ public final class BluetoothMonitorService extends Service {
 
         reader.read(d,s->{
             main.post(()->{
-                record("标准通道 "+s.source);
-                if(same(d)&&!gotValue&&AppPrefs.enabled(BluetoothMonitorService.this)&&s.aggregate>=0){
+                record("标准通道 "+s.source+(s.aggregate>=0?(" = "+s.aggregate+"%"):""));
+                if(same(d)&&AppPrefs.enabled(BluetoothMonitorService.this)&&s.aggregate>=0){
                     gotValue=true;
                     popup.update(safeName(d),s);
                 }
@@ -140,8 +166,11 @@ public final class BluetoothMonitorService extends Service {
         });
     }
 
+    /** Poll is the reliable path on HyperOS: ACL broadcasts get throttled, but
+     *  the bonded-device connection state stays readable. */
     private void detectAlreadyConnected(){
         if(!AppPrefs.enabled(this)) return;
+        if(Build.VERSION.SDK_INT>=31&&checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED) return;
         try{
             BluetoothAdapter a=BluetoothAdapter.getDefaultAdapter();
             if(a==null||!a.isEnabled()) return;
@@ -196,6 +225,7 @@ public final class BluetoothMonitorService extends Service {
 
     @Override public void onDestroy(){
         started=false;
+        main.removeCallbacks(pollTask);
         try{ unregisterReceiver(receiver); }catch(Throwable ignored){}
         if(reader!=null) reader.close();
         if(sniffer!=null) sniffer.stop();

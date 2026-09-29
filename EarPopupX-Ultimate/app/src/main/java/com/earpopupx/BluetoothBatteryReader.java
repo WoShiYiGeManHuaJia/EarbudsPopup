@@ -5,109 +5,184 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
+import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothProfile;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Handler;
 import android.os.Looper;
+
 import java.lang.reflect.Method;
 import java.util.UUID;
 
-/** Reads only values actually supplied by Android/vendor Bluetooth. Never invents battery percentages. */
+/**
+ * Reads only values the headset actually reports. Never invents a percentage.
+ *
+ * Two channels race each other:
+ *
+ *   1) BLE Battery Service 0x180F/0x2A19 - read straight off the headset.
+ *      This is the ONLY channel the user's own logs proved to return a real,
+ *      changing value (100 and 90 at two different moments).
+ *   2) Android bluetooth stack cache - getBatteryLevel(). It is what the stack
+ *      filled in from the headset's HFP report, so it is a real value too, but
+ *      it can still hold the previous headset's number right after a switch.
+ *
+ * The GATT value outranks the cached one, so a stale cache can never win.
+ */
 public final class BluetoothBatteryReader {
+
     public interface Callback { void onState(BatteryState state); }
+
     private static final UUID BATTERY_SERVICE = UUID.fromString("0000180F-0000-1000-8000-00805F9B34FB");
-    private static final UUID BATTERY_LEVEL = UUID.fromString("00002A19-0000-1000-8000-00805F9B34FB");
+    private static final UUID BATTERY_LEVEL   = UUID.fromString("00002A19-0000-1000-8000-00805F9B34FB");
+
+    private static final int T_SYS  = 1;
+    private static final int T_GATT = 2;
+
     private final Context context;
     private volatile BluetoothGatt lastGatt;
-    public BluetoothBatteryReader(Context c) { context=c.getApplicationContext(); }
+
+    public BluetoothBatteryReader(Context c) { context = c.getApplicationContext(); }
 
     public void read(BluetoothDevice d, Callback cb) {
-        final java.util.concurrent.atomic.AtomicBoolean finished = new java.util.concurrent.atomic.AtomicBoolean(false);
-        Callback safe = state -> {
-            if (!finished.compareAndSet(false, true)) return;
-            new Handler(Looper.getMainLooper()).post(() -> cb.onState(state));
-        };
+        final Hub hub = new Hub(cb);
 
-        int level = getSystemLevel(d);
-        if (level >= 0) { safe.onState(new BatteryState(level,-1,-1,-1,false,false,false,"Android Bluetooth")); return; }
-        if (android.os.Build.VERSION.SDK_INT >= 31 && context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-            safe.onState(BatteryState.unknown("无 BLUETOOTH_CONNECT 权限")); return;
+        int sys0 = systemLevel(d);
+        if (sys0 >= 0) {
+            hub.emit(new BatteryState(sys0, -1, -1, -1, false, false, false, "系统蓝牙缓存"), T_SYS);
         }
 
-        // Standard Battery Service is a GATT/BLE service. Do not open a GATT connection
-        // against classic-only headsets; many earbuds expose their battery through the
-        // Bluetooth stack or a vendor protocol instead.
-        try {
-            int type = d.getType();
-            if (type == BluetoothDevice.DEVICE_TYPE_CLASSIC) {
-                safe.onState(BatteryState.unknown("未提供标准 BLE 电量"));
-                return;
-            }
-        } catch (Throwable ignored) {}
+        startGatt(d, hub);
+        pollSystem(d, hub);
+    }
 
+    private void startGatt(BluetoothDevice d, Hub hub) {
+        if (android.os.Build.VERSION.SDK_INT >= 31
+                && context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            hub.gattDone();
+            return;
+        }
         final BluetoothGatt[] holder = new BluetoothGatt[1];
-        final Handler timeoutHandler = new Handler(Looper.getMainLooper());
-        final Runnable timeout = () -> {
-            safe.onState(BatteryState.unknown("读取电量超时"));
-            BluetoothGatt g = holder[0];
-            if (g != null) { try { g.disconnect(); } catch (Throwable ignored) {} try { g.close(); } catch (Throwable ignored) {} }
-        };
+        final Handler h = new Handler(Looper.getMainLooper());
+        final Runnable timeout = () -> { hub.gattDone(); closeGatt(holder[0]); };
         try {
             holder[0] = d.connectGatt(context, false, new BluetoothGattCallback() {
-                private void finishGatt() {
-                    timeoutHandler.removeCallbacks(timeout);
-                    BluetoothGatt g = holder[0];
-                    if (g != null) { try { g.disconnect(); } catch (Throwable ignored) {} try { g.close(); } catch (Throwable ignored) {} }
-                }
                 @Override public void onConnectionStateChange(BluetoothGatt g, int status, int newState) {
                     if (newState == BluetoothProfile.STATE_CONNECTED) {
-                        try { g.discoverServices(); } catch (Throwable t) { safe.onState(BatteryState.unknown("发现服务失败")); finishGatt(); }
+                        try {
+                            g.discoverServices();
+                            return;
+                        } catch (Throwable t) {
+                            h.removeCallbacks(timeout);
+                            hub.gattDone();
+                            closeGatt(g);
+                        }
                     } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                        safe.onState(BatteryState.unknown("BLE 连接失败")); finishGatt();
+                        h.removeCallbacks(timeout);
+                        hub.gattDone();
+                        closeGatt(g);
                     }
                 }
                 @Override public void onServicesDiscovered(BluetoothGatt g, int status) {
-                    if (status != BluetoothGatt.GATT_SUCCESS) { safe.onState(BatteryState.unknown("发现电量服务失败")); finishGatt(); return; }
+                    if (status != BluetoothGatt.GATT_SUCCESS) {
+                        h.removeCallbacks(timeout);
+                        hub.gattDone();
+                        closeGatt(g);
+                        return;
+                    }
                     try {
-                        android.bluetooth.BluetoothGattService svc = g.getService(BATTERY_SERVICE);
+                        BluetoothGattService svc = g.getService(BATTERY_SERVICE);
                         BluetoothGattCharacteristic c = svc == null ? null : svc.getCharacteristic(BATTERY_LEVEL);
                         if (c != null && g.readCharacteristic(c)) return;
                     } catch (Throwable ignored) {}
-                    safe.onState(BatteryState.unknown("Bluetooth Battery Service unavailable"));
-                    finishGatt();
+                    h.removeCallbacks(timeout);
+                    hub.gattDone();
+                    closeGatt(g);
                 }
                 @Override public void onCharacteristicRead(BluetoothGatt g, BluetoothGattCharacteristic c, int status) {
+                    h.removeCallbacks(timeout);
                     if (status == BluetoothGatt.GATT_SUCCESS && BATTERY_LEVEL.equals(c.getUuid())) {
-                        int v = c.getValue() == null || c.getValue().length == 0 ? -1 : (c.getValue()[0] & 0xff);
-                        safe.onState(v >= 0 && v <= 100 ? new BatteryState(v,-1,-1,-1,false,false,false,"BLE Battery Service") : BatteryState.unknown("BLE 电量值无效"));
-                    } else safe.onState(BatteryState.unknown("BLE read failed"));
-                    finishGatt();
+                        byte[] v = c.getValue();
+                        if (v != null && v.length > 0) {
+                            int lv = v[0] & 0xff;
+                            if (lv <= 100) {
+                                hub.emit(new BatteryState(lv, -1, -1, -1, false, false, false, "BLE 直读耳机"), T_GATT);
+                            }
+                        }
+                    }
+                    hub.gattDone();
+                    closeGatt(g);
                 }
-            });
+            }, BluetoothDevice.TRANSPORT_LE);
             lastGatt = holder[0];
-            timeoutHandler.postDelayed(timeout, 9000L);
+            h.postDelayed(timeout, 7000L);
         } catch (Throwable t) {
-            safe.onState(BatteryState.unknown("Bluetooth read unavailable"));
+            hub.gattDone();
         }
     }
 
-    /** Releases any GATT connection still held, so the monitor service can shut down cleanly. */
+    /** The stack cache is refreshed when the headset reports over HFP, so keep
+     *  reading it for a short window and push every change to the popup. */
+    private void pollSystem(BluetoothDevice d, Hub hub) {
+        final Handler h = new Handler(Looper.getMainLooper());
+        final int[] last = { systemLevel(d) };
+        final int[] same = { 0 };
+        final int[] tries = { 0 };
+        final Runnable poll = new Runnable() {
+            @Override public void run() {
+                int v = systemLevel(d);
+                if (v >= 0) {
+                    if (v == last[0]) same[0]++;
+                    else { last[0] = v; same[0] = 0; }
+                    hub.emit(new BatteryState(last[0], -1, -1, -1, false, false, false, "系统蓝牙"), T_SYS);
+                }
+                tries[0]++;
+                if (same[0] >= 2 || tries[0] >= 10) return;
+                h.postDelayed(this, 250L);
+            }
+        };
+        h.postDelayed(poll, 250L);
+    }
+
+    private void closeGatt(BluetoothGatt g) {
+        if (g == null) return;
+        try { g.disconnect(); } catch (Throwable ignored) {}
+        try { g.close(); } catch (Throwable ignored) {}
+    }
+
     public void close() {
         BluetoothGatt g = lastGatt;
         lastGatt = null;
-        if (g != null) {
-            try { g.disconnect(); } catch (Throwable ignored) {}
-            try { g.close(); } catch (Throwable ignored) {}
-        }
+        closeGatt(g);
     }
 
-    private int getSystemLevel(BluetoothDevice d) {
+    private int systemLevel(BluetoothDevice d) {
         try {
             Method m = BluetoothDevice.class.getMethod("getBatteryLevel");
             Object r = m.invoke(d);
-            if (r instanceof Integer) { int v=(Integer)r; if (v>=0 && v<=100) return v; }
+            if (r instanceof Integer) {
+                int v = (Integer) r;
+                if (v >= 0 && v <= 100) return v;
+            }
         } catch (Throwable ignored) {}
         return -1;
+    }
+
+    /** Keeps the most trustworthy value seen so far; a lower-trust channel can
+     *  never overwrite a higher-trust one. */
+    private static final class Hub {
+        private final Callback cb;
+        private final Handler h = new Handler(Looper.getMainLooper());
+        private int trust = -1;
+
+        Hub(Callback cb) { this.cb = cb; }
+
+        synchronized void emit(BatteryState s, int t) {
+            if (t < trust) return;
+            trust = t;
+            h.post(() -> cb.onState(s));
+        }
+
+        synchronized void gattDone() { }
     }
 }

@@ -1,6 +1,6 @@
 package com.earpopupx;
 
-import android.Manifest;import android.app.*;import android.content.*;import android.content.pm.PackageManager;import android.net.Uri;import android.os.*;import android.provider.Settings;import android.view.*;import android.widget.*;import java.util.List;
+import android.Manifest;import android.app.*;import android.content.*;import android.content.pm.PackageManager;import android.graphics.Color;import android.net.Uri;import android.os.*;import android.provider.Settings;import android.view.*;import android.widget.*;import java.util.List;import java.util.Set;
 
 public final class MainActivity extends Activity{
  static final int REQ_BT=10,REQ_NOTIFY=11,REQ_MEDIA=12;TextView status,pos,diag;SeekBar x,y,w,h,r,b,dim,dur;Switch auto,drag;
@@ -26,6 +26,17 @@ public final class MainActivity extends Activity{
   addAdbAndDiagnostics();
  }
 
+ private LinearLayout.LayoutParams lpBtn(){
+  LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,(int)(46*getResources().getDisplayMetrics().density+.5f));
+  p.topMargin=(int)(8*getResources().getDisplayMetrics().density+.5f);
+  return p;
+ }
+ private LinearLayout.LayoutParams lpBtnBig(){
+  LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,(int)(50*getResources().getDisplayMetrics().density+.5f));
+  p.topMargin=(int)(10*getResources().getDisplayMetrics().density+.5f);
+  return p;
+ }
+
  // ---------------------------------------------------------- ADB one button
 
  private String adbScript(){
@@ -43,7 +54,6 @@ public final class MainActivity extends Activity{
    +"adb shell settings put global hidden_api_policy 1\n";
  }
 
- /** Skips the adb shell prefix so it can be pasted straight into Stellar / a local shell. */
  private String shellScript(){
   String p=getPackageName();
   return "appops set "+p+" SYSTEM_ALERT_WINDOW allow\n"
@@ -61,62 +71,105 @@ public final class MainActivity extends Activity{
 
  private void addAdbAndDiagnostics(){
   try{
-   View host0=findViewById(R.id.status);
-   ViewGroup host=host0!=null&&host0.getParent() instanceof ViewGroup ? (ViewGroup)host0.getParent() : null;
+   ViewGroup host=findViewById(R.id.advHost);
    if(host==null)return;
-   int pad=(int)(10*getResources().getDisplayMetrics().density+.5f);
+   int pad=(int)(8*getResources().getDisplayMetrics().density+.5f);
 
-   TextView head=new TextView(this);head.setText("ADB 一键授权");head.setTextSize(15);head.setTypeface(null,1);
-   head.setPadding(pad,pad*2,pad,pad);host.addView(head);
-
-   Button pc=new Button(this);pc.setText("① 复制电脑版 ADB 命令");
-   pc.setOnClickListener(v->{ClipboardManager cm=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText("adb",adbScript()));Toast.makeText(this,"已复制，粘贴到电脑终端执行",Toast.LENGTH_LONG).show();});
-   host.addView(pc);
-
-   Button sh=new Button(this);sh.setText("② 复制 Stellar / 本地 Shell 命令");
-   sh.setOnClickListener(v->{ClipboardManager cm=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText("sh",shellScript()));Toast.makeText(this,"已复制，粘贴到 Stellar 执行",Toast.LENGTH_LONG).show();});
-   host.addView(sh);
-
-   Button one=new Button(this);one.setText("③ 一键执行（Shizuku / Stellar，不用复制粘贴）");
+   Button one=new Button(this);one.setText("① 一键执行（Stellar / Shizuku）");
+   one.setBackgroundResource(R.drawable.accent_button);one.setTextColor(Color.WHITE);one.setTextSize(15);one.setTypeface(null,1);
    one.setOnClickListener(v->runAdbOneClick());
-   host.addView(one);
+   host.addView(one,lpBtnBig());
 
-   TextView note=new TextView(this);note.setText("授权后重开一次监听。hidden_api_policy 用于解除隐藏 API 限制，系统蓝牙电量字段被拦时可放行。");
-   note.setTextSize(11);note.setPadding(pad,pad,pad,pad);host.addView(note);
+   Button sh=new Button(this);sh.setText("② 复制命令到 Stellar");
+   sh.setBackgroundResource(R.drawable.button);sh.setTextColor(Color.parseColor("#17181C"));
+   sh.setOnClickListener(v->{ClipboardManager cm=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText("sh",shellScript()));Toast.makeText(this,"已复制，粘贴到 Stellar 执行",Toast.LENGTH_LONG).show();});
+   host.addView(sh,lpBtn());
 
-   TextView dh=new TextView(this);dh.setText("协议抓取（最近一次连接）");dh.setTextSize(15);dh.setTypeface(null,1);dh.setPadding(pad,pad*2,pad,pad);host.addView(dh);
+   Button pc=new Button(this);pc.setText("③ 复制电脑版 ADB 命令");
+   pc.setBackgroundResource(R.drawable.button);pc.setTextColor(Color.parseColor("#17181C"));
+   pc.setOnClickListener(v->{ClipboardManager cm=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText("adb",adbScript()));Toast.makeText(this,"已复制，粘贴到电脑终端执行",Toast.LENGTH_LONG).show();});
+   host.addView(pc,lpBtn());
+
+   Button scan=new Button(this);scan.setText("④ 查看当前已连接耳机");
+   scan.setBackgroundResource(R.drawable.button);scan.setTextColor(Color.parseColor("#17181C"));
+   scan.setOnClickListener(v->showConnected());
+   host.addView(scan,lpBtn());
+
+   TextView note=new TextView(this);note.setText("授权后重开一次监听。hidden_api_policy 用于解除隐藏 API 限制。\n如果连接耳机不弹窗，点④确认系统是否真的认为耳机已连接。");
+   note.setTextSize(11);note.setTextColor(Color.parseColor("#74767D"));note.setPadding(pad,pad,pad,0);host.addView(note);
+
+   TextView dh=new TextView(this);dh.setText("协议抓取（最近一次连接）");dh.setTextSize(15);dh.setTypeface(null,1);
+   dh.setTextColor(Color.parseColor("#17181C"));dh.setPadding(pad,(int)(14*getResources().getDisplayMetrics().density+.5f),pad,pad);host.addView(dh);
 
    diag=new TextView(this);diag.setTextSize(10);diag.setPadding(pad,pad,pad,pad);diag.setTypeface(android.graphics.Typeface.MONOSPACE);
+   diag.setTextColor(Color.parseColor("#74767D"));
    diag.setTextIsSelectable(true);
    host.addView(diag);
 
    Button rd=new Button(this);rd.setText("刷新协议抓取");
+   rd.setBackgroundResource(R.drawable.button);rd.setTextColor(Color.parseColor("#17181C"));
    rd.setOnClickListener(v->refreshDiag());
-   host.addView(rd);
+   host.addView(rd,lpBtn());
    refreshDiag();
   }catch(Throwable ignored){}
  }
 
+ private void showConnected(){
+  StringBuilder sb=new StringBuilder();
+  try{
+   android.bluetooth.BluetoothAdapter a=android.bluetooth.BluetoothAdapter.getDefaultAdapter();
+   if(a==null){sb.append("设备不支持蓝牙");}
+   else if(!a.isEnabled()){sb.append("蓝牙未开启");}
+   else{
+    if(Build.VERSION.SDK_INT>=31&&checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED){sb.append("没有 BLUETOOTH_CONNECT 权限");}
+    else{
+     Set<android.bluetooth.BluetoothDevice> bonded=a.getBondedDevices();
+     if(bonded==null||bonded.isEmpty())sb.append("没有已配对设备");
+     else{
+      for(android.bluetooth.BluetoothDevice d:bonded){
+       boolean conn=false;
+       try{java.lang.reflect.Method m=android.bluetooth.BluetoothDevice.class.getMethod("isConnected");Object o=m.invoke(d);if(o instanceof Boolean)conn=(Boolean)o;}catch(Throwable ignored){}
+       int lv=-1;
+       try{java.lang.reflect.Method m=android.bluetooth.BluetoothDevice.class.getMethod("getBatteryLevel");Object o=m.invoke(d);if(o instanceof Integer)lv=(Integer)o;}catch(Throwable ignored){}
+       sb.append(conn?"● ":"○ ").append(d.getName()).append('\n').append("   ").append(d.getAddress()).append("  电量 ").append(lv<0?"未知":(lv+"%")).append('\n');
+      }
+     }
+    }
+   }
+  }catch(Throwable t){sb.append("读取失败：").append(t);}
+  new AlertDialog.Builder(this).setTitle("当前已配对设备").setMessage(sb.toString()).setPositiveButton("关闭",null).show();
+ }
 
  private void runAdbOneClick(){
-  if(!ShizukuHelper.isRunning()){
-   Toast.makeText(this,"当前版本没有内置 Shizuku 运行库，点不了。请先用按钮②复制命令，到 Stellar 里粘贴执行；下次我把运行库打进去就能真的一键。",Toast.LENGTH_LONG).show();
+  if(!ShizukuHelper.isServiceRunning()){
+   new AlertDialog.Builder(this)
+    .setTitle("未检测到 Shizuku / Stellar 服务")
+    .setMessage("内置运行库已在，但需要服务端把权限通道交给本应用：\n\n"
+      +"1. 打开 Stellar，启动服务（无线调试 或 Root）\n"
+      +"2. Stellar → 设置 → 打开「允许 Shizuku」\n"
+      +"3. Stellar → 授权应用 → 找到 EarPopup X → 允许\n"
+      +"4. 回到本页再点一次这个按钮\n\n"
+      +"不想折腾就用按钮②复制命令，在 Stellar 的「命令」里执行一次。")
+    .setPositiveButton("知道了",null)
+    .setNeutralButton("复制命令",(d,w)->{ClipboardManager cm=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);if(cm!=null)cm.setPrimaryClip(ClipData.newPlainText("sh",shellScript()));Toast.makeText(this,"已复制",Toast.LENGTH_SHORT).show();})
+    .show();
    return;
   }
   if(!ShizukuHelper.hasPermission()){
-   try{
-    ShizukuHelper.requestPermission(1001);
-   }catch(Throwable t){}
+   ShizukuHelper.requestPermission();
    Toast.makeText(this,"已在 Stellar / Shizuku 弹出授权请求，允许后再回来点一次。",Toast.LENGTH_LONG).show();
    return;
   }
-  Toast.makeText(this,"正在执行…",Toast.LENGTH_SHORT).show();
+  Toast.makeText(this,"正在以 adb 权限执行…",Toast.LENGTH_SHORT).show();
   final String script=shellScript();
   new Thread(()->{
    final String out=ShizukuHelper.run(script);
    runOnUiThread(()->{
-    String msg=(out==null||out.trim().isEmpty())?"已执行（无输出，多数 appops 命令成功时就是静默的）":out;
-    Toast.makeText(this,"执行结果：\n"+msg,Toast.LENGTH_LONG).show();
+    String msg=(out==null)?null:out.trim();
+    if(msg==null||msg.isEmpty())msg="全部执行完成（appops / pm grant 成功时通常无输出）";
+    new AlertDialog.Builder(this).setTitle("执行结果").setMessage(msg)
+      .setPositiveButton("关闭",null).show();
+    status();
    });
   }).start();
  }
@@ -143,6 +196,9 @@ public final class MainActivity extends Activity{
  void stopMonitor(){AppPrefs.setEnabled(this,false);auto.setChecked(false);try{stopService(new Intent(this,BluetoothMonitorService.class));}catch(Throwable ignored){}EarPopupWindow.shared(this).dismiss();}
  void test(){if(!Settings.canDrawOverlays(this)){overlay();return;}EarPopupWindow.shared(this).show("测试耳机 · EarPopup X",BatteryState.unknown("测试模式"));}
  void refreshPopup(){EarPopupWindow.shared(this).refreshLayout();}
- void status(){StringBuilder s=new StringBuilder();s.append(Settings.canDrawOverlays(this)?"● 悬浮窗已开启\n":"○ 悬浮窗未开启\n");if(Build.VERSION.SDK_INT>=31)s.append(checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED?"● 蓝牙权限已开启\n":"○ 蓝牙权限未开启\n");if(Build.VERSION.SDK_INT>=33)s.append(checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED?"● 通知权限已开启\n":"○ 通知权限未开启\n");s.append(AppPrefs.enabled(this)?"● 自动弹窗已启用":"○ 自动弹窗未启用");status.setText(s.toString());}
+ void status(){StringBuilder s=new StringBuilder();s.append(Settings.canDrawOverlays(this)?"● 悬浮窗已开启\n":"○ 悬浮窗未开启\n");if(Build.VERSION.SDK_INT>=31)s.append(checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED?"● 蓝牙权限已开启\n":"○ 蓝牙权限未开启\n");if(Build.VERSION.SDK_INT>=33)s.append(checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED?"● 通知权限已开启\n":"○ 通知权限未开启\n");s.append(AppPrefs.enabled(this)?"● 自动弹窗已启用\n":"○ 自动弹窗未启用\n");
+  if(ShizukuHelper.isServiceRunning())s.append(ShizukuHelper.hasPermission()?"● Shizuku/Stellar 已授权（"+ShizukuHelper.serverInfo()+"）":"○ Shizuku/Stellar 已运行，但未授权本应用");
+  else s.append("○ 未检测到 Shizuku / Stellar 服务");
+  status.setText(s.toString());}
  @Override protected void onResume(){super.onResume();status();refreshDiag();}
 }
