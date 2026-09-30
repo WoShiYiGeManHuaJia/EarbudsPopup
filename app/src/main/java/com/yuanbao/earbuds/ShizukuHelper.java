@@ -232,6 +232,25 @@ public final class ShizukuHelper {
                 "pm grant " + PKG + " android.permission.BLUETOOTH_SCAN",
                 "pm grant " + PKG + " android.permission.POST_NOTIFICATIONS",
                 "dumpsys deviceidle whitelist +" + PKG,
+                // 以下三项来自补丁包 adb_setup.sh：后台存活的关键。
+                // 之前只做了 deviceidle 白名单，没有 AUTO_START / RUN_IN_BACKGROUND，
+                // 系统在内存紧张或长时间后台时仍会回收服务 ——
+                // 表现就是「用一阵子之后弹窗不弹了」。
+                "appops set " + PKG + " AUTO_START allow",
+                "appops set " + PKG + " RUN_IN_BACKGROUND allow",
+                "appops set " + PKG + " START_FOREGROUND allow",
+        };
+    }
+
+    /**
+     * 系统蓝牙栈电量诊断。
+     *
+     * 来自补丁包的排查命令：直接看系统蓝牙栈里有没有这副耳机的电量记录。
+     * 有值 → 一定能拿到真电量；空白 → 只能走 GATT，且大概率也拿不到。
+     */
+    public static String[] batteryDiagCommands() {
+        return new String[]{
+                "dumpsys bluetooth_manager | grep -iE 'Address:|BatteryLevel|mBatteryLevel'",
         };
     }
 

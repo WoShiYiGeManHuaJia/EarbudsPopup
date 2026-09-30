@@ -240,6 +240,14 @@ public class SetupActivity extends AppCompatActivity {
                 sb.append("   get → ").append(r[3]).append('\n');
             }
 
+            // 系统蓝牙栈里到底有没有这副耳机的电量记录 ——
+            // 决定「真电量」能否拿到，比反复试 GATT 更能说明问题
+            sb.append("\n【系统蓝牙栈电量诊断】\n");
+            for (String c : ShizukuHelper.batteryDiagCommands()) {
+                sb.append("$ ").append(c).append('\n');
+                sb.append(ShizukuHelper.exec(c)).append('\n');
+            }
+
             // 屏蔽到底生效没有，必须回读，不能只看命令有没有报错
             sb.append("\n【小米弹窗屏蔽状态】\n");
             for (String v : ShizukuHelper.verifyBlockState()) {
