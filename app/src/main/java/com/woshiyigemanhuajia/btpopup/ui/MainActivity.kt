@@ -267,6 +267,7 @@ class MainActivity : AppCompatActivity() {
             if (it <= 0) "不自动关闭" else "${it}s"
         }
 
+        b.swLandBlur.isChecked = Prefs.landBlurEnabled
         b.swPortraitWhite.isChecked = Prefs.portraitSolidWhite
         b.swWindowBlur.isChecked = Prefs.windowBlurEnabled
         b.swBlurFromImage.isChecked = Prefs.blurFromImage
@@ -303,6 +304,12 @@ class MainActivity : AppCompatActivity() {
     // ------------------------------------------------------------------ 开关
 
     private fun setupSwitches() {
+        b.swLandBlur.setOnCheckedChangeListener { _, v ->
+            if (loadingUi) return@setOnCheckedChangeListener
+            Prefs.landBlurEnabled = v
+            refreshPreview()
+        }
+
         b.swPortraitWhite.setOnCheckedChangeListener { _, v ->
             if (loadingUi) return@setOnCheckedChangeListener
             Prefs.portraitSolidWhite = v
@@ -372,7 +379,69 @@ class MainActivity : AppCompatActivity() {
 
     // ------------------------------------------------------------------ 按钮
 
+    /**
+     * 查看崩溃日志。
+     *
+     * 连续多个版本反复闪退却定位不到原因，根源是此前没有任何崩溃记录、只能靠现象猜。
+     * App 启动时已挂上全局未捕获异常处理器，崩溃堆栈写入 filesDir/crash/crash.log。
+     * 这里读出来展示，支持复制与分享 —— 有了堆栈就能精确到行号，不再靠猜。
+     */
+    private fun showCrashLog() {
+        val f = java.io.File(filesDir, "crash/crash.log")
+        val text: String = if (f.exists()) {
+            try {
+                f.readText().takeLast(8000)
+            } catch (t: Throwable) {
+                "读取失败：" + t.message
+            }
+        } else {
+            "暂无崩溃记录。\n\n如果刚闪退过却看不到记录，说明崩溃发生在极早期（进程启动阶段），" +
+                "或者 App 是被系统直接杀掉而非抛异常。那种情况请改用系统的「设置 → 应用管理」查看。"
+        }
+        val tv = android.widget.TextView(this).apply {
+            setText(text)
+            setTextIsSelectable(true)
+            textSize = 11f
+            setPadding(40, 30, 40, 30)
+        }
+        val scroll = android.widget.ScrollView(this).apply { addView(tv) }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("崩溃日志")
+            .setView(scroll)
+            .setNeutralButton("复制") { _, _ ->
+                val cm = getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                        as android.content.ClipboardManager
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("crash", text))
+                toast("已复制")
+            }
+            .setPositiveButton("分享") { _, _ ->
+                try {
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        this, "$packageName.fileprovider", f
+                    )
+                    startActivity(
+                        android.content.Intent.createChooser(
+                            android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }, "导出崩溃日志"
+                        )
+                    )
+                } catch (t: Throwable) {
+                    toast("分享失败：" + t.message)
+                }
+            }
+            .setNegativeButton("清空") { _, _ ->
+                try { f.delete() } catch (_: Throwable) {}
+                toast("已清空")
+            }
+            .setCancelable(true)
+            .show()
+    }
+
     private fun setupButtons() {
+
         b.btnPickImage.setOnClickListener { pickImage() }
         b.btnClearImage.setOnClickListener {
             Prefs.imageUri = null
@@ -382,6 +451,7 @@ class MainActivity : AppCompatActivity() {
         b.btnLandscapePreview.setOnClickListener { toggleLandscapePreview() }
         b.btnAdbGrant.setOnClickListener { runOneKeyGrant() }
         b.btnCopyAdb.setOnClickListener { copyAdbScript() }
+        b.btnCrashLog.setOnClickListener { showCrashLog() }
         b.btnAutoStartSetting.setOnClickListener { openAutoStartSettings() }
         b.btnPermFix.setOnClickListener { fixPermissions() }
         b.btnOpenBtDetail.setOnClickListener { openBluetoothDeviceSettings() }
