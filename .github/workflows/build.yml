@@ -32,7 +32,32 @@ jobs:
           gradle-version: '8.11.1'
 
       - name: Build Release APK
-        run: gradle assembleRelease --no-daemon --stacktrace
+        id: build
+        run: |
+          set +e
+          gradle assembleRelease --no-daemon --stacktrace 2>&1 | tee build_log.txt
+          echo "GRADLE_EXIT=${PIPESTATUS[0]}" >> $GITHUB_ENV
+          exit 0
+
+      - name: Publish build log
+        if: always()
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -rf /tmp/logout && mkdir -p /tmp/logout
+          cp build_log.txt /tmp/logout/ 2>/dev/null || echo "no log" > /tmp/logout/build_log.txt
+          git checkout --orphan logs-tmp
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          rm -rf $(ls -A | grep -v '^\.git$') || true
+          cp /tmp/logout/build_log.txt .
+          git add -f build_log.txt
+          git commit -m "build log $GITHUB_RUN_ID" || echo "no change"
+          git push -f origin HEAD:build-logs || echo "push failed"
+
+      - name: Fail if build failed
+        if: env.GRADLE_EXIT != '0'
+        run: exit 1
 
       - name: Show APK signature
         if: always()
