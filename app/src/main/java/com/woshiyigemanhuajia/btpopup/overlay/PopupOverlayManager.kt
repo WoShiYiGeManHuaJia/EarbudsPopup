@@ -971,23 +971,45 @@ object PopupOverlayManager {
         // 闪退与卡顿的根源被移除；横屏这一小块保留完全没问题。
         //
         val blur = view.findViewById<LiveBlurView>(R.id.detailBlurBg) ?: return
-        val detail = view.findViewById<View>(R.id.detailArea)
-        val image = view.findViewById<ImageView>(R.id.popupImage)
 
-        blur.setCoverSource(false)
-        val extraPx = (Prefs.landBlurFadeDp.coerceIn(0, 80) * density * s).toInt()
-        blur.setBlurRadius(Prefs.landBlurRadiusDp.coerceIn(0, 60) * density)
-        // 压暗默认 12%，只为保证文字可读；旧值 30% 会把整块压成黑
-        val dim = Prefs.landBlurDimPercent.coerceIn(0, 90) * 255 / 100
-        blur.setDim(dim shl 24)
-        blur.setBottomCornerRadius(Prefs.cornerRadiusDp.coerceIn(0, 200) * density)
-        blur.setSource(image)
-        blur.visibility = View.VISIBLE
-        if (detail == null) {
-            blur.setFadeRatio(if (extraPx > 0) 0.25f else 0f)
+        //
+        // 【默认关闭，且全程异常保护】
+        // 横屏弹窗不弹 + 反复闪退，与横屏模糊高度同源：一触发就崩、进程被杀、弹窗出不来。
+        // 关掉后横屏详情区就是普通半透明面板，绝不参与任何位图运算。
+        // 整个模糊初始化再包一层 try/catch：即便将来打开开关时算失败，
+        // 也只退化成没有模糊，绝不能把弹窗 / App 带崩。
+        //
+        if (!Prefs.landBlurEnabled) {
+            blur.setSource(null)
+            blur.setSourceBitmap(null)
+            blur.visibility = View.GONE
             return
         }
-        fitBlurToDetail(blur, detail, extraPx)
+
+        try {
+            val detail = view.findViewById<View>(R.id.detailArea)
+            val image = view.findViewById<ImageView>(R.id.popupImage)
+
+            blur.setCoverSource(false)
+            val extraPx = (Prefs.landBlurFadeDp.coerceIn(0, 80) * density * s).toInt()
+            blur.setBlurRadius(Prefs.landBlurRadiusDp.coerceIn(0, 60) * density)
+            // 压暗默认 12%，只为保证文字可读；旧值 30% 会把整块压成黑
+            val dim = Prefs.landBlurDimPercent.coerceIn(0, 90) * 255 / 100
+            blur.setDim(dim shl 24)
+            blur.setBottomCornerRadius(Prefs.cornerRadiusDp.coerceIn(0, 200) * density)
+            blur.setSource(image)
+            blur.visibility = View.VISIBLE
+            if (detail == null) {
+                blur.setFadeRatio(if (extraPx > 0) 0.25f else 0f)
+                return
+            }
+            fitBlurToDetail(blur, detail, extraPx)
+        } catch (t: Throwable) {
+            Log.e(TAG, "横屏模糊初始化失败，已降级为无模糊（不影响弹窗）", t)
+            blur.setSource(null)
+            blur.setSourceBitmap(null)
+            blur.visibility = View.GONE
+        }
     }
 
     /**
