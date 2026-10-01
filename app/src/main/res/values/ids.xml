@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 图片变换重试计数：View 尺寸未测量完时用它记录已重试次数，避免无限 post -->
+    <item name="tag_transform_retry" type="id" />
+</resources>

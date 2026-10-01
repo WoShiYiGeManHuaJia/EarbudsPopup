@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">耳机弹窗</string>
+    <string name="app_subtitle">蓝牙耳机连接 · 系统级电量弹窗</string>
+
+    <string name="sec_status">运行状态</string>
+    <string name="sec_appearance">弹窗外观</string>
+    <string name="sec_layout">尺寸与位置</string>
+    <string name="sec_animation">动画</string>
+    <string name="sec_permission">权限与 ADB 授权</string>
+    <string name="sec_keepalive">保活设置</string>
+
+    <string name="pick_image">选择图片 / GIF</string>
+    <string name="clear_image">清除</string>
+    <string name="test_popup">预览弹窗</string>
+    <string name="one_key_adb">一键 ADB 授权</string>
+    <string name="copy_adb">复制 ADB 命令</string>
+
+    <string name="notif_title">耳机弹窗监听中</string>
+    <string name="notif_text">正在监听蓝牙耳机连接，连接后立即弹出电量窗</string>
+    <string name="guard_notif_title">保活守护运行中</string>
+    <string name="guard_notif_text">正在维持后台存活，防止系统回收</string>
+
+    <!-- 权限自检：区分「未授权」与「已授权」两种失败原因，文案直接指向缺失项 -->
+    <string name="perm_label_overlay">悬浮窗权限（显示在其他应用上层）</string>
+    <string name="perm_label_bt">蓝牙连接权限</string>
+    <string name="perm_label_notif">通知权限</string>
+    <string name="perm_state_ready">已授权：悬浮窗 / 通知 / 蓝牙连接均已就绪</string>
+    <string name="perm_state_missing">未授权：缺少 %1$s（未授权时连接耳机不会弹窗）</string>
+    <string name="perm_banner_missing">未授权：缺少 %1$s\n未授权时连接耳机不会弹窗，请点「一键授权」逐项补齐</string>
+    <string name="perm_banner_ok">已授权：悬浮窗 / 通知 / 蓝牙连接均已就绪，连接耳机即弹出电量窗</string>
+    <string name="perm_fix">一键授权（补齐缺失项）</string>
+    <string name="notif_text_perm_missing">正在监听蓝牙耳机连接；注意：%1$s，未授权时可能不弹窗</string>
+
+    <!-- 无障碍保活服务 -->
+    <string name="a11y_service_label">耳机弹窗保活</string>
+    <string name="a11y_service_desc">仅用于在后台把耳机电量监听服务重新拉起，不读取、不点击、不收集任何屏幕内容。</string>
+    <string name="a11y_state_on">当前状态：已启用（系统会长期保留本应用进程）</string>
+    <string name="a11y_state_off">当前状态：未启用（点击上方开关前往系统设置开启）</string>
+
+    <!-- 服务状态文案：把「服务在跑」与「权限是否真的给了」分开说清楚 -->
+    <string name="svc_state_stopped">监听服务未启动</string>
+    <string name="svc_state_running_ok">监听服务运行中 · 权限已就绪</string>
+    <string name="svc_state_running_perm_missing">监听服务运行中 · %1$s未授权，可能不弹窗</string>
+</resources>

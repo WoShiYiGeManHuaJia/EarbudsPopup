@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  横屏弹窗（参考外观：媒体区铺满 + 底部叠加详情）
+  - 媒体区铺满整张卡片：图片 / GIF 直接作为卡片背景，四个圆角由 RoundedCardLayout 统一裁剪
+  - 详情区叠在图片底部：设备名 / 连接状态 / 电量一行小字直接显示，不再有图标与三栏大框
+  - 详情区背后是实时模糊层，保证小字在任意图片上都清晰可读
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/popupRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <com.woshiyigemanhuajia.btpopup.widget.RoundedCardLayout
+        android:id="@+id/card"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <FrameLayout
+            android:id="@+id/imageWrap"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <com.woshiyigemanhuajia.btpopup.widget.RoundedImageView
+                android:id="@+id/popupImage"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@string/app_name"
+                android:scaleType="centerCrop" />
+
+            <LinearLayout
+                android:id="@+id/noImageHint"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/bg_popup_image_mask"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <ImageView
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:alpha="0.7"
+                    android:contentDescription="@string/app_name"
+                    android:src="@drawable/ic_image" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="未设置图片 / GIF"
+                    android:textColor="@color/popup_text_dim"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!--
+          详情区动态模糊层：
+          - 绑定上方 popupImage 的 Drawable，图片/GIF 每前进一帧就重算一次模糊
+          - 顶部自带渐隐过渡带（fadeRatio），与上方清晰画面柔和衔接，不做一刀切硬边
+          - 底部两角跟随卡片圆角；高度由代码按 detailArea 实测高度 + 渐隐带动态设置
+        -->
+        <com.woshiyigemanhuajia.btpopup.widget.LiveBlurView
+            android:id="@+id/detailBlurBg"
+            android:layout_width="match_parent"
+            android:layout_height="72dp"
+            android:layout_gravity="bottom" />
+
+        <LinearLayout
+            android:id="@+id/detailArea"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tvDeviceName"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="蓝牙耳机"
+                    android:textColor="@color/popup_text"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvSourceTag"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_popup_chip"
+                    android:paddingStart="7dp"
+                    android:paddingTop="2dp"
+                    android:paddingEnd="7dp"
+                    android:paddingBottom="2dp"
+                    android:visibility="gone"
+                    android:textColor="@color/popup_accent"
+                    android:textSize="9sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tvConnState"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="已连接"
+                android:textColor="@color/popup_text_dim"
+                android:textSize="10sp" />
+
+            <!-- 电量：去掉左耳 / 右耳 / 充电仓三栏图标大框，直接一行小字显示 -->
+            <TextView
+                android:id="@+id/tvBatteryLine"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="左耳 --%  ·  右耳 --%  ·  充电仓 --%"
+                android:textColor="@color/popup_text"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </com.woshiyigemanhuajia.btpopup.widget.RoundedCardLayout>
+</FrameLayout>
