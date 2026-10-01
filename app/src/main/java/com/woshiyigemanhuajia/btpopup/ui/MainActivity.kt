@@ -267,6 +267,7 @@ class MainActivity : AppCompatActivity() {
             if (it <= 0) "不自动关闭" else "${it}s"
         }
 
+        b.swWindowBlur.isChecked = Prefs.windowBlurEnabled
         b.swAutoPopup.isChecked = Prefs.autoPopup
         b.swForeground.isChecked = Prefs.foregroundGuard
         b.swAccessibility.isChecked = KeepAliveAccessibilityService.isEnabled(this)
@@ -300,6 +301,12 @@ class MainActivity : AppCompatActivity() {
     // ------------------------------------------------------------------ 开关
 
     private fun setupSwitches() {
+        b.swWindowBlur.setOnCheckedChangeListener { _, v ->
+            if (loadingUi) return@setOnCheckedChangeListener
+            Prefs.windowBlurEnabled = v
+            refreshPreview()
+        }
+
         b.swAutoPopup.setOnCheckedChangeListener { _, v ->
             if (loadingUi) return@setOnCheckedChangeListener
             Prefs.autoPopup = v
