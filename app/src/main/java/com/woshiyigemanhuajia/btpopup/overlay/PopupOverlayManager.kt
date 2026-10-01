@@ -1059,18 +1059,14 @@ object PopupOverlayManager {
         // 所以图片本身永远清晰；露出来的就是图片周围的留白 + 下方文字区背景 ——
         // 正好是用户要的「除了图片位置，其余空白都是毛玻璃」。
         //
-        val lp = blur.layoutParams
-        if (lp != null) {
-            lp.height = ViewGroup.LayoutParams.MATCH_PARENT
-            lp.width = ViewGroup.LayoutParams.MATCH_PARENT
-            if (lp is FrameLayout.LayoutParams) lp.gravity = Gravity.FILL
-            blur.layoutParams = lp
-        }
-        blur.visibility = View.VISIBLE
-
-        // 铺满模式：源内容缩放覆盖整卡，图片四周的留白也有模糊
+        //
+        // 【重要】高度绝不能在测量阶段设成 MATCH_PARENT。
+        // 父容器 popupRoot 是 wrap_content，子项用 MATCH_PARENT 会把整张卡片顶到
+        // 最大可用尺寸 —— 上一版"弹窗铺满全屏"就是这么来的。
+        // 正确做法：等布局完成后读取卡片实测高度，写成固定像素值。
+        // 固定 px 不会再反过来撑大父容器，卡片尺寸完全由 contentColumn 说了算。
+        //
         blur.setCoverSource(true)
-
         blur.setBlurRadius(Prefs.portraitBlurRadiusDp.coerceIn(0, 60) * density)
         // 压暗默认 12%，只为保文字可读；旧值 30% 会把这段压成暗块
         val dim = Prefs.portraitBlurDimPercent.coerceIn(0, 90) * 255 / 100
@@ -1079,6 +1075,39 @@ object PopupOverlayManager {
         // 整卡铺满后不需要顶部渐隐带了：上方就是卡片顶边，做渐隐反而糊掉一圈
         blur.setFadeRatio(0f)
         blur.setSource(image)
+        fitPortraitBlurHeight(blur, 0)
+    }
+
+    /**
+     * 把模糊层高度对齐为「卡片实测高度」，但**只在布局完成后**写固定像素值。
+     * 测量阶段一律保持 1dp，不参与父容器 wrap_content 的测量，卡片尺寸因此不受影响。
+     */
+    private fun fitPortraitBlurHeight(blur: LiveBlurView, attempt: Int) {
+        val host = blur.parent as? View ?: return
+        // 先收回 1dp 再测量：模糊层是固定像素高度，带着旧值参与 wrap_content 测量
+        // 会把卡片撑住，内容变小时也缩不回去（电量文字变化时就容易撞上）。
+        val lp0 = blur.layoutParams
+        if (lp0 != null && lp0.height > 1) {
+            lp0.height = 1
+            blur.layoutParams = lp0
+        }
+        blur.post {
+            val h = host.height
+            if (h > 0) {
+                val lp = blur.layoutParams
+                if (lp != null) {
+                    lp.height = h
+                    if (lp is FrameLayout.LayoutParams) lp.gravity = Gravity.TOP
+                    blur.layoutParams = lp
+                }
+                blur.visibility = View.VISIBLE
+            } else if (attempt < 8) {
+                // 还没测量出来：下一帧再试，最多 8 次，绝不无限 post
+                fitPortraitBlurHeight(blur, attempt + 1)
+            } else {
+                blur.visibility = View.GONE
+            }
+        }
     }
 
     /**
