@@ -64,6 +64,9 @@ class LiveBlurView @JvmOverloads constructor(
 
         /** 最小重绘间隔（ms）：把模糊重算限制在 ~30fps，降低 CPU 占用 */
         private const val MIN_REDRAW_MS = 33L
+
+        /** 逐帧心跳间隔（ms）：约 12fps，足够让模糊"看起来在跟着动"，开销又可控 */
+        private const val FRAME_MS = 80L
     }
 
     /** 绑定源 ImageView（弹窗里那张图 / GIF）——实时逐帧模糊的来源 */
@@ -121,6 +124,39 @@ class LiveBlurView @JvmOverloads constructor(
     private var bufW = 0
     private var bufH = 0
 
+    /**
+     * 逐帧心跳。
+     *
+     * 【这才是"跟着 GIF 一起动"的关键】
+     * 只靠接管 Drawable.Callback 不可靠：源是 GIF 时，帧回调未必能驱动本 View 重绘
+     * （Coil 的 crossfade、或动画由其它线程驱动时都可能收不到 invalidateDrawable），
+     * 结果就是模糊层停在某一帧不动 —— 正是用户看到的"截取一帧固定住"。
+     *
+     * 这里改成主动心跳：只要源还活着，就按固定间隔持续 invalidate，
+     * 每次 onDraw 都重新采样源 Drawable 的**当前帧**再重新模糊。
+     * 横屏详情区面积很小，12fps 的重算开销完全可接受。
+     */
+    private var liveTicking = false
+    private val tick = object : Runnable {
+        override fun run() {
+            if (!liveTicking) return
+            invalidate()
+            mainHandler.postDelayed(this, FRAME_MS)
+        }
+    }
+
+    private fun startTicking() {
+        if (liveTicking) return
+        liveTicking = true
+        mainHandler.removeCallbacks(tick)
+        mainHandler.postDelayed(tick, FRAME_MS)
+    }
+
+    private fun stopTicking() {
+        liveTicking = false
+        mainHandler.removeCallbacks(tick)
+    }
+
     /** 降采样缓冲（2 倍：4 倍会把像素块拉得太大，放大回来是马赛克） */
     private var smallBuf: Bitmap? = null
     private var smallCanvas: Canvas? = null
@@ -146,6 +182,7 @@ class LiveBlurView @JvmOverloads constructor(
     fun setSource(source: ImageView?) {
         detachCallback()
         src = source
+        srcWaitTicks = 0
         invalidate()
     }
 
@@ -211,6 +248,7 @@ class LiveBlurView @JvmOverloads constructor(
         }
         attachedDrawable = null
         originalCallback = null
+        stopTicking()
     }
 
     private fun attachCallback(dr: Drawable) {
@@ -254,6 +292,7 @@ class LiveBlurView @JvmOverloads constructor(
     }
 
     override fun onDetachedFromWindow() {
+        stopTicking()
         detachCallback()
         super.onDetachedFromWindow()
     }
@@ -314,8 +353,14 @@ class LiveBlurView @JvmOverloads constructor(
         if (dr != null && imageView != null && dr !== attachedDrawable) {
             detachCallback()
             attachCallback(dr)
+            // 源到位：启动逐帧心跳，模糊开始跟着动
+            startTicking()
         } else if (dr == null && attachedDrawable != null) {
             detachCallback()
+            stopTicking()
+        } else if (dr != null && attachedDrawable != null && !liveTicking) {
+            // 已接管但心跳没跑（异常中断）：补一次
+            startTicking()
         }
 
         //
