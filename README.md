@@ -1,3 +1,3 @@
 # EarbudsPopup2
 
-1.3.1 build trigger
+1.3.7 rebuild
