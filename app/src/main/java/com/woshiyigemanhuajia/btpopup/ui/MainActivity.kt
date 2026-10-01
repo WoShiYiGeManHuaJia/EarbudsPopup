@@ -143,9 +143,6 @@ class MainActivity : AppCompatActivity() {
     // ------------------------------------------------------------------ 滑块
 
     private fun setupSliders() {
-        setupSeek(b.sbBehindBlur, b.tvBehindBlurVal, 0, 60,
-            { Prefs.behindBlurRadiusDp }, { Prefs.behindBlurRadiusDp = it }, { "${it}dp" })
-
         setupSeek(b.sbAlpha, b.tvAlphaVal, 0, 100,
             { Prefs.panelAlpha }, { Prefs.panelAlpha = it }) { "$it%" }
 
@@ -249,7 +246,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun syncFromPrefs() {
         loadingUi = true
-        setSeekValue(b.sbBehindBlur, b.tvBehindBlurVal, 0, Prefs.behindBlurRadiusDp) { "${it}dp" }
         setSeekValue(b.sbAlpha, b.tvAlphaVal, 0, Prefs.panelAlpha) { "$it%" }
         setSeekValue(b.sbImageHeight, b.tvImageHeightVal, 40, Prefs.imageHeightDp) { "${it}dp" }
         setSeekValue(b.sbImageScale, b.tvImageScaleVal, 20, Prefs.imageScalePercent) { "$it%" }
@@ -271,7 +267,6 @@ class MainActivity : AppCompatActivity() {
             if (it <= 0) "不自动关闭" else "${it}s"
         }
 
-        b.swBehindBlur.isChecked = Prefs.behindBlurEnabled
         b.swAutoPopup.isChecked = Prefs.autoPopup
         b.swForeground.isChecked = Prefs.foregroundGuard
         b.swAccessibility.isChecked = KeepAliveAccessibilityService.isEnabled(this)
@@ -305,12 +300,6 @@ class MainActivity : AppCompatActivity() {
     // ------------------------------------------------------------------ 开关
 
     private fun setupSwitches() {
-        b.swBehindBlur.setOnCheckedChangeListener { _, v ->
-            if (loadingUi) return@setOnCheckedChangeListener
-            Prefs.behindBlurEnabled = v
-            refreshPreview()
-        }
-
         b.swAutoPopup.setOnCheckedChangeListener { _, v ->
             if (loadingUi) return@setOnCheckedChangeListener
             Prefs.autoPopup = v

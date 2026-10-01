@@ -1268,57 +1268,6 @@
                 android:layout_height="wrap_content"
                 android:text="@string/sec_keepalive" />
 
-        <!-- 背景模糊：模糊「被弹窗盖住的手机界面」（系统跨窗口模糊） -->
-        <com.google.android.material.materialswitch.MaterialSwitch
-            android:id="@+id/swBehindBlur"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:checked="true"
-            android:text="背景模糊（毛玻璃）"
-            android:textColor="@color/text_primary"
-            android:textSize="14sp" />
-
-        <TextView
-            style="@style/CardHint"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="2dp"
-            android:layout_marginBottom="2dp"
-            android:text="模糊弹窗背后被盖住的手机界面，除图片 / GIF 区域外的空白都会生效" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-            <TextView
-                android:layout_width="76dp"
-                android:layout_height="wrap_content"
-                android:text="模糊强度"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp" />
-
-            <SeekBar
-                android:id="@+id/sbBehindBlur"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:max="200"
-                android:progressTint="@color/brand_teal"
-                android:thumbTint="@color/brand_teal" />
-
-            <TextView
-                android:id="@+id/tvBehindBlurVal"
-                android:layout_width="66dp"
-                android:layout_height="wrap_content"
-                android:gravity="end"
-                android:text="24dp"
-                android:textColor="@color/text_tertiary"
-                android:textSize="12sp" />
-        </LinearLayout>
-
         <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/swAutoPopup"
             android:layout_width="match_parent"

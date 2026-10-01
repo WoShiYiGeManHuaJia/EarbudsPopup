@@ -199,23 +199,6 @@ object Prefs {
         get() = gi("portrait_blur_dim", 12)
         set(v) = si("portrait_blur_dim", v)
 
-    // ---------------- 背景模糊（模糊"被弹窗盖住的手机界面"） ----------------
-    //
-    // 之前的模糊源是弹窗自己的图片 —— 那不是用户想要的。
-    // 用户要的是毛玻璃：模糊弹窗背后真实的手机界面。
-    // 这只能由系统提供（FLAG_BLUR_BEHIND 跨窗口模糊），
-    // 好处是完全不碰 popupImage 的 Drawable，GIF / 图片不可能再丢。
-
-    /** 是否启用系统级背景模糊（模糊弹窗背后的手机界面） */
-    var behindBlurEnabled: Boolean
-        get() = gb("behind_blur_enabled", true)
-        set(v) = sb("behind_blur_enabled", v)
-
-    /** 系统级背景模糊半径（dp），0 = 不模糊 */
-    var behindBlurRadiusDp: Int
-        get() = gi("behind_blur_radius", 24)
-        set(v) = si("behind_blur_radius", v.coerceIn(0, 60))
-
     // ---------------- 动画 ----------------
     /** fade / scale / slide_top / slide_bottom / spring */
     var animType: String
