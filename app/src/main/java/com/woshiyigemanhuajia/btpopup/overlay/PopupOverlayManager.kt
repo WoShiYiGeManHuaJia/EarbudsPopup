@@ -273,11 +273,19 @@ object PopupOverlayManager {
                 WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
 
         //
-        // 【纠正】FLAG_BLUR_BEHIND 模糊的是「弹窗背后那一整片手机界面」，
-        // 不是弹窗卡片内部 —— 用户要的是卡片内的空白区呈毛玻璃，对象搞错了。
-        // 这里停用系统跨窗口模糊，改回卡片内的 LiveBlurView 模糊层（见下方两个 setup 函数）。
+        // 【毛玻璃正解】模糊「弹窗背后那一片被盖住的手机界面」。
         //
-        val crossBlur = false
+        // 用户要的正是这个：弹窗盖住了手机界面上的某个字，
+        // 弹窗上这块空白就显示"那个字被模糊后的样子"。
+        // 采样对象是背后的屏幕内容，跟用户上传的图片 / GIF 毫无关系 ——
+        // 之前拿弹窗自己的图当模糊源，方向从一开始就错了。
+        //
+        // FLAG_BLUR_BEHIND 由系统合成器实时采样：
+        //  - 背后内容在动（GIF / 视频 / 滚动），模糊也跟着动 —— 横屏"固定一帧"根治；
+        //  - 不需要 App 解码位图、不跑 stackBlur —— 卡顿与 OOM 闪退的源头一并消失。
+        //
+        val radiusDp = if (landscape) Prefs.landBlurRadiusDp else Prefs.portraitBlurRadiusDp
+        val crossBlur = Prefs.windowBlurEnabled && radiusDp > 0
         if (crossBlur) {
             flags = flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
         }
@@ -291,9 +299,10 @@ object PopupOverlayManager {
         )
         if (crossBlur) {
             try {
-                lp.blurBehindRadius = (Prefs.portraitBlurRadiusDp.coerceIn(0, 60) * density).toInt()
+                lp.blurBehindRadius = (radiusDp.coerceIn(0, 60) * density).toInt()
             } catch (t: Throwable) {
-                Log.w(TAG, "设置窗口背景模糊半径失败: " + t.message)
+                // 设备不支持时只是没有模糊，绝不能影响弹窗本身
+                Log.w(TAG, "设置毛玻璃半径失败（设备可能不支持，仅影响模糊）: " + t.message)
             }
         }
         lp.gravity = Gravity.TOP or Gravity.START
@@ -706,27 +715,16 @@ object PopupOverlayManager {
      * 它只在「图片还没加载完」时顶上，图片一旦就绪就由 setSource(ImageView)
      * 接管为实时逐帧模糊（GIF 动、图片换，模糊跟着变）。
      */
+    /**
+     * 不再为模糊层解码任何位图。
+     *
+     * 模糊对象是弹窗背后的手机界面（系统跨窗口模糊），不是用户上传的图片。
+     * 这里保留函数只是为了让调用点不变，实际不再解码 —— 少一条解码链路，
+     * 就少一处可能误伤图片 / GIF 显示、也少一处 OOM 的地方。
+     */
     private fun prefetchBlurSource(context: Context, view: View, imageUri: String?) {
         val blur = view.findViewById<LiveBlurView>(R.id.detailBlurBg) ?: return
-        val tagKey = imageUri ?: ""
-        // 用两参 tag 单独占位，避免与别处对 ImageView / View 的单参 tag 用法打架
-        if (blur.getTag(R.id.detailBlurBg) == tagKey) return
-        blur.setTag(R.id.detailBlurBg, tagKey)
-        if (imageUri.isNullOrBlank()) {
-            blur.setSourceBitmap(null)
-            return
-        }
-        // 换图瞬间先清掉上一张图的模糊，避免新图还没解好时残留旧内容
         blur.setSourceBitmap(null)
-        val appContext = context.applicationContext
-        blurSrcExec.execute {
-            val bmp = decodeBlurSource(appContext, imageUri)
-            if (bmp != null) {
-                blur.post { blur.setSourceBitmap(bmp) }
-            } else {
-                Log.w(TAG, "模糊源解码失败：" + imageUri)
-            }
-        }
     }
 
     /** 独立解码一份"小图"作为模糊源；GIF 只取首帧，不会启动动画 */
@@ -762,10 +760,13 @@ object PopupOverlayManager {
     private fun applyPanelStyle(view: View, landscape: Boolean) {
         val density = view.context.resources.displayMetrics.density
         val radiusPx = Prefs.cornerRadiusDp.coerceIn(0, 200) * density
-        // 竖屏保持不透明实色：卡片内的空白区由 LiveBlurView 模糊层来呈现毛玻璃
-        // （见 setupPortraitBlur）。若卡片底也半透明，背后清晰的手机界面会透上来，
-        // 与卡片内的模糊层混在一起显得脏乱 —— 用户要的是卡片内部模糊，不是透出屏幕。
-        val alphaPercent = if (landscape) Prefs.panelAlpha.coerceIn(0, 100) else 100
+        //
+        // 卡片底色必须半透明，系统模糊才能透出来。
+        // 图片 / GIF 区域由不透明的原图铺满，天然盖住、始终清晰 ——
+        // 露出来的空白区显示的就是"被盖住的手机界面模糊后的样子"。
+        // 竖屏横屏统一走面板不透明度。
+        //
+        val alphaPercent = Prefs.panelAlpha.coerceIn(0, 100)
         val alpha = (alphaPercent * 255 / 100).coerceIn(0, 255)
         val panelColor = ColorUtils.setAlphaComponent(Prefs.panelColor or (0xFF shl 24), alpha)
 
@@ -927,29 +928,19 @@ object PopupOverlayManager {
      *  4. 底部两角圆角跟随卡片圆角；轻度压暗只为保证文字可读。
      */
     private fun setupLandscapeBlur(view: View, s: Float, density: Float) {
+        //
+        // 横屏同样停用自制模糊层。
+        //
+        // 之前"横屏模糊固定一帧不动"的根因：自制层绑定弹窗自己的图，
+        // 只在源就位的那一帧算了一次，之后 GIF 帧变化未必能驱动它重绘。
+        // 改用系统跨窗口模糊后，模糊由系统合成器实时采样弹窗背后的屏幕内容，
+        // 背后在动它就跟着动，不存在"截一帧固定住"这回事。
+        // 同时省掉整段解码 + stackBlur，卡顿与闪退的源头消失。
+        //
         val blur = view.findViewById<LiveBlurView>(R.id.detailBlurBg) ?: return
-        val detail = view.findViewById<View>(R.id.detailArea)
-        val image = view.findViewById<ImageView>(R.id.popupImage)
-
-        // 横屏模糊层在详情区（图片下方），沿用「底部对齐」取源底部那一段
-        blur.setCoverSource(false)
-
-        val extraPx = (Prefs.landBlurFadeDp.coerceIn(0, 80) * density * s).toInt()
-        blur.setBlurRadius(Prefs.landBlurRadiusDp.coerceIn(0, 60) * density)
-        // 压暗只用于保证文字可读，默认 12%（旧值 30% 会让横屏下方整片发黑）
-        val dim = Prefs.landBlurDimPercent.coerceIn(0, 90) * 255 / 100
-        blur.setDim(dim shl 24)
-        blur.setBottomCornerRadius(Prefs.cornerRadiusDp.coerceIn(0, 200) * density)
-        // 实时逐帧模糊：绑定源 ImageView 的 Drawable，GIF 每前进一帧就重算一次，
-        // 所以「模糊后面看得到在动」；图片未就绪时先用预解码的静态位图顶上。
-        blur.setSource(image)
-        blur.visibility = View.VISIBLE
-
-        if (detail == null) {
-            blur.setFadeRatio(if (extraPx > 0) 0.25f else 0f)
-            return
-        }
-        fitBlurToDetail(blur, detail, extraPx)
+        blur.setSource(null)
+        blur.setSourceBitmap(null)
+        blur.visibility = View.GONE
     }
 
     /**
@@ -1040,74 +1031,20 @@ object PopupOverlayManager {
      *  3. 顶部留一段渐隐带（fadeRatio），与上方清晰画面柔和衔接，不做硬边；
      *  4. 图片 / GIF 所在的 imageWrap 分层在模糊层之上，始终清晰显示原图。
      */
-    private fun setupPortraitBlur(view: View, density: Float) {
-        //
-        // 竖屏：卡片内「图片区正下方 → 卡片底边」这一整段做毛玻璃。
-        // 模糊源是弹窗自己的图片（实时逐帧），所以图片 / GIF 上方清晰、
-        // 下方是它自己的柔和延伸，中间有渐隐过渡，不是硬边。
-        //
-        val blur = view.findViewById<LiveBlurView>(R.id.popupBlurBg) ?: return
-        val image = view.findViewById<ImageView>(R.id.popupImage)
-
-        //
-        // 【修复】竖屏"看不到模糊"。
-        //
-        // 旧实现把模糊层裁成「图片区正下方 → 卡片底边」这一小条，
-        // 实际可见面积很小、又被 45% 渐隐带吃掉一截，看上去等于没有。
-        //
-        // 改成：模糊层铺满整张卡片。图片 / GIF 所在区域由 imageWrap 不透明地盖在上面，
-        // 所以图片本身永远清晰；露出来的就是图片周围的留白 + 下方文字区背景 ——
-        // 正好是用户要的「除了图片位置，其余空白都是毛玻璃」。
-        //
-        //
-        // 【重要】高度绝不能在测量阶段设成 MATCH_PARENT。
-        // 父容器 popupRoot 是 wrap_content，子项用 MATCH_PARENT 会把整张卡片顶到
-        // 最大可用尺寸 —— 上一版"弹窗铺满全屏"就是这么来的。
-        // 正确做法：等布局完成后读取卡片实测高度，写成固定像素值。
-        // 固定 px 不会再反过来撑大父容器，卡片尺寸完全由 contentColumn 说了算。
-        //
-        blur.setCoverSource(true)
-        blur.setBlurRadius(Prefs.portraitBlurRadiusDp.coerceIn(0, 60) * density)
-        // 压暗默认 12%，只为保文字可读；旧值 30% 会把这段压成暗块
-        val dim = Prefs.portraitBlurDimPercent.coerceIn(0, 90) * 255 / 100
-        blur.setDim(dim shl 24)
-        blur.setBottomCornerRadius(Prefs.cornerRadiusDp.coerceIn(0, 200) * density)
-        // 整卡铺满后不需要顶部渐隐带了：上方就是卡片顶边，做渐隐反而糊掉一圈
-        blur.setFadeRatio(0f)
-        blur.setSource(image)
-        fitPortraitBlurHeight(blur, 0)
-    }
-
     /**
-     * 把模糊层高度对齐为「卡片实测高度」，但**只在布局完成后**写固定像素值。
-     * 测量阶段一律保持 1dp，不参与父容器 wrap_content 的测量，卡片尺寸因此不受影响。
+     * 竖屏：不再自制模糊层。
+     *
+     * 模糊对象改为「弹窗背后被盖住的手机界面」，由系统跨窗口模糊提供
+     * （见 showInternal 里的 crossBlur），靠半透明卡片透出来。
+     *
+     * 自制层彻底停用：它要自己解码位图并跑 stackBlur，
+     * 整卡尺寸下正是卡顿与 OOM 闪退的根源；而且源是弹窗自己的图，方向本身就不对。
      */
-    private fun fitPortraitBlurHeight(blur: LiveBlurView, attempt: Int) {
-        val host = blur.parent as? View ?: return
-        // 先收回 1dp 再测量：模糊层是固定像素高度，带着旧值参与 wrap_content 测量
-        // 会把卡片撑住，内容变小时也缩不回去（电量文字变化时就容易撞上）。
-        val lp0 = blur.layoutParams
-        if (lp0 != null && lp0.height > 1) {
-            lp0.height = 1
-            blur.layoutParams = lp0
-        }
-        blur.post {
-            val h = host.height
-            if (h > 0) {
-                val lp = blur.layoutParams
-                if (lp != null) {
-                    lp.height = h
-                    if (lp is FrameLayout.LayoutParams) lp.gravity = Gravity.TOP
-                    blur.layoutParams = lp
-                }
-                blur.visibility = View.VISIBLE
-            } else if (attempt < 8) {
-                // 还没测量出来：下一帧再试，最多 8 次，绝不无限 post
-                fitPortraitBlurHeight(blur, attempt + 1)
-            } else {
-                blur.visibility = View.GONE
-            }
-        }
+    private fun setupPortraitBlur(view: View, density: Float) {
+        val blur = view.findViewById<LiveBlurView>(R.id.popupBlurBg) ?: return
+        blur.setSource(null)
+        blur.setSourceBitmap(null)
+        blur.visibility = View.GONE
     }
 
     /**
