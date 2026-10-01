@@ -285,9 +285,9 @@ object PopupOverlayManager {
         //  - 不需要 App 解码位图、不跑 stackBlur —— 卡顿与 OOM 闪退的源头一并消失。
         //
         val radiusDp = if (landscape) Prefs.landBlurRadiusDp else Prefs.portraitBlurRadiusDp
-        // 只有「模糊屏幕内容」模式才挂跨窗口模糊；走「模糊上传图片」时必须关掉，
-        // 否则两层模糊叠在一起，反而看不清
-        val crossBlur = Prefs.windowBlurEnabled && !Prefs.blurFromImage && radiusDp > 0
+        // 竖屏走纯白无模糊，横屏走自制动态模糊 —— 两处都不再需要系统跨窗口模糊，
+        // 一律关闭：它在这台机器上是静态快照，只会带来不可预期的结果
+        val crossBlur = false
         if (crossBlur) {
             flags = flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
         }
@@ -726,8 +726,8 @@ object PopupOverlayManager {
      */
     private fun prefetchBlurSource(context: Context, view: View, imageUri: String?) {
         val blur = view.findViewById<LiveBlurView>(R.id.detailBlurBg) ?: return
-        // 只在「模糊上传的图片」模式下需要；屏幕模式由系统合成器采样，不解码任何位图
-        if (!Prefs.blurFromImage) {
+        // 只有横屏（detailBlurBg 所在的布局）才需要；竖屏已改为纯白，不解码任何位图
+        if (!isLandscapeView(view)) {
             blur.setSourceBitmap(null)
             return
         }
@@ -793,11 +793,17 @@ object PopupOverlayManager {
         val alpha = (alphaPercent * 255 / 100).coerceIn(0, 255)
         val panelColor = ColorUtils.setAlphaComponent(Prefs.panelColor or (0xFF shl 24), alpha)
 
+        // 竖屏纯白模式：整卡不透明纯白，与横屏的模糊互不干扰
+        val solidWhite = !landscape && Prefs.portraitSolidWhite
+        val finalPanelColor =
+            if (solidWhite) Prefs.SOLID_WHITE
+            else panelColor
+
         // 参考外观：横屏的圆角 / 底色 / 裁剪全部交给 RoundedCardLayout 处理，
         // 这样"图片铺满整张卡片"时四个角也会被平滑裁掉，不会出现直角毛边
         val card = view.findViewById<View>(R.id.card) as? RoundedCardLayout
         if (card != null) {
-            card.setCardStyle(radiusPx, panelColor, Prefs.accentColor or (0xFF shl 24), 0f)
+            card.setCardStyle(radiusPx, finalPanelColor, Prefs.accentColor or (0xFF shl 24), 0f)
         } else {
             // 竖屏：整块换成「纯色 + 圆角 + 细描边」的 GradientDrawable。
             // 不能沿用「改原背景 + setColor」的写法：原背景是 <gradient> 渐变，
@@ -805,8 +811,9 @@ object PopupOverlayManager {
             val bg = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = radiusPx
-                setColor(panelColor)
-                setStroke((1 * density).toInt(), 0x33FFFFFF)
+                setColor(finalPanelColor)
+                // 纯白面板用极浅灰描边勾出边界；深色面板沿用原来的白色半透明描边
+                setStroke((1 * density).toInt(), if (solidWhite) 0x1F000000 else 0x33FFFFFF)
             }
             view.background = bg
         }
@@ -950,34 +957,27 @@ object PopupOverlayManager {
      *  3. 渐隐带让模糊层顶部柔和融进上方清晰画面，不做硬边一刀切；
      *  4. 底部两角圆角跟随卡片圆角；轻度压暗只为保证文字可读。
      */
+        //
+    /** 该弹窗 View 是否是横屏布局（以是否存在 detailBlurBg 为准，比读屏幕方向可靠） */
+    private fun isLandscapeView(view: View): Boolean =
+        view.findViewById<View>(R.id.detailBlurBg) != null
+
     private fun setupLandscapeBlur(view: View, s: Float, density: Float) {
+        // 【横屏保留动态模糊】只做详情区这一小块（不是整卡），面积小、运算量可控。
+        // 源 = 弹窗自己的图片 / GIF，通过 attachCallback 接管帧回调：
+        // GIF 每前进一帧就重算一次，所以它会跟着动 —— 这就是以前能做好、后来丢掉的那套。
         //
-        // 横屏同样停用自制模糊层。
-        //
-        // 之前"横屏模糊固定一帧不动"的根因：自制层绑定弹窗自己的图，
-        // 只在源就位的那一帧算了一次，之后 GIF 帧变化未必能驱动它重绘。
-        // 改用系统跨窗口模糊后，模糊由系统合成器实时采样弹窗背后的屏幕内容，
-        // 背后在动它就跟着动，不存在"截一帧固定住"这回事。
-        // 同时省掉整段解码 + stackBlur，卡顿与闪退的源头消失。
+        // 竖屏已改为纯白无模糊（见 setupPortraitBlur），因此整卡尺寸的重模糊不复存在，
+        // 闪退与卡顿的根源被移除；横屏这一小块保留完全没问题。
         //
         val blur = view.findViewById<LiveBlurView>(R.id.detailBlurBg) ?: return
-
-        if (!Prefs.blurFromImage) {
-            // 模糊「弹窗背后被盖住的手机界面」：由系统跨窗口模糊提供，
-            // 这一层不参与绘制。（若你的 ROM 把它渲染成静态快照、不会动，
-            // 请在设置里把「模糊来源」改成「上传的图片 / GIF」）
-            blur.setSource(null)
-            blur.setSourceBitmap(null)
-            blur.visibility = View.GONE
-            return
-        }
-
-        // —— 以下为「模糊上传的图片 / GIF」模式：实时逐帧，跟着 GIF 一起动 ——
         val detail = view.findViewById<View>(R.id.detailArea)
         val image = view.findViewById<ImageView>(R.id.popupImage)
+
         blur.setCoverSource(false)
         val extraPx = (Prefs.landBlurFadeDp.coerceIn(0, 80) * density * s).toInt()
         blur.setBlurRadius(Prefs.landBlurRadiusDp.coerceIn(0, 60) * density)
+        // 压暗默认 12%，只为保证文字可读；旧值 30% 会把整块压成黑
         val dim = Prefs.landBlurDimPercent.coerceIn(0, 90) * 255 / 100
         blur.setDim(dim shl 24)
         blur.setBottomCornerRadius(Prefs.cornerRadiusDp.coerceIn(0, 200) * density)
@@ -1088,57 +1088,20 @@ object PopupOverlayManager {
      * 整卡尺寸下正是卡顿与 OOM 闪退的根源；而且源是弹窗自己的图，方向本身就不对。
      */
     private fun setupPortraitBlur(view: View, density: Float) {
+        //
+        // 【竖屏彻底不做模糊】
+        // 整卡尺寸的 stackBlur 是反复闪退的根源（主线程跑几十万像素 → OOM）。
+        // 用户改为要求：竖屏做成系统弹窗那种纯白，不再有任何模糊层。
+        // 这里不解码位图、不绑 ImageView、不跑模糊 —— 竖屏这条路径上再没有能崩的地方。
+        //
         val blur = view.findViewById<LiveBlurView>(R.id.popupBlurBg) ?: return
-
-        if (!Prefs.blurFromImage) {
-            // 模糊「弹窗背后被盖住的手机界面」：由系统跨窗口模糊提供
-            blur.setSource(null)
-            blur.setSourceBitmap(null)
-            blur.visibility = View.GONE
-            return
-        }
-
-        // —— 「模糊上传的图片 / GIF」模式：铺满整卡，逐帧重算 ——
-        val image = view.findViewById<ImageView>(R.id.popupImage)
-        blur.setCoverSource(true)
-        blur.setBlurRadius(Prefs.portraitBlurRadiusDp.coerceIn(0, 60) * density)
-        val dim = Prefs.portraitBlurDimPercent.coerceIn(0, 90) * 255 / 100
-        blur.setDim(dim shl 24)
-        blur.setBottomCornerRadius(Prefs.cornerRadiusDp.coerceIn(0, 200) * density)
-        blur.setFadeRatio(0f)
-        blur.setSource(image)
-        fitPortraitBlurHeight(blur, 0)
+        blur.setSource(null)
+        blur.setSourceBitmap(null)
+        blur.visibility = View.GONE
     }
+
 
     /**
-     * 把模糊层高度对齐为「卡片实测高度」，且**只在布局完成后**写固定像素值。
-     * 测量阶段一律保持 1dp，绝不参与父容器 wrap_content 的测量 ——
-     * 否则会把整张卡片顶到全屏（这正是 1.3.5「弹窗铺满全屏」的根因）。
-     */
-    private fun fitPortraitBlurHeight(blur: LiveBlurView, attempt: Int) {
-        val host = blur.parent as? View ?: return
-        val lp0 = blur.layoutParams
-        if (lp0 != null && lp0.height > 1) {
-            lp0.height = 1
-            blur.layoutParams = lp0
-        }
-        blur.post {
-            val h = host.height
-            if (h > 0) {
-                val lp = blur.layoutParams
-                if (lp != null) {
-                    lp.height = h
-                    if (lp is FrameLayout.LayoutParams) lp.gravity = Gravity.TOP
-                    blur.layoutParams = lp
-                }
-                blur.visibility = View.VISIBLE
-            } else if (attempt < 8) {
-                fitPortraitBlurHeight(blur, attempt + 1)
-            } else {
-                blur.visibility = View.GONE
-            }
-        }
-    }
 
     /**
      * 等卡片走完布局后，把模糊层对齐到「图片区正下方 → 卡片底部」这一整段：
@@ -1266,8 +1229,10 @@ object PopupOverlayManager {
     // ------------------------------------------------------------------ 配色
 
     private fun applyColors(view: View) {
-        val text = Prefs.textColor or (0xFF shl 24)
-        val accent = Prefs.accentColor or (0xFF shl 24)
+        // 竖屏纯白面板：文字必须转成深色，否则白底白字等于看不见
+        val solidWhite = Prefs.portraitSolidWhite && !isLandscapeView(view)
+        val text = if (solidWhite) Prefs.SOLID_WHITE_TEXT else (Prefs.textColor or (0xFF shl 24))
+        val accent = if (solidWhite) Prefs.SOLID_WHITE_ACCENT else (Prefs.accentColor or (0xFF shl 24))
 
         view.findViewById<TextView>(R.id.tvDeviceName)?.setTextColor(text)
         view.findViewById<TextView>(R.id.tvConnState)?.setTextColor(ColorUtils.setAlphaComponent(text, 180))
