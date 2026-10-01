@@ -199,6 +199,27 @@ object Prefs {
         get() = gi("portrait_blur_dim", 12)
         set(v) = si("portrait_blur_dim", v)
 
+    // ---------------- 竖屏：纯白面板（不做任何模糊） ----------------
+    //
+    // 竖屏模糊是反复闪退的根源：整卡尺寸的 stackBlur 要在主线程上跑几十万像素，
+    // 既卡又 OOM。用户改为要求：竖屏干脆不要模糊，做成系统弹窗那种纯白。
+    // 竖屏不解码位图、不跑模糊、不绑定 ImageView —— 这条路径上再没有能崩的东西。
+    // 模糊只保留在横屏那一小块（面积小，运算量可控）。
+
+    /** 竖屏是否使用纯白面板（关闭模糊）。默认开。 */
+    var portraitSolidWhite: Boolean
+        get() = gb("portrait_solid_white", true)
+        set(v) = sb("portrait_solid_white", v)
+
+    /** 竖屏纯白面板的白（各厂商系统弹窗通用白） */
+    const val SOLID_WHITE = 0xFFFFFFFF.toInt()
+
+    /** 纯白面板上的文字色（近黑），保证可读 */
+    const val SOLID_WHITE_TEXT = 0xFF1A1A1A.toInt()
+
+    /** 纯白面板上的强调色（系统蓝，与原生弹窗一致） */
+    const val SOLID_WHITE_ACCENT = 0xFF1677FF.toInt()
+
     // ---------------- 毛玻璃：模糊"被弹窗盖住的手机界面" ----------------
     //
     // 这才是用户要的效果：弹窗盖住了手机界面上的某个字/图标，
