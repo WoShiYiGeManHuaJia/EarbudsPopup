@@ -212,13 +212,13 @@ object Prefs {
         set(v) = sb("portrait_solid_white", v)
 
     /** 竖屏纯白面板的白（各厂商系统弹窗通用白） */
-    const val SOLID_WHITE = 0xFFFFFFFF.toInt()
+    val SOLID_WHITE = 0xFFFFFFFF.toInt()
 
     /** 纯白面板上的文字色（近黑），保证可读 */
-    const val SOLID_WHITE_TEXT = 0xFF1A1A1A.toInt()
+    val SOLID_WHITE_TEXT = 0xFF1A1A1A.toInt()
 
     /** 纯白面板上的强调色（系统蓝，与原生弹窗一致） */
-    const val SOLID_WHITE_ACCENT = 0xFF1677FF.toInt()
+    val SOLID_WHITE_ACCENT = 0xFF1677FF.toInt()
 
     // ---------------- 毛玻璃：模糊"被弹窗盖住的手机界面" ----------------
     //
