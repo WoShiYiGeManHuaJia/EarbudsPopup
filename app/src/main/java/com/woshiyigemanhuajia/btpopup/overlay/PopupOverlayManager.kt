@@ -931,6 +931,9 @@ object PopupOverlayManager {
         val detail = view.findViewById<View>(R.id.detailArea)
         val image = view.findViewById<ImageView>(R.id.popupImage)
 
+        // 横屏模糊层在详情区（图片下方），沿用「底部对齐」取源底部那一段
+        blur.setCoverSource(false)
+
         val extraPx = (Prefs.landBlurFadeDp.coerceIn(0, 80) * density * s).toInt()
         blur.setBlurRadius(Prefs.landBlurRadiusDp.coerceIn(0, 60) * density)
         // 压暗只用于保证文字可读，默认 12%（旧值 30% 会让横屏下方整片发黑）
@@ -1064,6 +1067,9 @@ object PopupOverlayManager {
             blur.layoutParams = lp
         }
         blur.visibility = View.VISIBLE
+
+        // 铺满模式：源内容缩放覆盖整卡，图片四周的留白也有模糊
+        blur.setCoverSource(true)
 
         blur.setBlurRadius(Prefs.portraitBlurRadiusDp.coerceIn(0, 60) * density)
         // 压暗默认 12%，只为保文字可读；旧值 30% 会把这段压成暗块

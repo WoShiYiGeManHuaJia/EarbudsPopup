@@ -92,6 +92,13 @@ class LiveBlurView @JvmOverloads constructor(
 
     /** 源 ImageView 的 Drawable 还没到位时的重绘重试计数（上限 80 次 ≈ 12 秒） */
     private var srcWaitTicks = 0
+
+    /**
+     * 源内容是否「缩放铺满本 View」。
+     * true  = 整块模糊区都是图片的模糊延展（竖屏整卡毛玻璃用，图片四周留白也有模糊）
+     * false = 只取源底部那一段并对齐到底边（横屏详情区用）
+     */
+    private var coverSource = false
     private val mainHandler = Handler(Looper.getMainLooper())
 
     // ---- StackBlur 缓冲区：尺寸变化时才重建（必须按 w/h 分别判断，见 ensureBuffers）----
@@ -142,6 +149,16 @@ class LiveBlurView @JvmOverloads constructor(
     fun setSourceBitmap(bmp: Bitmap?) {
         if (sourceBitmap === bmp) return
         sourceBitmap = bmp
+        invalidate()
+    }
+
+    /**
+     * 源内容是否缩放铺满整个本 View。
+     * 竖屏整卡毛玻璃要 true（图片四周留白也能被模糊填满），横屏详情区保持 false。
+     */
+    fun setCoverSource(cover: Boolean) {
+        if (coverSource == cover) return
+        coverSource = cover
         invalidate()
     }
 
@@ -263,9 +280,10 @@ class LiveBlurView @JvmOverloads constructor(
                 val dr = iv?.drawable
                 val sw = iv?.width ?: 0
                 val sh = iv?.height ?: 0
+                val vw = width
                 val vh = height
-                if (dr != null && sw > 0 && sh > 0 && vh > 0) {
-                    drawSource(canvas, dr, sw, sh, vh)
+                if (dr != null && sw > 0 && sh > 0 && vw > 0 && vh > 0) {
+                    drawSource(canvas, dr, sw, sh, vw, vh)
                     canvas.drawColor(0x1A000000)
                 } else {
                     canvas.drawColor(0x1A000000)
@@ -338,7 +356,7 @@ class LiveBlurView @JvmOverloads constructor(
             } else if (dr != null && sw > 0 && sh > 0) {
                 // 模糊位图算不出来：直接画不模糊的源画面，绝不留一层压暗黑块
                 try {
-                    drawSource(canvas, dr, sw, sh, vh)
+                    drawSource(canvas, dr, sw, sh, vw, vh)
                 } catch (ignored: Throwable) {
                 }
             }
@@ -416,7 +434,7 @@ class LiveBlurView @JvmOverloads constructor(
         sb.eraseColor(Color.TRANSPARENT)
         sc.save()
         sc.scale(1f / factor, 1f / factor)
-        drawSource(sc, dr, sw, sh, vh)
+        drawSource(sc, dr, sw, sh, vw, vh)
         sc.restore()
 
         // 半径按小图尺寸动态取（参考实现）：上限收紧到短边的 1/8，
@@ -456,11 +474,35 @@ class LiveBlurView @JvmOverloads constructor(
      * 矩阵还没就绪时现算 centerCrop 兜底，保证底部区域一定有内容。
      * Drawable bounds 只在本层画布上临时改写、finally 里还原，不污染 ImageView 自身绘制。
      */
-    private fun drawSource(canvas: Canvas, dr: Drawable, sw: Int, sh: Int, vh: Int) {
+    private fun drawSource(canvas: Canvas, dr: Drawable, sw: Int, sh: Int, vw: Int, vh: Int) {
         val imageView = src ?: return
         val oldBounds = Rect(dr.bounds)
         canvas.save()
         try {
+            if (coverSource) {
+                //
+                // 【铺满模式】把源内容按 centerCrop 语义缩放，覆盖整个本 View。
+                //
+                // 模糊层铺满整张卡片时（竖屏），如果还沿用「底部对齐」，
+                // 源会被整体下推、只有底部一小条落在可见范围内 —— 表现就是
+                // 「只有下方文字那块有模糊，图片四周的留白是空的」。
+                // 铺满后整卡背景都是图片的模糊延展，图片区被不透明原图盖住，
+                // 露出来的四周留白自然也是毛玻璃。
+                //
+                var iw = dr.intrinsicWidth
+                var ih = dr.intrinsicHeight
+                if (iw <= 0 || ih <= 0) {
+                    iw = sw
+                    ih = sh
+                }
+                val scale = max(vw.toFloat() / iw, vh.toFloat() / ih)
+                canvas.translate((vw - iw * scale) / 2f, (vh - ih * scale) / 2f)
+                canvas.scale(scale, scale)
+                dr.setBounds(0, 0, iw, ih)
+                dr.draw(canvas)
+                return
+            }
+
             // 平移 -(sh - vh)：源的底部对齐到本 View 的位置
             canvas.translate(0f, -(sh - vh).toFloat())
             val m: Matrix? = imageView.imageMatrix
