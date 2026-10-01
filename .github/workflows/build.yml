@@ -59,6 +59,13 @@ jobs:
         if: env.GRADLE_EXIT != '0'
         run: exit 1
 
+      - name: Upload APK artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: app/build/outputs/apk/release/*.apk
+
       - name: Show APK signature
         if: always()
         run: |
