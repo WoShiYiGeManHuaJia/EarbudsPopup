@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- 用于 View.setTag 的键（不是 View id，只是资源 id 占位） -->
-    <item name="tag_matrix_retry" type="id" />
-    <!-- 标记该耳塞图标正处于「等待真实电量」的浮动状态 -->
-    <item name="tag_float_anim" type="id" />
-</resources>
