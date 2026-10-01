@@ -267,6 +267,7 @@ class MainActivity : AppCompatActivity() {
             if (it <= 0) "不自动关闭" else "${it}s"
         }
 
+        b.swPortraitWhite.isChecked = Prefs.portraitSolidWhite
         b.swWindowBlur.isChecked = Prefs.windowBlurEnabled
         b.swBlurFromImage.isChecked = Prefs.blurFromImage
         b.swAutoPopup.isChecked = Prefs.autoPopup
@@ -302,6 +303,12 @@ class MainActivity : AppCompatActivity() {
     // ------------------------------------------------------------------ 开关
 
     private fun setupSwitches() {
+        b.swPortraitWhite.setOnCheckedChangeListener { _, v ->
+            if (loadingUi) return@setOnCheckedChangeListener
+            Prefs.portraitSolidWhite = v
+            refreshPreview()
+        }
+
         b.swWindowBlur.setOnCheckedChangeListener { _, v ->
             if (loadingUi) return@setOnCheckedChangeListener
             Prefs.windowBlurEnabled = v
