@@ -490,6 +490,24 @@
         </LinearLayout>
 
         <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/swLandBlur"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:checked="false"
+            android:text="横屏：详情区动态模糊（模糊上传的图片）"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp" />
+
+        <TextView
+            style="@style/CardHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="2dp"
+            android:layout_marginBottom="2dp"
+            android:text="默认关闭：横屏模糊是闪退与「横屏不弹窗」的高度可疑来源。确认弹窗稳定后可再打开试用" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/swPortraitWhite"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -1252,6 +1270,15 @@
                     android:layout_marginStart="8dp"
                     android:text="@string/copy_adb" />
             </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCrashLog"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="查看崩溃日志（闪退后打开）" />
+
 
             <TextView
                 style="@style/CardHint"
