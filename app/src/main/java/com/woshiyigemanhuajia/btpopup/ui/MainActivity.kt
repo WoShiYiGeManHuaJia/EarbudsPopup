@@ -104,8 +104,91 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ------------------------------------------------------------------ 后台任务隐藏
+
+    /**
+     * 【修复「后台任务隐藏」不生效】
+     *
+     * 只靠 Manifest 的 excludeFromRecents 不够：它只在 **task 创建时** 生效，
+     * 已经出现在最近任务里的 task 不会被立刻移除，要等系统下次重新评估
+     * （通常得再切一次别的 App 才会刷新）—— 这正是「划到后台还有，点进别的 App 才消失」。
+     *
+     * 这里改成主动移除，两条一起上：
+     *  1) ActivityManager.AppTask.setExcludeFromRecents(true)：立刻把当前 task 标记为排除；
+     *  2) finishAndRemoveTask()：切到后台后把 Activity 连同 task 一起收掉，
+     *     最近任务里从此不再有本 App 的卡片。
+     *
+     * 弹窗由 Service + 静态广播接收器驱动，Activity 销毁完全不影响弹窗。
+     */
+
+    /** 启动外部 Activity（选图 / 授权）期间抑制隐藏，否则回不来 */
+    private var suppressHideTask = false
+
+    private val hideTaskRunnable = Runnable { hideTaskFromRecents() }
+
+    private fun hideTaskFromRecents() {
+        if (suppressHideTask) return
+        // 1) 先标记排除：多数 ROM 上这一步就已经让它从最近任务消失
+        try {
+            if (Build.VERSION.SDK_INT >= 21) {
+                val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+                am.appTasks?.forEach { task ->
+                    try {
+                        task.setExcludeFromRecents(true)
+                    } catch (ignored: Throwable) {
+                    }
+                }
+            }
+        } catch (ignored: Throwable) {
+        }
+        // 2) 再彻底收掉 task，保证下一次划到后台一定看不到
+        try {
+            if (Build.VERSION.SDK_INT >= 21 && !isFinishing) {
+                finishAndRemoveTask()
+            }
+        } catch (ignored: Throwable) {
+        }
+    }
+
+    private fun scheduleHideTask() {
+        ui.removeCallbacks(hideTaskRunnable)
+        ui.postDelayed(hideTaskRunnable, 600L)
+    }
+
+    private fun cancelHideTask() {
+        ui.removeCallbacks(hideTaskRunnable)
+    }
+
+    /** 启动外部 Activity 前调用：期间不要隐藏，否则选图回来 App 已经没了 */
+    private fun beginExternalActivity() {
+        suppressHideTask = true
+        cancelHideTask()
+    }
+
+    /** 回到前台时调用 */
+    private fun endExternalActivity() {
+        suppressHideTask = false
+        // 回来后立刻补一次标记，保证不在最近任务里
+        try {
+            if (Build.VERSION.SDK_INT >= 21) {
+                val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+                am.appTasks?.forEach { task ->
+                    try {
+                        task.setExcludeFromRecents(true)
+                    } catch (ignored: Throwable) {
+                    }
+                }
+            }
+        } catch (ignored: Throwable) {
+        }
+    }
+
     override fun onResume() {
         super.onResume()
+        cancelHideTask()
+        suppressHideTask = false
+        // 每次回到前台都补一次标记，防止 ROM 又把卡片放回去
+        endExternalActivity()
         syncFromPrefs()
         refreshPermissions()
         refreshPermissionBanner()
@@ -113,6 +196,12 @@ class MainActivity : AppCompatActivity() {
         refreshPreview()
         refreshServiceStatus()
         refreshAccessibilityState()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // 真正切到后台（不是启动外部 Activity）时，安排隐藏
+        scheduleHideTask()
     }
 
     /** 刷新「无障碍保活」开关与状态提示：开关本身只反映系统里的真实启用状态 */
@@ -419,6 +508,7 @@ class MainActivity : AppCompatActivity() {
                     val uri = androidx.core.content.FileProvider.getUriForFile(
                         this, "$packageName.fileprovider", f
                     )
+                    beginExternalActivity()
                     startActivity(
                         android.content.Intent.createChooser(
                             android.content.Intent(android.content.Intent.ACTION_SEND).apply {
@@ -467,6 +557,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun openBluetoothDeviceSettings() {
         try {
+            beginExternalActivity()
             startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
             toast("找到 Redmi Buds 6 的详情页，关闭「连接弹窗」")
         } catch (t: Throwable) {
@@ -575,6 +666,7 @@ class MainActivity : AppCompatActivity() {
             addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
         }
         try {
+            beginExternalActivity()
             startActivityForResult(intent, REQ_PICK)
         } catch (t: Throwable) {
             toast("无法打开图片选择器")
@@ -793,6 +885,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun requestOverlayPermission() {
         try {
+            beginExternalActivity()
             startActivity(
                 Intent(
                     Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -815,6 +908,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun requestIgnoreBatteryOptimization() {
         try {
+            beginExternalActivity()
             startActivity(
                 Intent(
                     Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
@@ -823,6 +917,7 @@ class MainActivity : AppCompatActivity() {
             )
         } catch (t: Throwable) {
             try {
+                beginExternalActivity()
                 startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
             } catch (t2: Throwable) {
                 toast("无法打开电池优化设置")
@@ -843,6 +938,7 @@ class MainActivity : AppCompatActivity() {
         )
         for (cn in candidates) {
             try {
+                beginExternalActivity()
                 startActivity(Intent().setComponent(cn))
                 return
             } catch (t: Throwable) {
@@ -850,6 +946,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         try {
+            beginExternalActivity()
             startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + packageName)))
         } catch (t: Throwable) {
             toast("请手动在系统设置中开启自启动")
