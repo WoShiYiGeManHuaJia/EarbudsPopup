@@ -26,6 +26,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.graphics.Color
 import androidx.core.graphics.ColorUtils
 import coil.load
 import coil.size.Size
@@ -962,6 +963,50 @@ object PopupOverlayManager {
     private fun isLandscapeView(view: View): Boolean =
         view.findViewById<View>(R.id.detailBlurBg) != null
 
+    /**
+     * 横屏「关掉模糊」时的降级实底。
+     *
+     * 没有模糊层后，详情区文字直接压在图片上：既读不清，看着也像"透明一片"。
+     * 这里铺一层不透明色板（面板色 + 轻压暗），底部两角跟随卡片圆角。
+     */
+    private fun applyLandscapeFallbackPanel(view: View, density: Float) {
+        val detail = view.findViewById<View>(R.id.detailArea) ?: return
+        val base = Prefs.panelColor or (0xFF shl 24)
+        // 与模糊模式的压暗保持一致（默认 12%），观感上接近"模糊后的暗底"
+        val dim = Prefs.landBlurDimPercent.coerceIn(0, 90)
+        val c = ColorUtils.blendARGB(base, Color.BLACK, dim / 100f)
+        val r = Prefs.cornerRadiusDp.coerceIn(0, 200) * density
+        val gd = android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            cornerRadii = floatArrayOf(0f, 0f, 0f, 0f, r, r, r, r)
+            setColor(c)
+        }
+        detail.background = gd
+        // 实底下文字用浅色：面板色偏亮时才不至于看不清
+        applyDetailTextColor(detail, pickReadableTextColor(c))
+    }
+
+    /** 开了模糊就清掉降级实底，让模糊层透出来 */
+    private fun clearLandscapeFallbackPanel(view: View) {
+        val detail = view.findViewById<View>(R.id.detailArea) ?: return
+        detail.background = null
+    }
+
+    /** 按底色亮度挑一个读得清的文字色 */
+    private fun pickReadableTextColor(bg: Int): Int {
+        val lum = (0.299 * Color.red(bg) + 0.587 * Color.green(bg) + 0.114 * Color.blue(bg)) / 255.0
+        return if (lum > 0.5) 0xFF1A1A1A.toInt() else 0xFFFFFFFF.toInt()
+    }
+
+    /** 详情区文字统一上色（设备名 / 连接状态 / 电量行） */
+    private fun applyDetailTextColor(detail: View, color: Int) {
+        detail.findViewById<TextView>(R.id.tvDeviceName)?.setTextColor(color)
+        detail.findViewById<TextView>(R.id.tvConnState)
+            ?.setTextColor(ColorUtils.setAlphaComponent(color, 200))
+        detail.findViewById<TextView>(R.id.tvBatteryLine)
+            ?.setTextColor(ColorUtils.setAlphaComponent(color, 230))
+    }
+
     private fun setupLandscapeBlur(view: View, s: Float, density: Float) {
         // 【横屏保留动态模糊】只做详情区这一小块（不是整卡），面积小、运算量可控。
         // 源 = 弹窗自己的图片 / GIF，通过 attachCallback 接管帧回调：
@@ -983,8 +1028,17 @@ object PopupOverlayManager {
             blur.setSource(null)
             blur.setSourceBitmap(null)
             blur.visibility = View.GONE
+            //
+            // 关掉模糊后详情区直接压在图片上，文字会读不清、看着像"透明一片"。
+            // 这里给它铺一层不透明实底（面板色 + 轻压暗，底部两角跟随圆角），
+            // 保证文字始终可读 —— 这是"没有模糊时"的降级，不是模糊效果本身。
+            //
+            applyLandscapeFallbackPanel(view, density)
             return
         }
+
+        // 开了模糊：清掉降级实底，让模糊层透出来
+        clearLandscapeFallbackPanel(view)
 
         try {
             val detail = view.findViewById<View>(R.id.detailArea)
