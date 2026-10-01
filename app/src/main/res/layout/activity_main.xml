@@ -507,6 +507,24 @@
             android:layout_marginBottom="2dp"
             android:text="弹窗盖住什么就模糊什么，背后在动它也跟着动；图片 / GIF 区域保持清晰" />
 
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/swBlurFromImage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:checked="false"
+            android:text="模糊来源改用上传的图片 / GIF"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp" />
+
+        <TextView
+            style="@style/CardHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="2dp"
+            android:layout_marginBottom="2dp"
+            android:text="若上方毛玻璃在你的机型上是一张不会动的定格画面，打开这个开关：改为模糊你上传的图片，会跟着 GIF 一起动" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
