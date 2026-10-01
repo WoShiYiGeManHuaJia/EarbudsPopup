@@ -18,6 +18,8 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.woshiyigemanhuajia.btpopup.R
 import com.woshiyigemanhuajia.btpopup.ui.MainActivity
+import com.woshiyigemanhuajia.btpopup.util.ForegroundStart
+import com.woshiyigemanhuajia.btpopup.util.ForegroundStart.safeStartForeground
 import com.woshiyigemanhuajia.btpopup.util.Prefs
 
 /**
@@ -32,24 +34,9 @@ class GuardService : Service() {
 
         fun start(context: Context) {
             val i = Intent(context, GuardService::class.java)
-            try {
-                if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(i) else context.startService(i)
-            } catch (t: Throwable) {
-                //
-                // 修复「关掉通知栏权限 / 后台场景拉不起服务」：
-                // startForegroundService 被系统拒绝（通知被禁用、或后台启动限制）时，
-                // 原实现只记日志就放弃 —— 守护进程彻底没了，进程一被回收就再也起不来，
-                // 表现正是「APP 在后台时弹窗概率特别低」。
-                //
-                // 这里退回普通 startService：服务照常创建并开始轮询守护，
-                // 只是没有常驻通知。通知是保活手段，不该成为保活的前提。
-                Log.w(TAG, "startForegroundService 被拒，降级为普通后台服务: " + t.message)
-                try {
-                    context.startService(i)
-                } catch (t2: Throwable) {
-                    Log.w(TAG, "启动守护服务失败: " + t2.message)
-                }
-            }
+            // 同 BluetoothMonitorService：承诺前台前先判定，
+            // 避免 ForegroundServiceDidNotStartInTimeException 杀进程
+            ForegroundStart.start(context, i)
         }
 
         fun stop(context: Context) {
@@ -111,13 +98,8 @@ class GuardService : Service() {
                 )
             }
         }
-        // 通知权限没给就别挂前台通知：没通知只是少了保活，绝不能因此把服务 / 进程带崩
-        if (Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            Log.w(TAG, "通知权限未授予：守护服务跳过前台通知，继续轮询（弹窗不依赖通知）")
-            return
-        }
+        // 只有在 ForegroundStart 判定"承诺得起"时才会走到这里；
+        // 通知权限未授予时外部已改用普通 startService()，这里不会执行。
         val pi = PendingIntent.getActivity(
             this,
             1,
@@ -134,16 +116,7 @@ class GuardService : Service() {
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setSilent(true)
             .build()
-        try {
-            if (Build.VERSION.SDK_INT >= 34) {
-                startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-            } else if (Build.VERSION.SDK_INT >= 29) {
-                startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-            } else {
-                startForeground(NOTIF_ID, notification)
-            }
-        } catch (t: Throwable) {
-            Log.w(TAG, "守护服务 startForeground 降级: " + t.message)
-        }
+        // 统一兜底：失败时体面退出，绝不让系统超时杀死进程
+        safeStartForeground(NOTIF_ID) { notification }
     }
 }
