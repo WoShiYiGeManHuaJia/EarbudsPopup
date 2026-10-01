@@ -90,6 +90,13 @@ class LiveBlurView @JvmOverloads constructor(
     private var originalCallback: Drawable.Callback? = null
     private var lastDrawAt = 0L
 
+    /** 输出位图的实际尺寸（可能被分辨率上限压缩过），供 shader 矩阵放大回原尺寸 */
+    private var outBufW = 0
+    private var outBufH = 0
+
+    /** 复用同一个矩阵对象，避免每次绘制都新建 */
+    private val shaderMatrix = Matrix()
+
     /** 源 ImageView 的 Drawable 还没到位时的重绘重试计数（上限 80 次 ≈ 12 秒） */
     private var srcWaitTicks = 0
 
@@ -351,7 +358,14 @@ class LiveBlurView @JvmOverloads constructor(
         val saved = canvas.saveLayer(0f, 0f, vw.toFloat(), vh.toFloat(), null)
         try {
             if (blurred != null && !blurred.isRecycled) {
-                shaderPaint.shader = BitmapShader(blurred, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+                val sh = BitmapShader(blurred, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+                // 输出位图被压缩过时，用矩阵放大回本 View 尺寸，避免模糊层只画了一小块
+                if (outBufW > 0 && outBufH > 0 && (outBufW != vw || outBufH != vh)) {
+                    shaderMatrix.reset()
+                    shaderMatrix.setScale(vw.toFloat() / outBufW, vh.toFloat() / outBufH)
+                    sh.setLocalMatrix(shaderMatrix)
+                }
+                shaderPaint.shader = sh
                 canvas.drawPath(shape, shaderPaint)
             } else if (dr != null && sw > 0 && sh > 0) {
                 // 模糊位图算不出来：直接画不模糊的源画面，绝不留一层压暗黑块
@@ -420,7 +434,14 @@ class LiveBlurView @JvmOverloads constructor(
      * 4 倍像素块太大，放大回来是马赛克。
      */
     private fun renderBlurredBitmap(dr: Drawable, sw: Int, sh: Int, vw: Int, vh: Int): Bitmap {
-        val factor = 2
+        //
+        // 【性能修复】降采样系数改为按尺寸自适应。
+        // 模糊层铺满整卡后面积比原来（底部一小条）大十几倍，
+        // 固定 factor=2 会让 stackBlur 在主线程上跑不动 —— 表现就是操作卡顿、随后 OOM 闪退。
+        // 这里保证参与模糊的小图最长边不超过 ~200px：无论卡片多大，模糊运算量恒定。
+        //
+        val targetSmall = 200
+        val factor = max(1, (max(vw, vh) + targetSmall - 1) / targetSmall).coerceAtMost(8)
         val bw = max(1, vw / factor)
         val bh = max(1, vh / factor)
 
@@ -439,8 +460,11 @@ class LiveBlurView @JvmOverloads constructor(
 
         // 半径按小图尺寸动态取（参考实现）：上限收紧到短边的 1/8，
         // 模糊依旧明显但保留结构，不会糊成一片纯色。
+        // 半径按小图尺寸动态取（参考实现）：上限收紧到短边的 1/8，
+        // 模糊依旧明显但保留结构，不会糊成一片纯色。
+        // 除以 factor 让模糊强度不随降采样倍数变化 —— 卡片变大时观感保持一致。
         val maxR = max(4, min(bw, bh) / 8)
-        val radius = min(maxR, max(5, (blurRadiusPx / 8f).roundToInt()))
+        val radius = min(maxR, max(3, (blurRadiusPx / factor / 2f).roundToInt()))
         try {
             stackBlur(sb, radius)
         } catch (t: Throwable) {
@@ -452,16 +476,33 @@ class LiveBlurView @JvmOverloads constructor(
             }
         }
 
+        //
+        // 【内存修复】输出位图也设分辨率上限。
+        // 整卡模糊时全尺寸位图（例：1100×1650）一次就要 7MB+，反复重建会 OOM 闪退。
+        // 这里限制像素总量，绘制时靠 shader 矩阵放大回去，观感几乎无损。
+        //
+        val maxOutPixels = 900_000
+        var outScale = 1f
+        while (vw * vh * outScale * outScale > maxOutPixels && outScale > 0.25f) {
+            outScale *= 0.75f
+        }
+        val ow = max(1, (vw * outScale).toInt())
+        val oh = max(1, (vh * outScale).toInt())
+
         var ob = outBuf
-        if (ob == null || ob.width != vw || ob.height != vh) {
-            ob = Bitmap.createBitmap(vw, vh, Bitmap.Config.ARGB_8888)
+        if (ob == null || ob.width != ow || ob.height != oh) {
+            ob = Bitmap.createBitmap(ow, oh, Bitmap.Config.ARGB_8888)
             outBuf = ob
             outCanvas = Canvas(ob)
+            outBufW = ow
+            outBufH = oh
         }
         val oc = outCanvas!!
         ob.eraseColor(Color.TRANSPARENT)
         oc.save()
-        oc.scale(factor.toFloat(), factor.toFloat())
+        // sb(bw×bh) 放大到 ow×oh：缩放比 = ow / bw = factor × outScale
+        val up = factor.toFloat() * outScale
+        oc.scale(up, up)
         oc.drawBitmap(sb, 0f, 0f, upscalePaint)
         oc.restore()
         return ob
