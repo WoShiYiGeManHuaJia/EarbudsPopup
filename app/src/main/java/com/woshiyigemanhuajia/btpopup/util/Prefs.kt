@@ -173,10 +173,21 @@ object Prefs {
         get() = gi("land_scale_percent", 78)
         set(v) = si("land_scale_percent", v)
 
+    /**
+     * 横屏详情区是否启用动态模糊（模糊上传的图片 / GIF）。
+     *
+     * 【默认关闭】「横屏弹窗不弹」与「反复闪退」高度同源：
+     * 弹窗一触发模糊就崩，进程被杀，弹窗自然出不来。
+     * 默认关掉，先保证「横屏能正常弹、App 不崩」；想试模糊再手动打开。
+     */
+    var landBlurEnabled: Boolean
+        get() = gb("land_blur_enabled", false)
+        set(v) = sb("land_blur_enabled", v)
+
     /** 横屏详情区动态模糊层的模糊半径（dp） */
     var landBlurRadiusDp: Int
         get() = gi("land_blur_radius", 26)
-        set(v) = si("land_blur_radius", v)
+        set(v) = si("land_blur_radius", v.coerceIn(0, 60))
 
     /** 横屏详情区模糊层之上的压暗程度（%），只为保证文字可读 */
     var landBlurDimPercent: Int
