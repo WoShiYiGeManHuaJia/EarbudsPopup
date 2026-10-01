@@ -39,9 +39,14 @@ object Prefs {
         set(v) = ss("image_uri", v)
 
     /** 0-100，面板背景不透明度 */
+    /**
+     * 卡片底色不透明度（%）。
+     * 数值越低，背后被弹窗盖住的手机界面透得越多、毛玻璃越明显。
+     * 100 = 完全实色（此时背景模糊看不见）。
+     */
     var panelAlpha: Int
-        get() = gi("panel_alpha", 88)
-        set(v) = si("panel_alpha", v)
+        get() = gi("panel_alpha", 82)
+        set(v) = si("panel_alpha", v.coerceIn(0, 100))
 
     /** 图片区高度 dp（40 - 600） */
     var imageHeightDp: Int
@@ -175,7 +180,7 @@ object Prefs {
 
     /** 横屏详情区模糊层之上的压暗程度（%），只为保证文字可读 */
     var landBlurDimPercent: Int
-        get() = gi("land_blur_dim", 30)
+        get() = gi("land_blur_dim", 12)
         set(v) = si("land_blur_dim", v)
 
     /** 横屏模糊层顶部的渐隐过渡带高度（dp）：越大过渡越柔和，0 = 硬边 */
@@ -191,8 +196,25 @@ object Prefs {
 
     /** 竖屏背景模糊层之上的压暗程度（%），保证文字可读 */
     var portraitBlurDimPercent: Int
-        get() = gi("portrait_blur_dim", 30)
+        get() = gi("portrait_blur_dim", 12)
         set(v) = si("portrait_blur_dim", v)
+
+    // ---------------- 背景模糊（模糊"被弹窗盖住的手机界面"） ----------------
+    //
+    // 之前的模糊源是弹窗自己的图片 —— 那不是用户想要的。
+    // 用户要的是毛玻璃：模糊弹窗背后真实的手机界面。
+    // 这只能由系统提供（FLAG_BLUR_BEHIND 跨窗口模糊），
+    // 好处是完全不碰 popupImage 的 Drawable，GIF / 图片不可能再丢。
+
+    /** 是否启用系统级背景模糊（模糊弹窗背后的手机界面） */
+    var behindBlurEnabled: Boolean
+        get() = gb("behind_blur_enabled", true)
+        set(v) = sb("behind_blur_enabled", v)
+
+    /** 系统级背景模糊半径（dp），0 = 不模糊 */
+    var behindBlurRadiusDp: Int
+        get() = gi("behind_blur_radius", 24)
+        set(v) = si("behind_blur_radius", v.coerceIn(0, 60))
 
     // ---------------- 动画 ----------------
     /** fade / scale / slide_top / slide_bottom / spring */
