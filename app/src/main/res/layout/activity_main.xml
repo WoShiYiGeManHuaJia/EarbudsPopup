@@ -490,6 +490,24 @@
         </LinearLayout>
 
         <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/swPortraitWhite"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:checked="true"
+            android:text="竖屏：纯白面板（不做模糊）"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp" />
+
+        <TextView
+            style="@style/CardHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="2dp"
+            android:layout_marginBottom="2dp"
+            android:text="竖屏弹窗用系统弹窗那种纯白底 + 深色字，完全不做模糊（横屏那一小块动态模糊不受影响）" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/swWindowBlur"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
