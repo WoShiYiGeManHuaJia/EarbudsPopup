@@ -47,41 +47,20 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           rm -rf /tmp/logout && mkdir -p /tmp/logout
           cp build_log.txt /tmp/logout/ 2>/dev/null || echo "no log" > /tmp/logout/build_log.txt
+          cp app/build/outputs/apk/release/app-release.apk /tmp/logout/app-release.apk 2>/dev/null || true
           git checkout --orphan logs-tmp
           git rm -rf --cached . >/dev/null 2>&1 || true
           rm -rf $(ls -A | grep -v '^\.git$') || true
-          cp /tmp/logout/build_log.txt .
+          cp /tmp/logout/build_log.txt . 2>/dev/null || true
+          cp /tmp/logout/app-release.apk . 2>/dev/null || true
           git add -f build_log.txt
+          git add -f app-release.apk || true
           git commit -m "build log $GITHUB_RUN_ID" || echo "no change"
           git push -f origin HEAD:build-logs || echo "push failed"
 
       - name: Fail if build failed
         if: env.GRADLE_EXIT != '0'
         run: exit 1
-
-      - name: Publish APK to build-logs branch
-        if: success()
-        run: |
-          set -e
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          rm -rf /tmp/apkl && mkdir -p /tmp/apkl
-          cp app/build/outputs/apk/release/*.apk /tmp/apkl/app-release.apk
-          git checkout --orphan apkl-tmp
-          git rm -rf --cached . >/dev/null 2>&1 || true
-          rm -rf $(ls -A | grep -v '^\.git$') || true
-          cp /tmp/apkl/app-release.apk .
-          git add -f app-release.apk
-          git commit -m "apk $GITHUB_RUN_ID" || echo "no change"
-          git push -f origin HEAD:build-logs || echo "push failed"
-          ls -la /tmp/apkl
-
-      - name: Upload APK artifact
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release
-          path: app/build/outputs/apk/release/*.apk
 
       - name: Show APK signature
         if: always()
