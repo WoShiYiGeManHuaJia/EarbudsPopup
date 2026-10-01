@@ -47,14 +47,18 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           rm -rf /tmp/logout && mkdir -p /tmp/logout
           cp build_log.txt /tmp/logout/ 2>/dev/null || echo "no log" > /tmp/logout/build_log.txt
-          cp app/build/outputs/apk/release/app-release.apk /tmp/logout/app-release.apk 2>/dev/null || true
+          echo "--- APK ---" >> /tmp/logout/build_log.txt
+          ls -la app/build/outputs/apk/release/ >> /tmp/logout/build_log.txt 2>&1 || true
+          md5sum app/build/outputs/apk/release/*.apk >> /tmp/logout/build_log.txt 2>&1 || true
+          base64 app/build/outputs/apk/release/app-release.apk > /tmp/logout/app.b64 2>/dev/null || true
+          ls -la /tmp/logout >> /tmp/logout/build_log.txt 2>&1 || true
           git checkout --orphan logs-tmp
           git rm -rf --cached . >/dev/null 2>&1 || true
           rm -rf $(ls -A | grep -v '^\.git$') || true
           cp /tmp/logout/build_log.txt . 2>/dev/null || true
-          cp /tmp/logout/app-release.apk . 2>/dev/null || true
+          cp /tmp/logout/app.b64 . 2>/dev/null || true
           git add -f build_log.txt
-          git add -f app-release.apk || true
+          git add -f app.b64 || true
           git commit -m "build log $GITHUB_RUN_ID" || echo "no change"
           git push -f origin HEAD:build-logs || echo "push failed"
 
