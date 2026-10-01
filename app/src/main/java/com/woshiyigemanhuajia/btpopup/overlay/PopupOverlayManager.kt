@@ -285,7 +285,9 @@ object PopupOverlayManager {
         //  - 不需要 App 解码位图、不跑 stackBlur —— 卡顿与 OOM 闪退的源头一并消失。
         //
         val radiusDp = if (landscape) Prefs.landBlurRadiusDp else Prefs.portraitBlurRadiusDp
-        val crossBlur = Prefs.windowBlurEnabled && radiusDp > 0
+        // 只有「模糊屏幕内容」模式才挂跨窗口模糊；走「模糊上传图片」时必须关掉，
+        // 否则两层模糊叠在一起，反而看不清
+        val crossBlur = Prefs.windowBlurEnabled && !Prefs.blurFromImage && radiusDp > 0
         if (crossBlur) {
             flags = flags or WindowManager.LayoutParams.FLAG_BLUR_BEHIND
         }
@@ -724,7 +726,28 @@ object PopupOverlayManager {
      */
     private fun prefetchBlurSource(context: Context, view: View, imageUri: String?) {
         val blur = view.findViewById<LiveBlurView>(R.id.detailBlurBg) ?: return
+        // 只在「模糊上传的图片」模式下需要；屏幕模式由系统合成器采样，不解码任何位图
+        if (!Prefs.blurFromImage) {
+            blur.setSourceBitmap(null)
+            return
+        }
+        val tagKey = imageUri ?: ""
+        if (blur.getTag(R.id.detailBlurBg) == tagKey) return
+        blur.setTag(R.id.detailBlurBg, tagKey)
+        if (imageUri.isNullOrBlank()) {
+            blur.setSourceBitmap(null)
+            return
+        }
         blur.setSourceBitmap(null)
+        val appContext = context.applicationContext
+        blurSrcExec.execute {
+            val bmp = decodeBlurSource(appContext, imageUri)
+            if (bmp != null) {
+                blur.post { blur.setSourceBitmap(bmp) }
+            } else {
+                Log.w(TAG, "模糊源解码失败：" + imageUri)
+            }
+        }
     }
 
     /** 独立解码一份"小图"作为模糊源；GIF 只取首帧，不会启动动画 */
@@ -938,9 +961,33 @@ object PopupOverlayManager {
         // 同时省掉整段解码 + stackBlur，卡顿与闪退的源头消失。
         //
         val blur = view.findViewById<LiveBlurView>(R.id.detailBlurBg) ?: return
-        blur.setSource(null)
-        blur.setSourceBitmap(null)
-        blur.visibility = View.GONE
+
+        if (!Prefs.blurFromImage) {
+            // 模糊「弹窗背后被盖住的手机界面」：由系统跨窗口模糊提供，
+            // 这一层不参与绘制。（若你的 ROM 把它渲染成静态快照、不会动，
+            // 请在设置里把「模糊来源」改成「上传的图片 / GIF」）
+            blur.setSource(null)
+            blur.setSourceBitmap(null)
+            blur.visibility = View.GONE
+            return
+        }
+
+        // —— 以下为「模糊上传的图片 / GIF」模式：实时逐帧，跟着 GIF 一起动 ——
+        val detail = view.findViewById<View>(R.id.detailArea)
+        val image = view.findViewById<ImageView>(R.id.popupImage)
+        blur.setCoverSource(false)
+        val extraPx = (Prefs.landBlurFadeDp.coerceIn(0, 80) * density * s).toInt()
+        blur.setBlurRadius(Prefs.landBlurRadiusDp.coerceIn(0, 60) * density)
+        val dim = Prefs.landBlurDimPercent.coerceIn(0, 90) * 255 / 100
+        blur.setDim(dim shl 24)
+        blur.setBottomCornerRadius(Prefs.cornerRadiusDp.coerceIn(0, 200) * density)
+        blur.setSource(image)
+        blur.visibility = View.VISIBLE
+        if (detail == null) {
+            blur.setFadeRatio(if (extraPx > 0) 0.25f else 0f)
+            return
+        }
+        fitBlurToDetail(blur, detail, extraPx)
     }
 
     /**
@@ -1042,9 +1089,55 @@ object PopupOverlayManager {
      */
     private fun setupPortraitBlur(view: View, density: Float) {
         val blur = view.findViewById<LiveBlurView>(R.id.popupBlurBg) ?: return
-        blur.setSource(null)
-        blur.setSourceBitmap(null)
-        blur.visibility = View.GONE
+
+        if (!Prefs.blurFromImage) {
+            // 模糊「弹窗背后被盖住的手机界面」：由系统跨窗口模糊提供
+            blur.setSource(null)
+            blur.setSourceBitmap(null)
+            blur.visibility = View.GONE
+            return
+        }
+
+        // —— 「模糊上传的图片 / GIF」模式：铺满整卡，逐帧重算 ——
+        val image = view.findViewById<ImageView>(R.id.popupImage)
+        blur.setCoverSource(true)
+        blur.setBlurRadius(Prefs.portraitBlurRadiusDp.coerceIn(0, 60) * density)
+        val dim = Prefs.portraitBlurDimPercent.coerceIn(0, 90) * 255 / 100
+        blur.setDim(dim shl 24)
+        blur.setBottomCornerRadius(Prefs.cornerRadiusDp.coerceIn(0, 200) * density)
+        blur.setFadeRatio(0f)
+        blur.setSource(image)
+        fitPortraitBlurHeight(blur, 0)
+    }
+
+    /**
+     * 把模糊层高度对齐为「卡片实测高度」，且**只在布局完成后**写固定像素值。
+     * 测量阶段一律保持 1dp，绝不参与父容器 wrap_content 的测量 ——
+     * 否则会把整张卡片顶到全屏（这正是 1.3.5「弹窗铺满全屏」的根因）。
+     */
+    private fun fitPortraitBlurHeight(blur: LiveBlurView, attempt: Int) {
+        val host = blur.parent as? View ?: return
+        val lp0 = blur.layoutParams
+        if (lp0 != null && lp0.height > 1) {
+            lp0.height = 1
+            blur.layoutParams = lp0
+        }
+        blur.post {
+            val h = host.height
+            if (h > 0) {
+                val lp = blur.layoutParams
+                if (lp != null) {
+                    lp.height = h
+                    if (lp is FrameLayout.LayoutParams) lp.gravity = Gravity.TOP
+                    blur.layoutParams = lp
+                }
+                blur.visibility = View.VISIBLE
+            } else if (attempt < 8) {
+                fitPortraitBlurHeight(blur, attempt + 1)
+            } else {
+                blur.visibility = View.GONE
+            }
+        }
     }
 
     /**
