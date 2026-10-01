@@ -268,6 +268,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         b.swWindowBlur.isChecked = Prefs.windowBlurEnabled
+        b.swBlurFromImage.isChecked = Prefs.blurFromImage
         b.swAutoPopup.isChecked = Prefs.autoPopup
         b.swForeground.isChecked = Prefs.foregroundGuard
         b.swAccessibility.isChecked = KeepAliveAccessibilityService.isEnabled(this)
@@ -304,6 +305,12 @@ class MainActivity : AppCompatActivity() {
         b.swWindowBlur.setOnCheckedChangeListener { _, v ->
             if (loadingUi) return@setOnCheckedChangeListener
             Prefs.windowBlurEnabled = v
+            refreshPreview()
+        }
+
+        b.swBlurFromImage.setOnCheckedChangeListener { _, v ->
+            if (loadingUi) return@setOnCheckedChangeListener
+            Prefs.blurSourceMode = if (v) "image" else "screen"
             refreshPreview()
         }
 
