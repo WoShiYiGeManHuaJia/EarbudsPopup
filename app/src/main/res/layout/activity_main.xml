@@ -489,6 +489,24 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/swWindowBlur"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:checked="true"
+            android:text="毛玻璃（模糊被弹窗盖住的手机界面）"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp" />
+
+        <TextView
+            style="@style/CardHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="2dp"
+            android:layout_marginBottom="2dp"
+            android:text="弹窗盖住什么就模糊什么，背后在动它也跟着动；图片 / GIF 区域保持清晰" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
