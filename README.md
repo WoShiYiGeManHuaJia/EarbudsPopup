@@ -1,3 +1,2 @@
 # EarbudsPopup2
-
-1.3.7 rebuild
+1.3.9
