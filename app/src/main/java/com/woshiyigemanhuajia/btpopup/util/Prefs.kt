@@ -199,6 +199,26 @@ object Prefs {
         get() = gi("portrait_blur_dim", 12)
         set(v) = si("portrait_blur_dim", v)
 
+    // ---------------- 毛玻璃：模糊"被弹窗盖住的手机界面" ----------------
+    //
+    // 这才是用户要的效果：弹窗盖住了手机界面上的某个字/图标，
+    // 弹窗上这一块空白就显示"那个字被模糊后的样子"。
+    // 模糊对象是弹窗背后的屏幕内容，不是用户上传的图片 / GIF。
+    //
+    // 实现走系统跨窗口模糊（FLAG_BLUR_BEHIND）：由系统合成器实时采样窗口背后内容，
+    // 因此背后在动它也跟着动（横屏"固定一帧"的问题从根上消失），
+    // 而且完全不需要 App 自己解码位图、跑 stackBlur —— 卡顿与 OOM 闪退的源头也被移除。
+
+    /** 是否启用毛玻璃（模糊弹窗背后被盖住的手机界面） */
+    var windowBlurEnabled: Boolean
+        get() = gb("window_blur_enabled", true)
+        set(v) = sb("window_blur_enabled", v)
+
+    /** 毛玻璃模糊半径（dp），0 = 不模糊 */
+    var windowBlurRadiusDp: Int
+        get() = gi("window_blur_radius", 24)
+        set(v) = si("window_blur_radius", v.coerceIn(0, 60))
+
     // ---------------- 动画 ----------------
     /** fade / scale / slide_top / slide_bottom / spring */
     var animType: String
