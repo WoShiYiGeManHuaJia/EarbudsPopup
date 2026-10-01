@@ -33,6 +33,8 @@ import com.woshiyigemanhuajia.btpopup.battery.BatteryUpdateBridge
 import com.woshiyigemanhuajia.btpopup.bluetooth.BluetoothPopupTrigger
 import com.woshiyigemanhuajia.btpopup.overlay.PopupOverlayManager
 import com.woshiyigemanhuajia.btpopup.ui.MainActivity
+import com.woshiyigemanhuajia.btpopup.util.ForegroundStart
+import com.woshiyigemanhuajia.btpopup.util.ForegroundStart.safeStartForeground
 import com.woshiyigemanhuajia.btpopup.util.PermissionGuard
 import com.woshiyigemanhuajia.btpopup.util.Prefs
 
@@ -51,24 +53,16 @@ class BluetoothMonitorService : Service() {
 
         fun start(context: Context) {
             val i = Intent(context, BluetoothMonitorService::class.java).setAction(ACTION_START)
-            try {
-                if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(i) else context.startService(i)
-            } catch (t: Throwable) {
-                //
-                // 修复「关掉通知栏权限，直接不弹窗了」：
-                // Android 13+ 关掉通知权限后，startForegroundService 会被系统拒绝
-                // （或启动后因无法显示通知被立刻回收），监听服务整个没起来、
-                // 蓝牙广播压根没人注册 —— 表现就是彻底不弹窗。
-                //
-                // 这里退回普通 startService：服务照常创建、照常注册广播、照常弹窗，
-                // 只是没有常驻通知。通知只是保活手段，不该成为弹窗的前提。
-                Log.w(TAG, "startForegroundService 被拒，降级为普通后台服务: " + t.message)
-                try {
-                    context.startService(i)
-                } catch (t2: Throwable) {
-                    Log.e(TAG, "启动监听服务失败: " + t2.message)
-                }
-            }
+            //
+            // 【崩溃根因修复】
+            // 原来是「先 startForegroundService()，再在服务里判断通知权限、
+            // 没权限就跳过 startForeground()」—— 承诺前台却不兑现，
+            // 系统等 5 秒超时会抛 ForegroundServiceDidNotStartInTimeException
+            // 并杀死整个进程。这正是反复闪退、横屏不弹窗的统一解释。
+            //
+            // 改为由 ForegroundStart 统一判定：确定能兑现才承诺前台。
+            // 通知权限未授予时走普通 startService，服务照常注册广播、照常弹窗。
+            ForegroundStart.start(context, i)
         }
 
         /**
@@ -80,21 +74,8 @@ class BluetoothMonitorService : Service() {
          */
         fun startFromBluetoothEvent(context: Context) {
             val i = Intent(context, BluetoothMonitorService::class.java).setAction(ACTION_START)
-            try {
-                if (Build.VERSION.SDK_INT >= 26) {
-                    context.startForegroundService(i)
-                } else {
-                    context.startService(i)
-                }
-            } catch (t: Throwable) {
-                // 同上：前台拉不起就退普通服务，保证蓝牙广播有人接收
-                Log.w(TAG, "蓝牙事件兜底拉起服务被系统拒绝，降级为普通后台服务: " + t.message)
-                try {
-                    context.startService(i)
-                } catch (t2: Throwable) {
-                    Log.w(TAG, "启动监听服务失败（不影响已弹出的弹窗）: " + t2.message)
-                }
-            }
+            // 同 start()：承诺前先判定，杜绝 DidNotStartInTime 杀进程
+            ForegroundStart.start(context, i)
         }
 
         fun stop(context: Context) {
@@ -239,43 +220,15 @@ class BluetoothMonitorService : Service() {
     /**
      * 挂前台通知（保活用）。
      *
-     * 【关键】通知权限被用户关掉时**绝不**再尝试 startForeground，
-     * 也不允许任何异常从这儿逃出去把服务 / 进程带崩 —— 否则进程一死，
-     * 刚刚由静态广播接收器弹出的悬浮窗会被系统一并回收，表现就是"关了通知就完全不弹窗"。
-     * 没通知只是少了保活手段，弹窗本身走的是 addView，不需要通知。
+     * 【关键】只有在 ForegroundStart 判定"承诺得起前台"时才可能走到这里。
+     * 通知权限被关掉时，外部已经改用普通 startService()，这里压根不会被调用，
+     * 不会再出现"承诺前台却不兑现 → 系统 5 秒超时杀进程"。
+     *
+     * 仍然保留双重保险：通知建不出来或 startForeground 失败时，
+     * 主动体面退出服务，也好过让系统超时杀掉整个进程。
      */
     private fun startForegroundCompat() {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            Log.w(TAG, "通知权限未授予：跳过前台通知，监听照常运行（弹窗不依赖通知）")
-            return
-        }
-        try {
-            val notification = buildNotification()
-            try {
-                if (Build.VERSION.SDK_INT >= 34) {
-                    startForeground(
-                        NOTIF_ID,
-                        notification,
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-                    )
-                } else if (Build.VERSION.SDK_INT >= 29) {
-                    startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-                } else {
-                    startForeground(NOTIF_ID, notification)
-                }
-            } catch (t: Throwable) {
-                Log.w(TAG, "startForeground 失败，降级: " + t.message)
-                try {
-                    startForeground(NOTIF_ID, notification)
-                } catch (t2: Throwable) {
-                    Log.e(TAG, "startForeground 彻底失败（仅影响保活，弹窗不受影响）: " + t2.message)
-                }
-            }
-        } catch (t: Throwable) {
-            Log.e(TAG, "构建通知失败（仅影响保活，弹窗不受影响）: " + t.message)
-        }
+        safeStartForeground(NOTIF_ID) { buildNotification() }
     }
 
     // ------------------------------------------------------------------ 广播注册
