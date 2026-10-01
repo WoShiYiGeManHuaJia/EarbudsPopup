@@ -219,6 +219,21 @@ object Prefs {
         get() = gi("window_blur_radius", 24)
         set(v) = si("window_blur_radius", v.coerceIn(0, 60))
 
+    /**
+     * 模糊源：
+     *  - "screen"：模糊弹窗背后被盖住的手机界面（系统跨窗口模糊，实时）
+     *  - "image" ：模糊弹窗自己上传的图片 / GIF（App 逐帧重算，跟着 GIF 一起动）
+     *
+     * 部分 ROM 的跨窗口模糊是静态快照、不随背后内容刷新，
+     * 那种机器上选 "image" 才能看到会动的模糊。
+     */
+    var blurSourceMode: String
+        get() = gs("blur_source_mode", "screen") ?: "screen"
+        set(v) = ss("blur_source_mode", v)
+
+    /** 便捷判断：当前是否走「模糊上传的图片 / GIF」 */
+    val blurFromImage: Boolean get() = blurSourceMode == "image"
+
     // ---------------- 动画 ----------------
     /** fade / scale / slide_top / slide_bottom / spring */
     var animType: String
