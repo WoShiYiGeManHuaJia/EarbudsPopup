@@ -89,6 +89,9 @@ class LiveBlurView @JvmOverloads constructor(
     private var attachedDrawable: Drawable? = null
     private var originalCallback: Drawable.Callback? = null
     private var lastDrawAt = 0L
+
+    /** 源 ImageView 的 Drawable 还没到位时的重绘重试计数（上限 80 次 ≈ 12 秒） */
+    private var srcWaitTicks = 0
     private val mainHandler = Handler(Looper.getMainLooper())
 
     // ---- StackBlur 缓冲区：尺寸变化时才重建（必须按 w/h 分别判断，见 ensureBuffers）----
@@ -289,7 +292,25 @@ class LiveBlurView @JvmOverloads constructor(
         } else if (dr == null && attachedDrawable != null) {
             detachCallback()
         }
-        if (dr == null || imageView == null) return
+
+        //
+        // 【修复】横屏模糊层"只截一帧、不会跟着动图动"。
+        //
+        // 根因：绑定模糊源时图片往往还没加载完，此刻 imageView.drawable 为 null，
+        // 本方法会走到下面的 return 直接收工。而此后**再没有任何东西触发 invalidate** ——
+        // 图片加载完成时只刷新 ImageView 自己，模糊层不会重绘，
+        // 于是它永远停在"预解码的那一张静态位图"上（看起来就是截取一帧固定住）。
+        //
+        // 修法：源还没就绪时安排一次重绘重试，等 drawable 到位后
+        // 上面那段 attachCallback 就会接管 GIF 回调，之后每帧自动重算。
+        //
+        if (dr == null || imageView == null) {
+            if (src != null && srcWaitTicks++ < 80) {
+                postInvalidateDelayed(150L)
+            }
+            return
+        }
+        srcWaitTicks = 0
 
         val sw = imageView.width
         val sh = imageView.height

@@ -14,8 +14,8 @@ android {
         applicationId = "com.woshiyigemanhuajia.btpopup"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "1.3.3"
+        versionCode = 17
+        versionName = "1.3.4"
         resConfigs("zh", "en")
     }
 

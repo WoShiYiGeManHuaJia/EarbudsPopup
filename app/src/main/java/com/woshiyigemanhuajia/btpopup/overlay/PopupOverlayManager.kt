@@ -1045,16 +1045,34 @@ object PopupOverlayManager {
         //
         val blur = view.findViewById<LiveBlurView>(R.id.popupBlurBg) ?: return
         val image = view.findViewById<ImageView>(R.id.popupImage)
-        val sharp = view.findViewById<View>(R.id.imageWrap) ?: image
+
+        //
+        // 【修复】竖屏"看不到模糊"。
+        //
+        // 旧实现把模糊层裁成「图片区正下方 → 卡片底边」这一小条，
+        // 实际可见面积很小、又被 45% 渐隐带吃掉一截，看上去等于没有。
+        //
+        // 改成：模糊层铺满整张卡片。图片 / GIF 所在区域由 imageWrap 不透明地盖在上面，
+        // 所以图片本身永远清晰；露出来的就是图片周围的留白 + 下方文字区背景 ——
+        // 正好是用户要的「除了图片位置，其余空白都是毛玻璃」。
+        //
+        val lp = blur.layoutParams
+        if (lp != null) {
+            lp.height = ViewGroup.LayoutParams.MATCH_PARENT
+            lp.width = ViewGroup.LayoutParams.MATCH_PARENT
+            if (lp is FrameLayout.LayoutParams) lp.gravity = Gravity.FILL
+            blur.layoutParams = lp
+        }
+        blur.visibility = View.VISIBLE
 
         blur.setBlurRadius(Prefs.portraitBlurRadiusDp.coerceIn(0, 60) * density)
         // 压暗默认 12%，只为保文字可读；旧值 30% 会把这段压成暗块
         val dim = Prefs.portraitBlurDimPercent.coerceIn(0, 90) * 255 / 100
         blur.setDim(dim shl 24)
         blur.setBottomCornerRadius(Prefs.cornerRadiusDp.coerceIn(0, 200) * density)
-        blur.setFadeRatio(if (Prefs.portraitBlurRadiusDp > 0) 0.45f else 0f)
+        // 整卡铺满后不需要顶部渐隐带了：上方就是卡片顶边，做渐隐反而糊掉一圈
+        blur.setFadeRatio(0f)
         blur.setSource(image)
-        alignPortraitBlur(blur, sharp)
     }
 
     /**

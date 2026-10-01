@@ -1,5 +1,6 @@
 package com.woshiyigemanhuajia.btpopup.service
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -15,6 +16,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Handler
@@ -234,27 +236,45 @@ class BluetoothMonitorService : Service() {
         return builder.build()
     }
 
+    /**
+     * 挂前台通知（保活用）。
+     *
+     * 【关键】通知权限被用户关掉时**绝不**再尝试 startForeground，
+     * 也不允许任何异常从这儿逃出去把服务 / 进程带崩 —— 否则进程一死，
+     * 刚刚由静态广播接收器弹出的悬浮窗会被系统一并回收，表现就是"关了通知就完全不弹窗"。
+     * 没通知只是少了保活手段，弹窗本身走的是 addView，不需要通知。
+     */
     private fun startForegroundCompat() {
-        val notification = buildNotification()
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.w(TAG, "通知权限未授予：跳过前台通知，监听照常运行（弹窗不依赖通知）")
+            return
+        }
         try {
-            if (Build.VERSION.SDK_INT >= 34) {
-                startForeground(
-                    NOTIF_ID,
-                    notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-                )
-            } else if (Build.VERSION.SDK_INT >= 29) {
-                startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-            } else {
-                startForeground(NOTIF_ID, notification)
+            val notification = buildNotification()
+            try {
+                if (Build.VERSION.SDK_INT >= 34) {
+                    startForeground(
+                        NOTIF_ID,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                    )
+                } else if (Build.VERSION.SDK_INT >= 29) {
+                    startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                } else {
+                    startForeground(NOTIF_ID, notification)
+                }
+            } catch (t: Throwable) {
+                Log.w(TAG, "startForeground 失败，降级: " + t.message)
+                try {
+                    startForeground(NOTIF_ID, notification)
+                } catch (t2: Throwable) {
+                    Log.e(TAG, "startForeground 彻底失败（仅影响保活，弹窗不受影响）: " + t2.message)
+                }
             }
         } catch (t: Throwable) {
-            Log.w(TAG, "startForeground 失败，降级: " + t.message)
-            try {
-                startForeground(NOTIF_ID, notification)
-            } catch (t2: Throwable) {
-                Log.e(TAG, "startForeground 彻底失败: " + t2.message)
-            }
+            Log.e(TAG, "构建通知失败（仅影响保活，弹窗不受影响）: " + t.message)
         }
     }
 

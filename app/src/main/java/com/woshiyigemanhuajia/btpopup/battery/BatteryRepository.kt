@@ -35,7 +35,10 @@ object BatteryRepository {
     fun update(address: String, name: String?, block: (BatteryInfo) -> BatteryInfo): BatteryInfo {
         val k = key(address)
         val base = cache[k] ?: BatteryInfo(name ?: BatteryInfo.UNKNOWN_NAME, address)
-        val withName = if (base.name.isBlank() && !name.isNullOrBlank()) base.copy(name = name) else base
+        // 【修复】用户在系统蓝牙设置里给耳机改名后，弹窗仍显示旧名。
+        // 旧逻辑是「只有缓存名为空时才写入新名」，于是第一次拿到的名字被永久锁死，
+        // 之后再改名永远显示旧的。改成：只要拿到新名字就覆盖。
+        val withName = if (!name.isNullOrBlank() && name != base.name) base.copy(name = name) else base
         val next = block(withName)
         cache[k] = next
         return next
@@ -50,7 +53,8 @@ object BatteryRepository {
         val address = addressOf(device) ?: "00:00:00:00:00:00"
         val name = fallbackName?.takeIf { it.isNotBlank() } ?: safeName(device)
         var info = cache[key(address)] ?: BatteryInfo(name, address)
-        if (info.name.isBlank()) info = info.copy(name = name)
+        // 同上：名字以本次读到的为准，改了名就必须跟着变
+        if (name.isNotBlank() && name != info.name) info = info.copy(name = name)
 
         val sys = readSystemLevel(device)
         if (sys in 0..100 && sys != info.overall) {

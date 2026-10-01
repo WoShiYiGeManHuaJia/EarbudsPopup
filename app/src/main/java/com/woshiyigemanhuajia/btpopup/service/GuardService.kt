@@ -1,5 +1,6 @@
 package com.woshiyigemanhuajia.btpopup.service
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,6 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Handler
@@ -108,6 +110,13 @@ class GuardService : Service() {
                     ).apply { setShowBadge(false) }
                 )
             }
+        }
+        // 通知权限没给就别挂前台通知：没通知只是少了保活，绝不能因此把服务 / 进程带崩
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.w(TAG, "通知权限未授予：守护服务跳过前台通知，继续轮询（弹窗不依赖通知）")
+            return
         }
         val pi = PendingIntent.getActivity(
             this,
