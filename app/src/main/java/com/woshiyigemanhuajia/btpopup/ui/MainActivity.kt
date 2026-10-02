@@ -592,28 +592,49 @@ class MainActivity : AppCompatActivity() {
                 toast("正在执行…")
                 Thread {
                     //
-                    // 多条命令依次尝试：不同 ROM / 权限状态下能成功的那条不一样。
-                    // appops 管的是「后台弹出界面」，比 pm disable 温和，
-                    // 即便 pm disable 被拒，这条也可能单独生效。
+                    // 关键发现：pm disable-user 对**系统应用**必然失败 ——
+                    //   java.lang.SecurityException: Cannot disable system packages.
+                    // com.xiaomi.bluetooth 是 /system_ext 下的系统包，这条路从一开始就堵死。
+                    //
+                    // 改用系统允许的四类手段依次尝试：
+                    //  1) pm suspend           —— 挂起应用（系统包也允许），恢复用 pm unsuspend
+                    //  2) pm uninstall -k --user 0 —— 对当前用户卸载（去更新 + 标记未安装），
+                    //                                 系统包通常允许，恢复用 pm install-existing
+                    //  3) appops deny          —— 禁「后台弹出界面」(MIUI op 10021) 与悬浮窗等
+                    //  4) am force-stop        —— 仅立即止住当前这一轮，非持久
                     //
                     val cmds = listOf(
-                        "pm disable-user --user 0 com.xiaomi.bluetooth",
-                        "pm disable-user com.xiaomi.bluetooth",
-                        "appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW deny",
+                        "pm suspend --user 0 com.xiaomi.bluetooth",
+                        "pm uninstall -k --user 0 com.xiaomi.bluetooth",
                         "appops set com.xiaomi.bluetooth 10021 deny",
-                        "appops set com.xiaomi.bluetooth START_FOREGROUND deny"
+                        "cmd appops set com.xiaomi.bluetooth 10021 deny",
+                        "appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW deny",
+                        "appops set com.xiaomi.bluetooth START_FOREGROUND deny",
+                        "appops set com.xiaomi.bluetooth RUN_IN_BACKGROUND deny",
+                        "am force-stop com.xiaomi.bluetooth"
                     )
                     val results = AdbShell.execAll(cmds)
                     val okCount = results.count { it.ok }
+                    // 回读真实状态：不看"命令有没有报错"，看"包现在到底处于什么状态"
+                    val verifyCmds = listOf(
+                        "dumpsys package com.xiaomi.bluetooth | grep -iE 'suspended|enabled=|firstInstallTime|flags=',",
+                        "pm list packages -d com.xiaomi.bluetooth",
+                        "pm list packages -u com.xiaomi.bluetooth",
+                        "appops get com.xiaomi.bluetooth 10021"
+                    )
+                    val verifyResults = AdbShell.execAll(verifyCmds)
+                    val verifyText = verifyCmds.mapIndexed { i, c ->
+                        val r = verifyResults.getOrNull(i)
+                        "【状态】$c\n" + (r?.let {
+                            (it.out.trim().ifBlank { it.err.trim() }).ifBlank { "(空)" }
+                        } ?: "(未执行)")
+                    }.joinToString("\n\n")
                     runOnUiThread {
-                        if (okCount > 0) {
-                            toast("已执行 $okCount/${cmds.size} 条；若仍弹系统窗，请用下方「复制命令」手动跑")
-                        } else {
-                            toast("全部失败，请用下方「复制命令」手动执行")
-                        }
-                        // 无论成败都展示完整结果：退出码 / stdout / stderr 全拿出来，
-                        // 不再让用户只看到一句"执行失败"却无从下手
-                        showCommandResult(cmds, results)
+                        toast(
+                            if (okCount > 0) "已执行 $okCount/${cmds.size} 条，见下方状态回读"
+                            else "命令全部被拒（系统包限制），见下方状态回读"
+                        )
+                        showCommandResult(cmds, results, verifyText)
                     }
                 }.start()
             }
@@ -622,8 +643,12 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    /** 汇总每条命令的退出码与输出，失败原因一目了然 */
-    private fun showCommandResult(cmds: List<String>, results: List<com.woshiyigemanhuajia.btpopup.adb.AdbShell.Result>) {
+    /** 汇总每条命令的退出码与输出，并附上状态回读，失败原因一目了然 */
+    private fun showCommandResult(
+        cmds: List<String>,
+        results: List<com.woshiyigemanhuajia.btpopup.adb.AdbShell.Result>,
+        verifyText: String = ""
+    ) {
         val sb = StringBuilder()
         cmds.forEachIndexed { i, c ->
             val r = results.getOrNull(i)
@@ -633,9 +658,17 @@ class MainActivity : AppCompatActivity() {
                 return@forEachIndexed
             }
             sb.append(if (r.ok) "  [成功]" else "  [失败]").append(" 退出码=").append(r.code).append('\n')
-            if (r.out.isNotBlank()) sb.append("  输出: ").append(r.out.trim()).append('\n')
-            if (r.err.isNotBlank()) sb.append("  错误: ").append(r.err.trim()).append('\n')
+            val errTrim = r.err.trim()
+            if (errTrim.isNotBlank()) {
+                // 错误信息往往很长，只保留关键的第一行原因 + 首个调用点
+                val first = errTrim.lines().firstOrNull()?.trim().orEmpty()
+                sb.append("  原因: ").append(first).append('\n')
+            }
+            if (r.out.trim().isNotBlank()) sb.append("  输出: ").append(r.out.trim()).append('\n')
             sb.append('\n')
+        }
+        if (verifyText.isNotBlank()) {
+            sb.append("──────── 执行后状态回读 ────────\n").append(verifyText).append('\n')
         }
         val text = sb.toString()
         val tv = android.widget.TextView(this).apply {
@@ -665,14 +698,19 @@ class MainActivity : AppCompatActivity() {
      */
     private fun copyDisableCommands() {
         val script = listOf(
-            "pm disable-user --user 0 com.xiaomi.bluetooth",
-            "pm disable-user com.xiaomi.bluetooth",
-            "appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW deny",
+            "# —— 屏蔽小米快连弹窗（com.xiaomi.bluetooth 是系统包，pm disable-user 必失败，勿用）——",
+            "pm suspend --user 0 com.xiaomi.bluetooth",
+            "pm uninstall -k --user 0 com.xiaomi.bluetooth",
             "appops set com.xiaomi.bluetooth 10021 deny",
+            "cmd appops set com.xiaomi.bluetooth 10021 deny",
+            "appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW deny",
             "appops set com.xiaomi.bluetooth START_FOREGROUND deny",
+            "appops set com.xiaomi.bluetooth RUN_IN_BACKGROUND deny",
             "",
-            "# 恢复：",
-            "pm enable com.xiaomi.bluetooth"
+            "# —— 恢复（按顺序执行）——",
+            "pm unsuspend com.xiaomi.bluetooth",
+            "pm install-existing --user 0 com.xiaomi.bluetooth",
+            "appops reset com.xiaomi.bluetooth"
         ).joinToString("\n")
         val cm = getSystemService(android.content.Context.CLIPBOARD_SERVICE)
                 as android.content.ClipboardManager
