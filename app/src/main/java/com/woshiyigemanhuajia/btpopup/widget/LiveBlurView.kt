@@ -182,8 +182,30 @@ class LiveBlurView @JvmOverloads constructor(
         skipEvery = if (target < skipEvery) maxOf(target, skipEvery - 1) else target
     }
 
+    /**
+     * 动画期间暂停逐帧模糊。
+     *
+     * 【修复「横屏弹窗动画卡」】
+     * 入场动画（位移 / 缩放 / 淡入）与模糊重算都挤在主线程上：
+     * 动画每一帧都要跑一次 stackBlur，帧预算被吃光，动画自然一卡一卡。
+     * 动画期间先停掉模糊，动画结束再恢复 —— 用户根本注意不到动画那几百毫秒里
+     * 模糊是静止的，但能明显感觉到动画变顺了。
+     */
+    fun pauseForAnimation() {
+        animPaused = true
+        stopTicking()
+    }
+
+    fun resumeAfterAnimation() {
+        animPaused = false
+        if (attachedDrawable != null) startTicking()
+        else invalidate()
+    }
+
+    private var animPaused = false
+
     private fun startTicking() {
-        if (liveTicking) return
+        if (liveTicking || animPaused) return
         liveTicking = true
         try {
             Choreographer.getInstance().postFrameCallback(frameCallback)
