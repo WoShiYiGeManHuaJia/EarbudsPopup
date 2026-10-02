@@ -96,6 +96,7 @@ class MainActivity : AppCompatActivity() {
         setupSwitches()
         setupButtons()
         setupShizuku()
+        setupTabs()
 
         // 权限静默失败修复：启动即自检，缺运行时权限（蓝牙连接 / 通知）时直接发起系统申请；
         // 悬浮窗权限不在这里跳系统页，交由首页横幅的「一键授权」入口触发，避免启动即被弹走。
@@ -106,6 +107,72 @@ class MainActivity : AppCompatActivity() {
         if (Prefs.monitorEnabled && !BluetoothMonitorService.running) {
             BluetoothMonitorService.start(this)
         }
+    }
+
+    // ------------------------------------------------------------------ 底部导航
+
+    /**
+     * 底部四页导航：弹窗 / 设备 / 外观 / 设置。
+     *
+     * 【本次改动的范围边界】
+     * 只做「页面显隐 + 标题变化 + 选中态」这三件事。
+     * 所有功能控件仍在各自页面里、id 与绑定逻辑完全没变 ——
+     * 因此这次重排不会触及弹窗渲染、触发、去重、模糊等任何既有逻辑。
+     */
+    private fun setupTabs() {
+        val items = listOf(
+            TabItem(b.tabHome, b.pageHome, "弹窗"),
+            TabItem(b.tabDevice, b.pageDevice, "设备"),
+            TabItem(b.tabLook, b.pageLook, "外观"),
+            TabItem(b.tabSet, b.pageSet, "设置")
+        )
+        items.forEach { item ->
+            item.tab.setOnClickListener { selectTab(items, item) }
+        }
+        selectTab(items, items[0])
+
+        b.btnHelp.setOnClickListener { showHelp() }
+    }
+
+    private class TabItem(
+        val tab: android.view.View,
+        val page: android.view.View,
+        val title: String
+    )
+
+    private fun selectTab(items: List<TabItem>, target: TabItem) {
+        items.forEach { item ->
+            val on = item === target
+            item.page.visibility = if (on) android.view.View.VISIBLE else android.view.View.GONE
+            item.tab.setBackgroundResource(
+                if (on) R.drawable.bg_tab_ind else android.R.color.transparent
+            )
+            // 选中态：文字改主色并加粗（结构是两个 LinearLayout > TextView）
+            val tv = (item.tab as? android.view.ViewGroup)?.getChildAt(0) as? android.widget.TextView
+            tv?.setTextColor(
+                resources.getColor(
+                    if (on) R.color.brand_teal_dark else R.color.text_secondary, theme
+                )
+            )
+            tv?.setTypeface(null, if (on) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+        }
+        b.tvPageTitle.text = target.title
+        // 切到设备页时刷新一次列表（可能是首次连接后才出现设备）
+        if (target.title == "设备") refreshDeviceNameList()
+    }
+
+    private fun showHelp() {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("使用说明")
+            .setMessage(
+                "弹窗：服务状态、提示音、实时电量\n" +
+                    "设备：已配对耳机，可单独改名\n" +
+                    "外观：预览、图片 / GIF、尺寸位置、动画，竖屏与横屏分别保存\n" +
+                    "设置：权限与 ADB 授权、屏蔽系统弹窗、后台保活\n\n" +
+                    "开盖即弹窗需要：悬浮窗权限 + 后台弹出权限 + 允许自启动 + 关闭电池优化。"
+            )
+            .setPositiveButton("知道了", null)
+            .show()
     }
 
     // ------------------------------------------------------------------ 后台任务隐藏
