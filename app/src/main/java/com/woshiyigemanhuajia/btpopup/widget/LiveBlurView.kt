@@ -27,6 +27,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import android.view.Choreographer
 
 /**
  * 详情区「实时动态模糊层」（参考 ui_ref/2_弹窗渲染逻辑/LiveBlurView.java 的最终方案）。
@@ -125,36 +126,62 @@ class LiveBlurView @JvmOverloads constructor(
     private var bufH = 0
 
     /**
-     * 逐帧心跳。
+     * 逐帧驱动：跟着屏幕刷新（VSYNC）走，而不是按固定定时器。
      *
-     * 【这才是"跟着 GIF 一起动"的关键】
-     * 只靠接管 Drawable.Callback 不可靠：源是 GIF 时，帧回调未必能驱动本 View 重绘
-     * （Coil 的 crossfade、或动画由其它线程驱动时都可能收不到 invalidateDrawable），
-     * 结果就是模糊层停在某一帧不动 —— 正是用户看到的"截取一帧固定住"。
+     * 【这才是"跟着 GIF 一起动"、且不与清晰区错帧的关键】
      *
-     * 这里改成主动心跳：只要源还活着，就按固定间隔持续 invalidate，
-     * 每次 onDraw 都重新采样源 Drawable 的**当前帧**再重新模糊。
-     * 横屏详情区面积很小，12fps 的重算开销完全可接受。
+     * 1) 只靠接管 Drawable.Callback 不可靠：源是 GIF 时帧回调未必能驱动本 View 重绘
+     *    （Coil 的 crossfade、或动画由其它线程驱动时都可能收不到 invalidateDrawable），
+     *    结果就是模糊层停在某一帧不动 —— 即"截取一帧固定住"。
+     * 2) 但用固定间隔定时器（如 80ms ≈ 12fps）又会比 GIF / 屏幕刷新慢，
+     *    模糊区落后清晰区一帧，看起来一卡一卡。
+     *
+     * 因此改用 Choreographer：每个 VSYNC 帧回调都 invalidate 一次，
+     * onDraw 里重新采样源 Drawable 的**当前帧**再模糊。
+     * 这样模糊区与清晰区在同一帧更新，不存在"慢一帧"。
      */
     private var liveTicking = false
-    private val tick = object : Runnable {
-        override fun run() {
+
+    private val frameCallback = object : Choreographer.FrameCallback {
+        override fun doFrame(frameTimeNanos: Long) {
             if (!liveTicking) return
             invalidate()
-            mainHandler.postDelayed(this, FRAME_MS)
+            // 继续请求下一帧，形成逐帧循环
+            try {
+                Choreographer.getInstance().postFrameCallback(this)
+            } catch (ignored: Throwable) {
+                liveTicking = false
+            }
         }
     }
 
     private fun startTicking() {
         if (liveTicking) return
         liveTicking = true
-        mainHandler.removeCallbacks(tick)
-        mainHandler.postDelayed(tick, FRAME_MS)
+        try {
+            Choreographer.getInstance().postFrameCallback(frameCallback)
+        } catch (t: Throwable) {
+            Log.w(TAG, "Choreographer 不可用，退定时器: " + t.message)
+            mainHandler.post(tickFallback)
+        }
     }
 
     private fun stopTicking() {
         liveTicking = false
-        mainHandler.removeCallbacks(tick)
+        try {
+            Choreographer.getInstance().removeFrameCallback(frameCallback)
+        } catch (ignored: Throwable) {
+        }
+        mainHandler.removeCallbacks(tickFallback)
+    }
+
+    /** 极端情况下 Choreographer 不可用时的兜底（频率略低，但至少会动） */
+    private val tickFallback = object : Runnable {
+        override fun run() {
+            if (!liveTicking) return
+            invalidate()
+            mainHandler.postDelayed(this, FRAME_MS)
+        }
     }
 
     /** 降采样缓冲（2 倍：4 倍会把像素块拉得太大，放大回来是马赛克） */
@@ -485,7 +512,12 @@ class LiveBlurView @JvmOverloads constructor(
         // 固定 factor=2 会让 stackBlur 在主线程上跑不动 —— 表现就是操作卡顿、随后 OOM 闪退。
         // 这里保证参与模糊的小图最长边不超过 ~200px：无论卡片多大，模糊运算量恒定。
         //
-        val targetSmall = 200
+        //
+        // 逐帧驱动后每帧都要算一次模糊（原来 12fps，现在跟随 VSYNC 最高 60fps），
+        // 因此把参与运算的小图进一步缩小：像素数按平方下降，单帧耗时才能压进一帧预算。
+        // 放大回来由 BitmapShader + FILTER_BITMAP 平滑，观感几乎无损。
+        //
+        val targetSmall = 150
         val factor = max(1, (max(vw, vh) + targetSmall - 1) / targetSmall).coerceAtMost(8)
         val bw = max(1, vw / factor)
         val bh = max(1, vh / factor)
