@@ -38,10 +38,12 @@ import com.woshiyigemanhuajia.btpopup.service.KeepAliveAccessibilityService
 import com.woshiyigemanhuajia.btpopup.util.PermissionGuard
 import com.woshiyigemanhuajia.btpopup.util.Prefs
 import rikka.shizuku.Shizuku
+import android.util.Log
 
 class MainActivity : AppCompatActivity() {
 
     companion object {
+        private const val TAG = "MainActivity"
         private const val REQ_SHIZUKU = 10086
         private const val REQ_PERMS = 2002
         private const val REQ_PICK = 2001
