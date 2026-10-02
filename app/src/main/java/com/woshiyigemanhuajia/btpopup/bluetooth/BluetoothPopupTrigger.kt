@@ -223,11 +223,25 @@ object BluetoothPopupTrigger {
         // 开盖时常常是「先断后连」（主从切换）：连接把 lastTriggerAt 记下，
         // 紧接着的断开把弹窗收掉，随后真正的连接事件落在 3 秒去重窗口内被判定为重复、
         // 直接忽略 —— 弹窗就再也不弹了，要等下一个事件才出现，实测延迟 6 秒以上。
+        //
         // 断连后下一次连接是全新事件，不是重复，必须放行。
+        //
+        // 但**不能简单清零**：关盖瞬间常有「断 → 连 → 断」的抖动，
+        // 清零会让抖动中间那次"连"也弹出来 —— 就是"盖上盖子还会再弹一次"。
+        // 这里改成记一个短暂的静默截止时刻：
+        //   · 抖动落在静默期内 → 不弹（解决关盖还弹）
+        //   · 静默期之后的真实重新开盖 → 正常弹（不会退化成 6 秒才弹）
         //
         lastAddress = null
         lastTriggerAt = 0L
+        silentUntil = System.currentTimeMillis() + DISCONNECT_SILENT_MS
     }
+
+    /** 断开后的静默期：吸收关盖瞬间的断连抖动 */
+    private const val DISCONNECT_SILENT_MS = 2000L
+
+    @Volatile
+    private var silentUntil = 0L
 
     /**
      * 连接事件的统一出口：无论 device 是否为空、进程是否在前台、前台服务能否被拉起，
@@ -257,6 +271,11 @@ object BluetoothPopupTrigger {
         val now = System.currentTimeMillis()
         if (address == lastAddress && now - lastTriggerAt < DEDUP_WINDOW_MS) {
             Log.d(TAG, "短时间重复事件，忽略: " + address)
+            return false
+        }
+        if (now < silentUntil) {
+            // 刚断开不久：大概率是关盖瞬间「断 → 连 → 断」的抖动，不弹
+            Log.d(TAG, "断开静默期内，忽略抖动: " + address)
             return false
         }
         lastAddress = address
