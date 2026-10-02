@@ -201,7 +201,16 @@ object PopupOverlayManager {
         // 这里在每次显示前比对朝向，变了就先拆掉旧窗口，再按新朝向重建。
         //
         if (rootView != null && lastLandscape != null && lastLandscape != landscape) {
+            //
+            // 【修复「横屏弹时切竖屏 → 弹窗乱冒 / 错位 / 圆角变形」】
+            // 悬浮窗的窗口参数不会随屏幕旋转自动重排：重建也照样错位，
+            // 而重建过程中新旧窗口短暂共存、布局按旧尺寸测量，圆角自然也跟着变形。
+            // 旋转本来就是一次"显示环境整体变化"，最干净的做法是**直接收掉**：
+            // 不在旋转时重建，下一次开盖会按新朝向重新正常弹出。
+            //
             removeInternal(false)
+            lastLandscape = landscape
+            return false
         }
         lastLandscape = landscape
 
@@ -541,7 +550,9 @@ object PopupOverlayManager {
 
     private fun buildStateText(info: BatteryInfo): String {
         val parts = mutableListOf<String>()
-        parts += if (info.charging) "已连接 · 充电中" else "已连接"
+        // 充电标志来源不可靠（厂商私有上报，无法校验），默认不显示；由设置开关控制
+        val showCharging = Prefs.showCharging && info.charging
+        parts += if (showCharging) "已连接 · 充电中" else "已连接"
         if (!info.hasSplit && info.overall >= 0) {
             parts += "整体电量 " + info.overall + "%"
         }
@@ -1020,10 +1031,17 @@ object PopupOverlayManager {
      *  4. 底部两角圆角跟随卡片圆角；轻度压暗只为保证文字可读。
      */
         //
-    /** 按朝向取卡片圆角（dp）：横屏更小更利落，竖屏沿用用户设的大圆角 */
-    private fun radiusFor(landscape: Boolean): Float =
-        if (landscape) Prefs.landCornerRadiusDp.coerceIn(0, 60).toFloat()
-        else Prefs.cornerRadiusDp.coerceIn(0, 200).toFloat()
+    /**
+     * 按朝向取卡片圆角（dp）。
+     * 横屏默认（Prefs.landCornerRadiusDp = -1）**直接沿用竖屏数值**，
+     * 保证两个朝向观感一致；用户在设置里单独调过横屏才用独立值。
+     */
+    private fun radiusFor(landscape: Boolean): Float {
+        val portrait = Prefs.cornerRadiusDp.coerceIn(0, 200).toFloat()
+        if (!landscape) return portrait
+        val land = Prefs.landCornerRadiusDp
+        return if (land < 0) portrait else land.coerceIn(0, 200).toFloat()
+    }
 
     /** 该弹窗 View 是否是横屏布局（以是否存在 detailBlurBg 为准，比读屏幕方向可靠） */
     private fun isLandscapeView(view: View): Boolean =
@@ -1331,6 +1349,23 @@ object PopupOverlayManager {
         val duration = Prefs.animDuration.toLong().coerceIn(80L, 1500L)
         val density = view.context.resources.displayMetrics.density
         val offset = 90 * density
+
+        // 动画期间暂停逐帧模糊，把主线程帧预算全留给动画（横屏动画卡顿的修法）
+        val blur = view.findViewById<LiveBlurView>(R.id.detailBlurBg)
+        val portraitBlur = view.findViewById<LiveBlurView>(R.id.popupBlurBg)
+        try {
+            blur?.pauseForAnimation()
+            portraitBlur?.pauseForAnimation()
+        } catch (ignored: Throwable) {
+        }
+        val resume = Runnable {
+            try {
+                blur?.resumeAfterAnimation()
+                portraitBlur?.resumeAfterAnimation()
+            } catch (ignored: Throwable) {
+            }
+        }
+        main.postDelayed(resume, (duration + 60L).coerceIn(100L, 2000L))
 
         when (Prefs.animType) {
             "fade" -> {
