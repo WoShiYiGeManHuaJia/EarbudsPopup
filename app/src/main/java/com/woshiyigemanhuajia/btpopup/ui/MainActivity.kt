@@ -39,6 +39,7 @@ import com.woshiyigemanhuajia.btpopup.util.PermissionGuard
 import com.woshiyigemanhuajia.btpopup.util.Prefs
 import rikka.shizuku.Shizuku
 import android.util.Log
+import com.woshiyigemanhuajia.btpopup.util.PopupSound
 
 class MainActivity : AppCompatActivity() {
 
@@ -807,10 +808,7 @@ class MainActivity : AppCompatActivity() {
             val stored = copyMediaToLocal(uri)
             Prefs.imageUri = stored?.let { Uri.fromFile(it).toString() } ?: uri.toString()
             refreshPreview()
-            return
-        }
-
-        if (requestCode == REQ_PICK_SOUND && resultCode == RESULT_OK) {
+        } else if (requestCode == REQ_PICK_SOUND && resultCode == RESULT_OK) {
             val uri: Uri = data?.data ?: return
             try {
                 contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -1329,7 +1327,7 @@ class MainActivity : AppCompatActivity() {
         b.btnTestSound.setOnClickListener {
             if (Prefs.soundUri.isNullOrBlank()) {
                 toast("请先选择音频文件")
-                return@setOnCheckedChangeListener
+                return@setOnClickListener
             }
             PopupSound.play(this)
             toast("试听中…")
