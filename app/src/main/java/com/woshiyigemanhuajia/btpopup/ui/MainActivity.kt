@@ -40,6 +40,7 @@ import com.woshiyigemanhuajia.btpopup.util.Prefs
 import rikka.shizuku.Shizuku
 import android.util.Log
 import com.woshiyigemanhuajia.btpopup.util.PopupSound
+import android.os.SystemClock
 
 class MainActivity : AppCompatActivity() {
 
@@ -195,6 +196,9 @@ class MainActivity : AppCompatActivity() {
     /** 启动外部 Activity（选图 / 授权）期间抑制隐藏，否则回不来 */
     private var suppressHideTask = false
 
+    /** 上次前台补拉监听服务的时间，用于节流 */
+    private var lastStartAttemptAt = 0L
+
     private val hideTaskRunnable = Runnable { hideTaskFromRecents() }
 
     private fun hideTaskFromRecents() {
@@ -268,6 +272,8 @@ class MainActivity : AppCompatActivity() {
         refreshPreview()
         refreshServiceStatus()
         refreshAccessibilityState()
+        // 服务启动是异步的：补拉后稍等再刷一次，避免仍显示"未启动"
+        ui.postDelayed({ refreshServiceStatus() }, 600L)
     }
 
     override fun onStop() {
@@ -1217,7 +1223,32 @@ class MainActivity : AppCompatActivity() {
 
     // ------------------------------------------------------------------ 状态
 
+    /**
+     * 确保监听服务在跑。
+     *
+     * 【修复「监听服务显示未启动」】
+     * 之前只在 onCreate 里启动一次，onResume 只负责**显示**状态、不做任何补救。
+     * 但服务是普通优先级进程组件，被系统回收后，
+     * 后台路径（KeepAlive / GuardService）在 Android 8+ 的后台启动限制下往往拉不起来，
+     * 于是用户切回 APP 就一直看到"未启动"，且永远不会自愈。
+     *
+     * 现在每次回到前台都补一次启动（幂等：已运行就不重复调），
+     * 这样只要打开 APP，服务必然是活的。
+     */
+    private fun ensureMonitorService() {
+        if (!Prefs.monitorEnabled) return
+        if (BluetoothMonitorService.running) return
+        val now = SystemClock.uptimeMillis()
+        // 节流：避免服务刚被杀就疯狂重试
+        if (now - lastStartAttemptAt < 2000L) return
+        lastStartAttemptAt = now
+        Log.i("MainActivity", "监听服务未运行，前台补拉")
+        BluetoothMonitorService.start(this)
+        if (Prefs.foregroundGuard) GuardService.start(this)
+    }
+
     private fun refreshServiceStatus() {
+        ensureMonitorService()
         val running = BluetoothMonitorService.running
         val missing = PermissionGuard.missingLabels(this)
         // 权限静默失败修复：把"服务在跑"和"权限是否真的给了"分开说清楚
