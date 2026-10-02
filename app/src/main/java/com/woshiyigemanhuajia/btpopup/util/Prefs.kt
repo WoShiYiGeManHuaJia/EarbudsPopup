@@ -33,6 +33,40 @@ object Prefs {
         if (ready) sp.edit().putBoolean(k, v).apply()
     }
 
+    // ---------------- 弹窗提示音 ----------------
+
+    /** 是否开启弹窗提示音 */
+    var soundEnabled: Boolean
+        get() = gb("sound_enabled", false)
+        set(v) = sb("sound_enabled", v)
+
+    /** 自定义提示音的 URI（null = 不播放自定义音，仅播报） */
+    var soundUri: String?
+        get() = gs("sound_uri", null)
+        set(v) = ss("sound_uri", v)
+
+    /** 弹窗出现后延迟多少毫秒播放提示音（0 = 立即） */
+    var soundDelayMs: Int
+        get() = gi("sound_delay_ms", 0)
+        set(v) = si("sound_delay_ms", v.coerceIn(0, 10_000))
+
+    /** 提示音播放时长上限（毫秒），到点自动停止；0 = 播完整段 */
+    var soundDurationMs: Int
+        get() = gi("sound_duration_ms", 0)
+        set(v) = si("sound_duration_ms", v.coerceIn(0, 60_000))
+
+    /** 音量 0-100 */
+    var soundVolume: Int
+        get() = gi("sound_volume", 80)
+        set(v) = si("sound_volume", v.coerceIn(0, 100))
+
+    // ---------------- 横屏圆角 ----------------
+
+    /** 横屏卡片圆角（dp）。横屏卡片更扁，沿用竖屏的大圆角会显得笨重。 */
+    var landCornerRadiusDp: Int
+        get() = gi("land_corner_radius", 14)
+        set(v) = si("land_corner_radius", v.coerceIn(0, 60))
+
     // ---------------- 设备自定义名称 ----------------
     //
     // 系统蓝牙设置里改名后，BluetoothDevice.getName() 未必同步
