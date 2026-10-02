@@ -145,7 +145,17 @@ class LiveBlurView @JvmOverloads constructor(
     private val frameCallback = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
             if (!liveTicking) return
-            invalidate()
+            //
+            // 【帧预算自适应】GIF 播到后面（帧尺寸大 / 系统负载高）时，
+            // 每帧都重算模糊会拖垮主线程，表现就是"前面正常、后面卡顿"。
+            // 这里按实测耗时动态跳帧：单帧越重，重算间隔越大，
+            // 保证模糊永远不抢占 GIF 与 UI 的帧预算。
+            //
+            framesSeen++
+            if (framesSeen >= skipEvery) {
+                framesSeen = 0
+                invalidate()
+            }
             // 继续请求下一帧，形成逐帧循环
             try {
                 Choreographer.getInstance().postFrameCallback(this)
@@ -153,6 +163,23 @@ class LiveBlurView @JvmOverloads constructor(
                 liveTicking = false
             }
         }
+    }
+
+    /** 跳帧计数：每隔 skipEvery 个 VSYNC 才重算一次模糊 */
+    private var framesSeen = 0
+    private var skipEvery = 1
+
+    /** 根据上次模糊耗时动态调整跳帧倍率 */
+    private fun adaptFrameBudget(costMs: Long) {
+        val target = when {
+            costMs > 24 -> 4
+            costMs > 16 -> 3
+            costMs > 10 -> 2
+            costMs < 5 -> 1
+            else -> skipEvery
+        }
+        // 变好时缓慢回落，避免来回抖动
+        skipEvery = if (target < skipEvery) maxOf(target, skipEvery - 1) else target
     }
 
     private fun startTicking() {
@@ -419,7 +446,10 @@ class LiveBlurView @JvmOverloads constructor(
         }
 
         val blurred = try {
-            renderBlurredBitmap(dr, sw, sh, vw, vh)
+            val t0 = SystemClock.uptimeMillis()
+            val b = renderBlurredBitmap(dr, sw, sh, vw, vh)
+            adaptFrameBudget(SystemClock.uptimeMillis() - t0)
+            b
         } catch (t: Throwable) {
             Log.e(TAG, "生成模糊位图失败", t)
             null
