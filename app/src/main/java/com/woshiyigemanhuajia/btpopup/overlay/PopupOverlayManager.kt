@@ -192,7 +192,7 @@ object PopupOverlayManager {
         // 外观参数完全一致时才复用现有弹窗，否则重建，保证改完参数预览立即生效
         if (rootView != null && signature == lastSignature) {
             bindData(rootView!!, info)
-            restartDismissTimer()
+            startDismissTimer(false)
             return
         }
         // 【闪两下修复】弹窗已在屏上且距上次显示不足 500ms：
@@ -202,7 +202,7 @@ object PopupOverlayManager {
         if (rootView != null && now - lastShowAt < 500) {
             lastSignature = signature
             bindData(rootView!!, info)
-            restartDismissTimer()
+            startDismissTimer(false)
             return
         }
         if (rootView == null && now - lastShowAt < 600) {
@@ -337,7 +337,7 @@ object PopupOverlayManager {
         lastSignature = signature
 
         playEnter(view)
-        restartDismissTimer()
+        startDismissTimer(true)
     }
 
     /** 外观参数签名：任一参数变化都触发重建，避免"改了参数但预览没变化" */
@@ -407,13 +407,39 @@ object PopupOverlayManager {
         }
     }
 
-    private fun restartDismissTimer() {
-        cancelDismissTimer()
+    /**
+     * 启动关闭倒计时。
+     *
+     * 【修复「弹窗时长时短时长」】
+     * 之前每次 showInternal 都会调 restartDismissTimer()，而系统电量广播是**不定时**的：
+     * 电量刷新让签名变化 → 弹窗重建 → 计时器被重置归零。
+     * 广播来得密，计时就被反复清零，弹窗赖着不走；广播来得稀，4 秒就消失。
+     * 用户看到的就是"有时长有时短"，完全不可预测。
+     *
+     * 现在改成：**只在真正新建弹窗时启动一次**，之后电量刷新、参数重建都不再重置。
+     * 另加一道硬上限：即便反复重建，也绝不超过设定值 + 8 秒，保证时长始终可控。
+     */
+    private var firstShowAtMs = 0L
+
+    private fun startDismissTimer(fresh: Boolean) {
         val delay = Prefs.dismissDelayMs
         if (delay <= 0) return
+        val now = System.currentTimeMillis()
+        if (fresh) {
+            firstShowAtMs = now
+            cancelDismissTimer()
+            val task = Runnable { removeInternal(true) }
+            dismissTask = task
+            main.postDelayed(task, delay.toLong().coerceIn(1000L, 120_000L))
+            return
+        }
+        // 已存在弹窗：不重置。只补一道硬上限，防止极端情况下无限驻留
+        if (firstShowAtMs <= 0) firstShowAtMs = now
+        if (dismissTask != null) return
+        val remain = (firstShowAtMs + delay + 8000L) - now
         val task = Runnable { removeInternal(true) }
         dismissTask = task
-        main.postDelayed(task, delay.toLong().coerceIn(1000L, 120_000L))
+        main.postDelayed(task, remain.coerceIn(1000L, 120_000L))
     }
 
     private fun cancelDismissTimer() {
