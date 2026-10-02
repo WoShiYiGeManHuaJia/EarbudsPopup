@@ -612,6 +612,11 @@ class MainActivity : AppCompatActivity() {
             Prefs.showCharging = v
             refreshPreview()
         }
+        b.swPopupUnknown.isChecked = Prefs.popupUnknownDevices
+        b.swPopupUnknown.setOnCheckedChangeListener { _, v ->
+            if (loadingUi) return@setOnCheckedChangeListener
+            Prefs.popupUnknownDevices = v
+        }
         b.btnClearImage.setOnClickListener {
             Prefs.imageUri = null
             refreshPreview()
