@@ -380,6 +380,13 @@ object PopupOverlayManager {
         cancelDismissTimer()
         // 弹窗收掉：朝向记录失效，提示音一并停
         lastLandscape = null
+        //
+        // 【弹窗速度】收掉后立刻清零「上次显示时间」。
+        // 下面有「距上次显示不足 600ms 的重复事件直接忽略」的去抖，
+        // 若弹窗已被断开事件正常收掉，再来的真实连接就不该被这条去抖挡住 ——
+        // 否则开盖「先断后连」的场景会被静默吞掉，表现就是迟迟不弹窗。
+        //
+        lastShowAt = 0L
         try {
             PopupSound.stop()
         } catch (ignored: Throwable) {
