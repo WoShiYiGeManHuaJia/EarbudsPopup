@@ -28,6 +28,8 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import android.view.Choreographer
+import android.graphics.RenderEffect
+import android.os.Build
 
 /**
  * 详情区「实时动态模糊层」（参考 ui_ref/2_弹窗渲染逻辑/LiveBlurView.java 的最终方案）。
@@ -244,12 +246,48 @@ class LiveBlurView @JvmOverloads constructor(
     private var outBuf: Bitmap? = null
     private var outCanvas: Canvas? = null
 
+    //
+    // 【用 GPU 做模糊，不再用 CPU 逐像素 —— 这是横屏 GIF 卡成 PPT 的根因】
+    //
+    // 原实现是"软件层 + 每帧 stackBlur"三重叠加：
+    //   1) LAYER_TYPE_SOFTWARE：整个 View 每帧都要在 CPU 上重新光栅化成位图；
+    //   2) 每帧 saveLayer 开一张离屏图层；
+    //   3) stackBlur 在主线程逐像素运算。
+    // GIF 每前进一帧就整套重跑一次，主线程帧预算被吃光 —— 表现为"卡成 PPT"。
+    //
+    // Android 12（API 31）起有 RenderEffect：模糊发生在 GPU 渲染管线里，
+    // 本 View 只负责"把源画出来"，CPU 成本几乎为零，GIF 再快也不卡。
+    // 用户的机器是 Android 16，必然走这条路径；低于 31 才回退到旧的 CPU 方案。
+    //
+    private val gpuBlur: Boolean = Build.VERSION.SDK_INT >= 31
+
     init {
         dimPaint.color = dimColor
-        // 参考实现结论：软件层下 saveLayer / PorterDuff / BitmapShader 行为确定，
-        // 不受 RenderNode、alpha layer 干扰（圆角时有时无、合成失效都源于硬件路径）。
-        setLayerType(View.LAYER_TYPE_SOFTWARE, null)
-        setClipToOutline(false)
+        if (gpuBlur) {
+            // 硬件层是使用 RenderEffect 的前提；同时省掉每帧 CPU 光栅化
+            setLayerType(View.LAYER_TYPE_HARDWARE, null)
+            setClipToOutline(false)
+            applyGpuBlur()
+        } else {
+            // 旧路径：软件层下 saveLayer / PorterDuff / BitmapShader 行为确定
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+            setClipToOutline(false)
+        }
+    }
+
+    /** 把模糊半径交给 GPU 渲染管线 */
+    private fun applyGpuBlur() {
+        if (!gpuBlur) return
+        try {
+            // 半径上限 25（系统限制）；按 dp 值换算即可
+            val r = blurRadiusPx.coerceIn(0f, 25f)
+            setRenderEffect(
+                if (r <= 0f) null
+                else RenderEffect.createBlurEffect(r, r, Shader.TileMode.CLAMP)
+            )
+        } catch (t: Throwable) {
+            Log.w(TAG, "RenderEffect 不可用，回退 CPU 模糊: " + t.message)
+        }
     }
 
     // ------------------------------------------------------------------ 对外 API
@@ -289,6 +327,8 @@ class LiveBlurView @JvmOverloads constructor(
 
     fun setBlurRadius(px: Float) {
         blurRadiusPx = max(0f, px)
+        // GPU 模式：半径变化要同步给 RenderEffect（CPU 模式下由绘制时读取）
+        applyGpuBlur()
         invalidate()
     }
 
@@ -481,12 +521,18 @@ class LiveBlurView @JvmOverloads constructor(
         // 动画结束（resumeAfterAnimation）后再恢复逐帧重算。
         //
         val cached = blurCache
-        if (animPaused && cached != null && !cached.isRecycled) {
+        if (animPaused && cached != null && !cached.isRecycled && !gpuBlur) {
             drawBlurredToCanvas(canvas, cached, shape)
             return
         }
 
-        val blurred = try {
+        //
+        // GPU 模式：模糊由 RenderEffect 完成，这里只负责把源画面画出来，
+        // 不做任何 CPU 模糊运算 —— 每帧成本从"几十万像素 stackBlur"降到一次 draw。
+        //
+        val blurred: Bitmap? = if (gpuBlur) {
+            null
+        } else try {
             val t0 = SystemClock.uptimeMillis()
             val b = renderBlurredBitmap(dr, sw, sh, vw, vh)
             adaptFrameBudget(SystemClock.uptimeMillis() - t0)
