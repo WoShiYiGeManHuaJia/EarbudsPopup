@@ -193,6 +193,7 @@ class MainActivity : AppCompatActivity() {
         refreshPermissions()
         refreshPermissionBanner()
         refreshLiveStatus()
+        refreshDeviceNameList()
         refreshPreview()
         refreshServiceStatus()
         refreshAccessibilityState()
@@ -1134,6 +1135,155 @@ class MainActivity : AppCompatActivity() {
         val color = if (running) ContextCompat.getColor(this, R.color.brand_teal)
         else ContextCompat.getColor(this, R.color.status_off)
         b.dotStatus.setTextColor(color)
+    }
+
+    /**
+     * 构建「弹窗显示的设备名」列表。
+     *
+     * 数据来源：已配对 / 已连接的蓝牙设备（优先）+ 本 App 缓存里见过的设备。
+     * 每一行显示当前生效的名字（自定义名优先于系统名），点击弹出输入框改名。
+     */
+    private fun refreshDeviceNameList() {
+        val container = b.deviceNameList
+        container.removeAllViews()
+
+        data class Item(val address: String, val sysName: String)
+
+        val items = LinkedHashMap<String, Item>()
+
+        // 1) 已配对 / 已连接设备
+        try {
+            val bm = getSystemService(android.content.Context.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager
+            val adapter = bm.adapter
+            @Suppress("MissingPermission")
+            adapter?.bondedDevices?.forEach { d ->
+                val addr = d.address ?: return@forEach
+                if (addr.isBlank()) return@forEach
+                val sys = try {
+                    d.name ?: ""
+                } catch (t: Throwable) {
+                    ""
+                }
+                items[addr] = Item(addr, sys.ifBlank { addr })
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "读取已配对设备失败: " + t.message)
+        }
+
+        // 2) 本 App 缓存里见过的设备（含自定义名已设置但当前未连接的）
+        try {
+            BatteryRepository.all().forEach { info ->
+                if (info.address.isBlank()) return@forEach
+                if (!items.containsKey(info.address)) {
+                    items[info.address] = Item(info.address, info.name)
+                }
+            }
+        } catch (ignored: Throwable) {
+        }
+
+        // 3) 只设过自定义名、其它来源都没有的设备
+        Prefs.allCustomNames().forEach { (addr, _) ->
+            if (!items.containsKey(addr)) items[addr] = Item(addr, addr)
+        }
+
+        if (items.isEmpty()) {
+            val tv = android.widget.TextView(this).apply {
+                text = "暂无设备记录；连接一次耳机后这里会出现"
+                setTextColor(resources.getColor(R.color.text_secondary, theme))
+                textSize = 12f
+            }
+            container.addView(tv)
+            return
+        }
+
+        items.values.forEach { item ->
+            val custom = Prefs.customName(item.address)
+            val shown = custom ?: item.sysName
+
+            val row = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                setPadding(0, 18, 0, 18)
+                gravity = android.view.Gravity.CENTER_VERTICAL
+            }
+
+            val textCol = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+                )
+            }
+            val nameView = android.widget.TextView(this).apply {
+                text = shown
+                setTextColor(resources.getColor(R.color.text_primary, theme))
+                textSize = 13.5f
+            }
+            val subView = android.widget.TextView(this).apply {
+                text = buildString {
+                    append(item.address)
+                    append("　·　")
+                    append(if (custom != null) "已自定义" else "跟随系统：${item.sysName}")
+                }
+                setTextColor(resources.getColor(R.color.text_secondary, theme))
+                textSize = 11f
+            }
+            textCol.addView(nameView)
+            textCol.addView(subView)
+
+            val btn = android.widget.TextView(this).apply {
+                text = if (custom != null) "修改" else "改名"
+                setTextColor(resources.getColor(R.color.brand_teal_dark, theme))
+                textSize = 12.5f
+                setPadding(24, 12, 16, 12)
+                setOnClickListener { showRenameDialog(item.address, item.sysName, custom) }
+            }
+
+            row.addView(textCol)
+            row.addView(btn)
+            container.addView(row)
+        }
+    }
+
+    private fun showRenameDialog(address: String, sysName: String, current: String?) {
+        val input = android.widget.EditText(this).apply {
+            setText(current ?: sysName)
+            setSingleLine(true)
+            hint = "留空则恢复为系统名"
+            setSelection(text.length)
+            setPadding(48, 24, 48, 12)
+        }
+        val box = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(24, 12, 24, 0)
+            addView(input)
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("设备显示名")
+            .setMessage("地址：$address")
+            .setView(box)
+            .setPositiveButton("保存") { _, _ ->
+                val v = input.text.toString().trim()
+                Prefs.setCustomName(address, v.ifBlank { null })
+                // 立刻把新名字写进缓存并刷新弹窗（若正在显示）
+                try {
+                    BatteryRepository.update(address, v.ifBlank { sysName }) { it.copy(name = v.ifBlank { sysName }) }
+                } catch (ignored: Throwable) {
+                }
+                refreshDeviceNameList()
+                refreshPreview()
+                toast(if (v.isBlank()) "已恢复为系统名" else "已保存：$v")
+            }
+            .setNeutralButton("清除") { _, _ ->
+                Prefs.setCustomName(address, null)
+                try {
+                    BatteryRepository.update(address, sysName) { it.copy(name = sysName) }
+                } catch (ignored: Throwable) {
+                }
+                refreshDeviceNameList()
+                refreshPreview()
+                toast("已恢复为系统名")
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun refreshLiveStatus() {
