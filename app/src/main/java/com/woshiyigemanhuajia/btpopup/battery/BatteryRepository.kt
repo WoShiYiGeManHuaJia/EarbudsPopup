@@ -46,8 +46,19 @@ object BatteryRepository {
             if (!effective.isNullOrBlank() && effective != base.name) base.copy(name = effective)
             else base
         val next = block(withName)
-        cache[k] = next
-        return next
+        //
+        // 【充电标志统一收口 —— 这是"总是显示充电中"的真正根因】
+        // 充电位来自厂商私有协议（小米协议 bit7、苹果协议 key 5/6/7/8 等），
+        // 各家编码不统一，第三方 App 无从校验；任一协议把某个数据位误读成充电位，
+        // 就会表现为"永远在充电中"。之前只在 UI 文案处加开关，
+        // 漏了协议解析这一侧，多个解析路径各写各的，改了一条漏一条。
+        //
+        // 这里在所有写入路径的唯一出口统一处理：开关关闭时一律不采信充电位。
+        //
+        val finalNext =
+            if (Prefs.showCharging || !next.charging) next else next.copy(charging = false)
+        cache[k] = finalNext
+        return finalNext
     }
 
     fun remove(address: String?) {
