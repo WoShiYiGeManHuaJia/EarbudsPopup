@@ -121,7 +121,11 @@ class BluetoothMonitorService : Service() {
                         TAG,
                         "A2DP 状态=" + state + " 解析设备=" + (d?.let { addressOf(it) } ?: "未取到（改为反查）")
                     )
-                    if (state == BluetoothA2dp.STATE_CONNECTED) onConnected(d)
+                    when (state) {
+                        BluetoothA2dp.STATE_CONNECTED -> onConnected(d)
+                        // 断开同样要收弹窗 + 开静默期，否则关盖还会再弹一次
+                        BluetoothA2dp.STATE_DISCONNECTED -> onDisconnected(d ?: return)
+                    }
                 }
                 BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED -> {
                     val state = intent.getIntExtra(BluetoothHeadset.EXTRA_STATE, -1)
@@ -130,7 +134,10 @@ class BluetoothMonitorService : Service() {
                         TAG,
                         "HEADSET 状态=" + state + " 解析设备=" + (d?.let { addressOf(it) } ?: "未取到（改为反查）")
                     )
-                    if (state == BluetoothHeadset.STATE_CONNECTED) onConnected(d)
+                    when (state) {
+                        BluetoothHeadset.STATE_CONNECTED -> onConnected(d)
+                        BluetoothHeadset.STATE_DISCONNECTED -> onDisconnected(d ?: return)
+                    }
                 }
             }
         }
@@ -329,10 +336,17 @@ class BluetoothMonitorService : Service() {
     private fun onDisconnected(device: BluetoothDevice) {
         val address = addressOf(device) ?: FALLBACK_ADDRESS
         BatteryRepository.remove(address)
-        if (address.equals(lastDeviceAddress, true)) {
-            PopupOverlayManager.dismiss()
-            lastDeviceAddress = null
-        }
+        //
+        // 【修复「盖上盖子还会再弹一次」的另一半】
+        // 之前这里只调 PopupOverlayManager.dismiss()，没有走统一入口，
+        // 于是 BluetoothPopupTrigger 里的「断开静默期」根本没被设置 ——
+        // 关盖瞬间的「断 → 连 → 断」抖动中那个"连"就会再弹一次。
+        // 而且原实现还有地址匹配条件，lastDeviceAddress 为 null 时连弹窗都不收。
+        //
+        // 统一交给 handleDisconnected：收弹窗 + 停提示音 + 开启静默期。
+        //
+        BluetoothPopupTrigger.handleDisconnected(this)
+        lastDeviceAddress = null
     }
 
     // 电量补偿刷新已统一由 BluetoothPopupTrigger.scheduleBatteryRefresh 负责
