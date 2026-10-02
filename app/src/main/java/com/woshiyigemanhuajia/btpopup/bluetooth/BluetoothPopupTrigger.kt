@@ -218,6 +218,15 @@ object BluetoothPopupTrigger {
     fun handleDisconnected(context: Context) {
         PopupOverlayManager.dismiss()
         PopupSound.stop()
+        //
+        // 【关键】断开必须同时清掉去重状态。
+        // 开盖时常常是「先断后连」（主从切换）：连接把 lastTriggerAt 记下，
+        // 紧接着的断开把弹窗收掉，随后真正的连接事件落在 3 秒去重窗口内被判定为重复、
+        // 直接忽略 —— 弹窗就再也不弹了，要等下一个事件才出现，实测延迟 6 秒以上。
+        // 断连后下一次连接是全新事件，不是重复，必须放行。
+        //
+        lastAddress = null
+        lastTriggerAt = 0L
     }
 
     /**
@@ -253,32 +262,40 @@ object BluetoothPopupTrigger {
         lastAddress = address
         lastTriggerAt = now
 
-        // 名称 / 电量只是锦上添花，任何读取失败都不允许挡住弹窗本身
-        var name = ""
-        var info: BatteryInfo? = null
-        if (resolved != null) {
-            try {
-                name = BatteryRepository.safeName(resolved)
-                info = BatteryRepository.query(context, resolved, name)
-            } catch (t: Throwable) {
-                Log.e(TAG, "读取耳机信息失败（不影响弹窗）: " + t.message)
-            }
-        } else {
-            Log.w(TAG, "设备对象与反查均无结果，仍按占位信息弹窗（取不到设备不作为不弹窗的理由）")
-        }
-        val payload = info ?: BatteryRepository.update(address, name) { it }
-
         val status = PermissionGuard.check(context)
         if (!status.overlay) {
             Log.e(TAG, "弹窗失败原因=未授权：缺少悬浮窗权限（SYSTEM_ALERT_WINDOW），请在首页点「一键授权」")
             return false
         }
+
+        //
+        // 【弹窗速度优先】先弹、再补电量。
+        // 原实现是「把电量查完再弹」：名称解析 + 系统电量反射 + 可能的设备反查
+        // 都在广播的 onReceive 里同步跑完才 addView，任何一环慢一点就直接推迟弹窗。
+        // 现在先用缓存（或占位）立刻把窗口加上，电量由后面异步补偿刷新补齐。
+        //
+        var name = ""
+        if (resolved != null) {
+            try {
+                name = BatteryRepository.safeName(resolved)
+            } catch (t: Throwable) {
+                Log.w(TAG, "读取名称失败（不阻塞弹窗）: " + t.message)
+            }
+        }
+        val quick = try {
+            BatteryRepository.get(address)
+        } catch (t: Throwable) {
+            null
+        } ?: BatteryInfo(name.ifBlank { address }, address)
+
         Log.i(
             TAG,
             "弹窗失败原因=无：已授权，直接添加悬浮窗（不依赖前台服务）: " + name.ifBlank { address }
         )
-        val shown = PopupOverlayManager.show(context, payload, Prefs.imageUri)
+        val shown = PopupOverlayManager.show(context, quick, Prefs.imageUri)
+
         if (shown && resolved != null) {
+            // 电量异步补齐：不占用弹窗的时间
             scheduleBatteryRefresh(context.applicationContext, resolved, address, name)
         }
         return shown
