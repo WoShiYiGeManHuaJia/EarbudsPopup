@@ -4,6 +4,7 @@ import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import com.woshiyigemanhuajia.btpopup.util.Prefs
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -38,7 +39,12 @@ object BatteryRepository {
         // 【修复】用户在系统蓝牙设置里给耳机改名后，弹窗仍显示旧名。
         // 旧逻辑是「只有缓存名为空时才写入新名」，于是第一次拿到的名字被永久锁死，
         // 之后再改名永远显示旧的。改成：只要拿到新名字就覆盖。
-        val withName = if (!name.isNullOrBlank() && name != base.name) base.copy(name = name) else base
+        // 自定义名优先级最高：用户在本 App 里填过名就以那个为准，覆盖系统名。
+        val custom = Prefs.customName(address)
+        val effective = custom ?: name
+        val withName =
+            if (!effective.isNullOrBlank() && effective != base.name) base.copy(name = effective)
+            else base
         val next = block(withName)
         cache[k] = next
         return next
@@ -51,7 +57,9 @@ object BatteryRepository {
     /** 主动拉取一次最新值（系统 API + 缓存合并） */
     fun query(context: Context, device: BluetoothDevice, fallbackName: String?): BatteryInfo {
         val address = addressOf(device) ?: "00:00:00:00:00:00"
-        val name = fallbackName?.takeIf { it.isNotBlank() } ?: safeName(device)
+        val sysName = fallbackName?.takeIf { it.isNotBlank() } ?: safeName(device)
+        // 自定义名优先：用户在本 App 里填过就以那个为准
+        val name = Prefs.customName(address) ?: sysName
         var info = cache[key(address)] ?: BatteryInfo(name, address)
         // 同上：名字以本次读到的为准，改了名就必须跟着变
         if (name.isNotBlank() && name != info.name) info = info.copy(name = name)
@@ -91,8 +99,21 @@ object BatteryRepository {
         null
     }
 
+    /**
+     * 设备显示名。
+     *
+     * 优先级：**用户在 App 里设置的自定义名 > 系统蓝牙名 > MAC 地址**。
+     *
+     * 系统蓝牙设置里改名后 getName() 未必同步给第三方 App
+     * （部分 ROM 需重启蓝牙 / 重新配对，有的干脆不同步），
+     * 所以自定义名必须排在系统名前面 —— 用户填了就以用户填的为准。
+     */
     fun safeName(d: BluetoothDevice): String = try {
-        (d.name ?: "").takeIf { it.isNotBlank() } ?: addressOf(d) ?: BatteryInfo.UNKNOWN_NAME
+        val addr = addressOf(d)
+        Prefs.customName(addr)
+            ?: (d.name ?: "").takeIf { it.isNotBlank() }
+            ?: addr
+            ?: BatteryInfo.UNKNOWN_NAME
     } catch (t: Throwable) {
         // 兜底分支也必须安全：旧写法在 catch 里再读一次 address，权限缺失时会二次抛异常，
         // 异常逃出蓝牙广播的 onReceive 后系统会连带回收监听服务 —— 这正是"怎么都不弹窗"的根因之一
