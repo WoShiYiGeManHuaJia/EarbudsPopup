@@ -125,6 +125,39 @@
                 android:visibility="gone" />
         </LinearLayout>
 
+        <!-- ================= 设备显示名 ================= -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="14dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="弹窗显示的设备名"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="系统蓝牙设置里改名可能不会同步过来，这里填的名字优先级最高，按耳机分别保存"
+                android:textColor="@color/text_secondary"
+                android:textSize="11.5sp" />
+
+            <LinearLayout
+                android:id="@+id/deviceNameList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="vertical" />
+        </LinearLayout>
+
         <!-- ================= 运行状态 ================= -->
         <LinearLayout
             android:layout_width="match_parent"
