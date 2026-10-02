@@ -987,6 +987,24 @@ object PopupOverlayManager {
         // 横屏：① 整体等比缩小（字号 / 内边距 / 间距 / 图标同步缩，形态不变）
         //       ② 详情区换成动态模糊背景层，并与上方清晰画面做渐隐过渡
         if (landscape) {
+            //
+            // 【修复「底部文字被截掉一部分」】
+            // 卡片圆角会按弧形裁掉四角，而详情区文字贴着左下角：
+            // 圆角半径一旦大于左侧内边距，弧线就会切进文字，
+            // 表现就是最下面那行电量文字的左边缺一块。
+            // 这里让左右 / 底部内边距始终不小于圆角半径，圆角再大也切不到字。
+            //
+            val detail = view.findViewById<View>(R.id.detailArea)
+            if (detail != null) {
+                val needSide = (radiusPx + 4 * density).toInt()
+                val needBottom = (radiusPx * 0.7f + 6 * density).toInt()
+                val curSide = (16 * density).toInt()
+                val curBottom = (12 * density).toInt()
+                detail.setPadding(
+                    maxOf(needSide, curSide), detail.paddingTop,
+                    maxOf(needSide, curSide), maxOf(needBottom, curBottom)
+                )
+            }
             scaleSubtree(view, s)
             setupLandscapeBlur(view, s, density)
         } else {
