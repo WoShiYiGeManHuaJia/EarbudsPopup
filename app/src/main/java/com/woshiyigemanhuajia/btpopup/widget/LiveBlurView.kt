@@ -235,6 +235,9 @@ class LiveBlurView @JvmOverloads constructor(
 
     /** 降采样缓冲（2 倍：4 倍会把像素块拉得太大，放大回来是马赛克） */
     private var smallBuf: Bitmap? = null
+
+    /** 最近一次算好的模糊位图：动画期间直接复用，避免每帧重算 */
+    private var blurCache: Bitmap? = null
     private var smallCanvas: Canvas? = null
 
     /** 放大回原尺寸的模糊位图，供 BitmapShader 填充圆角形状 */
@@ -467,6 +470,22 @@ class LiveBlurView @JvmOverloads constructor(
             addRect(0f, 0f, vw.toFloat(), vh.toFloat(), Path.Direction.CW)
         }
 
+        //
+        // 【动画期不重算 —— 这是横屏动画卡顿的真正根因】
+        // 入场动画改变 scaleX / scaleY / alpha，系统会**自动** invalidate 本 View，
+        // onDraw → drawBlur 就会跟着重跑一次 stackBlur。
+        // 光停掉 Choreographer 心跳没用：那只是不再主动请求重绘，
+        // 动画自身的重绘照样把模糊拖进来，帧预算照样被吃光。
+        //
+        // 因此动画期间直接复用上一次算好的模糊位图，只画不算。
+        // 动画结束（resumeAfterAnimation）后再恢复逐帧重算。
+        //
+        val cached = blurCache
+        if (animPaused && cached != null && !cached.isRecycled) {
+            drawBlurredToCanvas(canvas, cached, shape)
+            return
+        }
+
         val blurred = try {
             val t0 = SystemClock.uptimeMillis()
             val b = renderBlurredBitmap(dr, sw, sh, vw, vh)
@@ -477,24 +496,48 @@ class LiveBlurView @JvmOverloads constructor(
             null
         }
 
-        // 正确顺序：开一个覆盖整个 View 的图层 → 把模糊内容和压暗画进去
-        // → 再在同一个图层里用 DST_OUT 擦顶部（渐隐）。图层里有内容，擦除才真正生效。
+        if (blurred != null) blurCache = blurred
+        drawBlurredContent(canvas, blurred, dr, sw, sh, vw, vh, shape)
+    }
+
+    /** 动画期：只把缓存位图画出来，不重算模糊 */
+    private fun drawBlurredToCanvas(canvas: Canvas, cached: Bitmap, shape: Path) {
+        drawBlurredContent(canvas, cached, null, 0, 0, width, height, shape)
+    }
+
+    /**
+     * 把模糊内容（含压暗与顶部渐隐）画进图层。
+     *
+     * 正确顺序：开一个覆盖整个 View 的图层 → 把模糊内容和压暗画进去
+     * → 再在同一个图层里用 DST_OUT 擦顶部（渐隐）。图层里有内容，擦除才真正生效。
+     * 动画期复用缓存位图时走的是同一条绘制路径，观感一致。
+     */
+    private fun drawBlurredContent(
+        canvas: Canvas,
+        bmp: Bitmap?,
+        fallbackDr: Drawable?,
+        srcW: Int,
+        srcH: Int,
+        vw: Int,
+        vh: Int,
+        shape: Path
+    ) {
         val saved = canvas.saveLayer(0f, 0f, vw.toFloat(), vh.toFloat(), null)
         try {
-            if (blurred != null && !blurred.isRecycled) {
-                val sh = BitmapShader(blurred, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+            if (bmp != null && !bmp.isRecycled) {
+                val bsh = BitmapShader(bmp, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
                 // 输出位图被压缩过时，用矩阵放大回本 View 尺寸，避免模糊层只画了一小块
                 if (outBufW > 0 && outBufH > 0 && (outBufW != vw || outBufH != vh)) {
                     shaderMatrix.reset()
                     shaderMatrix.setScale(vw.toFloat() / outBufW, vh.toFloat() / outBufH)
-                    sh.setLocalMatrix(shaderMatrix)
+                    bsh.setLocalMatrix(shaderMatrix)
                 }
-                shaderPaint.shader = sh
+                shaderPaint.shader = bsh
                 canvas.drawPath(shape, shaderPaint)
-            } else if (dr != null && sw > 0 && sh > 0) {
+            } else if (fallbackDr != null && srcW > 0 && srcH > 0) {
                 // 模糊位图算不出来：直接画不模糊的源画面，绝不留一层压暗黑块
                 try {
-                    drawSource(canvas, dr, sw, sh, vw, vh)
+                    drawSource(canvas, fallbackDr, srcW, srcH, vw, vh)
                 } catch (ignored: Throwable) {
                 }
             }
