@@ -539,6 +539,12 @@ class MainActivity : AppCompatActivity() {
 
         b.btnPickImage.setOnClickListener { pickImage() }
         setupSound()
+        b.swShowCharging.isChecked = Prefs.showCharging
+        b.swShowCharging.setOnCheckedChangeListener { _, v ->
+            if (loadingUi) return@setOnCheckedChangeListener
+            Prefs.showCharging = v
+            refreshPreview()
+        }
         b.btnClearImage.setOnClickListener {
             Prefs.imageUri = null
             refreshPreview()
