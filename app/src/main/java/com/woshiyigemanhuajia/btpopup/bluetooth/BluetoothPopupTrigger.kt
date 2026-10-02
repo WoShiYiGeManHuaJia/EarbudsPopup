@@ -17,6 +17,7 @@ import com.woshiyigemanhuajia.btpopup.battery.BatteryUpdateBridge
 import com.woshiyigemanhuajia.btpopup.battery.GattBatteryReader
 import com.woshiyigemanhuajia.btpopup.overlay.PopupOverlayManager
 import com.woshiyigemanhuajia.btpopup.util.PermissionGuard
+import com.woshiyigemanhuajia.btpopup.util.PopupSound
 import com.woshiyigemanhuajia.btpopup.util.Prefs
 
 /**
@@ -206,6 +207,18 @@ object BluetoothPopupTrigger {
     }
 
     // ---------------------------------------------------------------- 弹窗
+
+    /**
+     * 断开事件的统一出口：耳机盒盖上 / 主从切换导致的断连，都要立刻收掉弹窗。
+     *
+     * 【修复「耳机盒已盖上，弹窗还在往外冒」】
+     * 之前只监听连接事件，从不处理断开 —— 断连后旧弹窗继续挂着，
+     * 而主从切换又会带来新一轮连接广播，于是出现"旧弹窗没关 + 新弹窗又冒"的错乱。
+     */
+    fun handleDisconnected(context: Context) {
+        PopupOverlayManager.dismiss()
+        PopupSound.stop()
+    }
 
     /**
      * 连接事件的统一出口：无论 device 是否为空、进程是否在前台、前台服务能否被拉起，
