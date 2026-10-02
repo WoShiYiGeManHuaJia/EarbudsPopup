@@ -158,6 +158,34 @@
                 android:orientation="vertical" />
         </LinearLayout>
 
+        <!-- ================= 充电状态 ================= -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="14dp">
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/swShowCharging"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:checked="false"
+                android:text="显示「充电中」"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="2dp"
+                android:layout_marginTop="4dp"
+                android:text="充电标志来自厂商私有上报，第三方无法校验，容易误判成一直充电中。默认关闭"
+                android:textColor="@color/text_secondary"
+                android:textSize="11.5sp" />
+        </LinearLayout>
+
         <!-- ================= 弹窗提示音 ================= -->
         <LinearLayout
             android:layout_width="match_parent"
