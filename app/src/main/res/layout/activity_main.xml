@@ -1536,7 +1536,35 @@
                 </LinearLayout>
 
 
-                <!-- ================= 权限与 ADB 授权 ================= -->
+                <!-- ================= 弹窗设备范围 ================= -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="14dp">
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/swPopupUnknown"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:checked="false"
+                android:text="未知类型的蓝牙设备也弹窗"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="2dp"
+                android:layout_marginTop="4dp"
+                android:text="默认只对耳机 / 音箱等音频设备弹窗。若你的耳机开盖不弹，再打开此项"
+                android:textColor="@color/text_secondary"
+                android:textSize="11.5sp" />
+        </LinearLayout>
+
+        <!-- ================= 权限与 ADB 授权 ================= -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
