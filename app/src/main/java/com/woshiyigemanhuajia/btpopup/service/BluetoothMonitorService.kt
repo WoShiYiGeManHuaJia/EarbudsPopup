@@ -377,10 +377,18 @@ class BluetoothMonitorService : Service() {
             ""
         }
         if (KEYWORDS.any { n.contains(it) }) return true
-        // 放宽判定：类信息拿不到（未授权 / 机型差异）或名称不含关键字时，不再判为"非音频设备"。
-        // 宁可多弹一次（用户可在首页关闭自动弹窗），也不能因为判定过严而该弹不弹。
-        Log.i(TAG, "设备类与名称均未命中音频特征，仍按音频设备处理: " + n)
-        return true
+        //
+        // 【与 BluetoothPopupTrigger.isAudioLike 保持一致：兜底改为「不弹」】
+        // 旧逻辑是"类与名称都没命中 → 仍按音频设备处理"，
+        // 结果任何蓝牙设备（热水器 / 手环 / 车载 / BLE 模块）一连上就弹窗。
+        // 这里同步改成白名单式，未知设备默认不弹，由设置开关兜底。
+        //
+        if (Prefs.popupUnknownDevices) {
+            Log.i(TAG, "类与名称均未命中，按设置对未知设备也弹窗: " + n)
+            return true
+        }
+        Log.i(TAG, "非音频设备，不弹窗: " + n)
+        return false
     }
 
     /** 服务启动时的权限自检：把「未授权」与「已授权」两种失败原因分开写日志，便于用户定位 */
