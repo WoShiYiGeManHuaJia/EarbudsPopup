@@ -210,7 +210,7 @@ object PopupOverlayManager {
             //
             removeInternal(false)
             lastLandscape = landscape
-            return false
+            return
         }
         lastLandscape = landscape
 
