@@ -229,8 +229,15 @@ object Prefs {
         get() = gi("pos_y", 50)
         set(v) = si("pos_y", v)
 
+    /**
+     * 卡片圆角（dp）。
+     *
+     * 默认从 28 调到 **16**：28 的圆角在弹窗这种小卡片上显得过胖，
+     * 四个角吃掉的面积太大，两侧文字也容易被圆角弧线切到。
+     * 16 更接近主流系统弹窗的观感。
+     */
     var cornerRadiusDp: Int
-        get() = gi("corner_radius", 28)
+        get() = gi("corner_radius", 16)
         set(v) = si("corner_radius", v)
 
     // ---------------- 横屏 ----------------
