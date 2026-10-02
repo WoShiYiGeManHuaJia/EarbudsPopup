@@ -45,6 +45,12 @@ class BluetoothEventReceiver : BroadcastReceiver() {
                 return
             }
 
+            // 断开事件优先处理：无论弹窗开关状态如何，断开都必须收掉弹窗
+            if (isDisconnectAction(intent)) {
+                BluetoothPopupTrigger.handleDisconnected(app)
+                return
+            }
+
             if (!isConnectAction(intent)) return
             if (!Prefs.autoPopup) return
 
@@ -70,6 +76,16 @@ class BluetoothEventReceiver : BroadcastReceiver() {
             intent.getIntExtra(BluetoothA2dp.EXTRA_STATE, -1) == BluetoothA2dp.STATE_CONNECTED
         BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED ->
             intent.getIntExtra(BluetoothHeadset.EXTRA_STATE, -1) == BluetoothHeadset.STATE_CONNECTED
+        else -> false
+    }
+
+    /** 断开类事件：ACL 断开 + A2DP / HEADSET 的断开状态 */
+    private fun isDisconnectAction(intent: Intent): Boolean = when (intent.action) {
+        BluetoothDevice.ACTION_ACL_DISCONNECTED -> true
+        BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED ->
+            intent.getIntExtra(BluetoothA2dp.EXTRA_STATE, -1) == BluetoothA2dp.STATE_DISCONNECTED
+        BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED ->
+            intent.getIntExtra(BluetoothHeadset.EXTRA_STATE, -1) == BluetoothHeadset.STATE_DISCONNECTED
         else -> false
     }
 
