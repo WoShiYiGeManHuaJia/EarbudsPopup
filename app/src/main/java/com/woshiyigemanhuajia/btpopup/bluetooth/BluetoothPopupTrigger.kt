@@ -278,6 +278,22 @@ object BluetoothPopupTrigger {
             Log.d(TAG, "断开静默期内，忽略抖动: " + address)
             return false
         }
+
+        //
+        // 【修复「盖还开着，弹窗却又跳一个」】
+        // 去重窗口只有几秒，而开盖并保持连接期间会持续产生连接类广播
+        // （主从切换：左右耳各有一个 MAC，A2DP / HEADSET 又各发一轮；
+        //  再加上弹窗显示时长往往比去重窗口长）。
+        // 于是弹窗还没消失，新的连接事件就又过了去重窗口，于是又弹一个。
+        //
+        // 规则很简单：**弹窗还在屏上，就不再弹第二个**。
+        // 本轮弹窗消失（超时 / 断开）后，下一次连接正常弹。
+        //
+        if (PopupOverlayManager.isShowing()) {
+            Log.d(TAG, "弹窗仍显示中，不重复弹: " + address)
+            return false
+        }
+
         lastAddress = address
         lastTriggerAt = now
 
