@@ -47,6 +47,7 @@ class MainActivity : AppCompatActivity() {
         private const val REQ_SHIZUKU = 10086
         private const val REQ_PERMS = 2002
         private const val REQ_PICK = 2001
+        private const val REQ_PICK_SOUND = 2003
     }
 
     private lateinit var b: ActivityMainBinding
@@ -536,6 +537,7 @@ class MainActivity : AppCompatActivity() {
     private fun setupButtons() {
 
         b.btnPickImage.setOnClickListener { pickImage() }
+        setupSound()
         b.btnClearImage.setOnClickListener {
             Prefs.imageUri = null
             refreshPreview()
@@ -805,6 +807,20 @@ class MainActivity : AppCompatActivity() {
             val stored = copyMediaToLocal(uri)
             Prefs.imageUri = stored?.let { Uri.fromFile(it).toString() } ?: uri.toString()
             refreshPreview()
+            return
+        }
+
+        if (requestCode == REQ_PICK_SOUND && resultCode == RESULT_OK) {
+            val uri: Uri = data?.data ?: return
+            try {
+                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (ignored: Throwable) {
+            }
+            // 同样复制一份到私有目录，避免授权失效后提示音丢失
+            val stored = copyMediaToLocal(uri)
+            Prefs.soundUri = stored?.let { Uri.fromFile(it).toString() } ?: uri.toString()
+            refreshSoundFile()
+            toast("已选择提示音")
         }
     }
 
@@ -1286,6 +1302,92 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    // ------------------------------------------------------------------ 弹窗提示音
+
+    private fun setupSound() {
+        b.swSound.isChecked = Prefs.soundEnabled
+
+        b.swSound.setOnCheckedChangeListener { _, v ->
+            if (loadingUi) return@setOnCheckedChangeListener
+            Prefs.soundEnabled = v
+            if (!v) PopupSound.stop()
+            refreshSoundFile()
+        }
+
+        b.btnPickSound.setOnClickListener {
+            if (!Prefs.soundEnabled) {
+                Prefs.soundEnabled = true
+                loadingUi = true
+                b.swSound.isChecked = true
+                loadingUi = false
+            }
+            pickSound()
+        }
+
+        b.btnTestSound.setOnClickListener {
+            if (Prefs.soundUri.isNullOrBlank()) {
+                toast("请先选择音频文件")
+                return@setOnCheckedChangeListener
+            }
+            PopupSound.play(this)
+            toast("试听中…")
+        }
+
+        b.sbSoundDelay.progress = Prefs.soundDelayMs.coerceIn(0, b.sbSoundDelay.max)
+        b.tvSoundDelay.text = "${Prefs.soundDelayMs} ms"
+        b.sbSoundDelay.setOnSeekBarChangeListener(simpleSeek { v ->
+            Prefs.soundDelayMs = v
+            b.tvSoundDelay.text = "$v ms"
+        })
+
+        b.sbSoundDuration.progress = Prefs.soundDurationMs.coerceIn(0, b.sbSoundDuration.max)
+        b.tvSoundDuration.text =
+            if (Prefs.soundDurationMs <= 0) "0 ms（播完整段）" else "${Prefs.soundDurationMs} ms"
+        b.sbSoundDuration.setOnSeekBarChangeListener(simpleSeek { v ->
+            Prefs.soundDurationMs = v
+            b.tvSoundDuration.text = if (v <= 0) "0 ms（播完整段）" else "$v ms"
+        })
+
+        b.sbSoundVolume.progress = Prefs.soundVolume.coerceIn(0, 100)
+        b.tvSoundVolume.text = "${Prefs.soundVolume}%"
+        b.sbSoundVolume.setOnSeekBarChangeListener(simpleSeek { v ->
+            Prefs.soundVolume = v
+            b.tvSoundVolume.text = "$v%"
+        })
+
+        refreshSoundFile()
+    }
+
+    private fun refreshSoundFile() {
+        val uri = Prefs.soundUri
+        b.tvSoundFile.text = if (uri.isNullOrBlank()) "未选择音频" else "已选择：$uri"
+    }
+
+    private fun simpleSeek(onChange: (Int) -> Unit) = object : android.widget.SeekBar.OnSeekBarChangeListener {
+        override fun onProgressChanged(sb: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+            if (loadingUi || !fromUser) return
+            onChange(progress)
+        }
+        override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+        override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
+    }
+
+    /** 选择提示音文件 */
+    private fun pickSound() {
+        try {
+            val intent = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(android.content.Intent.CATEGORY_OPENABLE)
+                type = "audio/*"
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            }
+            beginExternalActivity()
+            startActivityForResult(intent, REQ_PICK_SOUND)
+        } catch (t: Throwable) {
+            toast("无法打开文件选择器")
+        }
     }
 
     private fun refreshLiveStatus() {
