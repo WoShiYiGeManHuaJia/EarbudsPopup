@@ -71,6 +71,20 @@ object Prefs {
         get() = gb("show_charging", false)
         set(v) = sb("show_charging", v)
 
+    /**
+     * 类型与名称都无法识别的蓝牙设备，是否也弹窗。
+     *
+     * 【默认关闭】设备判定已改成白名单式（见 BluetoothPopupTrigger.isAudioLike）：
+     * 只有明确是音频大类 / 音频设备类 / 名称命中耳机关键词才弹。
+     * 绝大多数耳机都能被正确识别，因此默认不需要这条兜底。
+     *
+     * 万一某款耳机识别不出来、开盖不弹，打开这个开关即可恢复旧的"宁可多弹"行为
+     * —— 代价是热水器、手环之类的蓝牙设备也会弹。
+     */
+    var popupUnknownDevices: Boolean
+        get() = gb("popup_unknown_devices", false)
+        set(v) = sb("popup_unknown_devices", v)
+
     // ---------------- 横屏圆角 ----------------
 
     /**
