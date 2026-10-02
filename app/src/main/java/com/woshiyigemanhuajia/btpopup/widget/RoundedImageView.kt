@@ -54,7 +54,12 @@ class RoundedImageView @JvmOverloads constructor(
         }
     }
 
-    /** 设置圆角半径（px），传入 0 表示不裁剪 */
+    /**
+     * 设置圆角半径（px），传入 0 表示不裁剪。
+     *
+     * 【封顶】半径按当前短边的一半封顶。横屏卡片很扁时，沿用竖屏的大圆角
+     * 会把图片两端裁成半圆，非常难看 —— 这里保证形态不受控件尺寸影响。
+     */
     fun setRadius(value: Float) {
         val v = value.coerceAtLeast(0f)
         if (abs(v - radiusPx) < 0.5f) {
@@ -63,6 +68,18 @@ class RoundedImageView @JvmOverloads constructor(
         }
         radiusPx = v
         syncClipStrategy()
+        invalidateOutline()
+        invalidate()
+    }
+
+    /** 实际生效半径：不超过短边的一半 */
+    private fun effectiveRadius(): Float {
+        val half = minOf(width, height) / 2f
+        return if (half <= 0f) radiusPx else minOf(radiusPx, half)
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
         invalidateOutline()
         invalidate()
     }
