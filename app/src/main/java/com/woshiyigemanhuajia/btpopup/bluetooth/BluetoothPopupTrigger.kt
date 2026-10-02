@@ -172,13 +172,33 @@ object BluetoothPopupTrigger {
      * 因此只有在能明确判定为「非音频大类」（电脑 / 手机 / 外设 / 影像 / 网络）时才排除；
      * 类型读不到、名称也匹配不上时，一律按音频设备处理并记日志。
      */
+    /**
+     * 是否为"应弹窗的音频设备"。
+     *
+     * 【判定原则已反转 —— 这是"热水器 / 手环 / 其他蓝牙设备也弹窗"的根因】
+     *
+     * 旧逻辑是「宁可多弹一次，也绝不漏弹」：类型读不到、名称也匹配不上时
+     * **一律按音频设备处理**。结果就是任何蓝牙设备一连上就弹 ——
+     * 学校的蓝牙热水器、手环、车载模块、BLE 设备全都会触发弹窗。
+     * 这些设备的 BluetoothClass 通常是 UNCATEGORIZED / MISC，
+     * 既不在排除名单里，名称也不含耳机关键词，于是被"兜底当成耳机"。
+     *
+     * 新逻辑改成**白名单式**：
+     *   明确是音频大类 / 音频设备类 → 弹
+     *   明确是电脑 / 手机 / 外设 / 影像 / 网络 → 不弹
+     *   名称命中耳机关键词 → 弹
+     *   其余（含类型未知）→ **默认不弹**
+     *
+     * 万一某款耳机类型与名称都识别不出来，可在设置里打开
+     * 「未知类型的蓝牙设备也弹窗」作为兜底。
+     */
     fun isAudioLike(device: BluetoothDevice?): Boolean {
-        if (device == null) return true
+        if (device == null) return false
 
         val cls = try {
             device.bluetoothClass
         } catch (t: Throwable) {
-            Log.w(TAG, "读取设备类型失败（按音频设备处理以免漏弹窗）: " + t.message)
+            Log.w(TAG, "读取设备类型失败: " + t.message)
             null
         }
         if (cls != null) {
@@ -196,14 +216,23 @@ object BluetoothPopupTrigger {
                 BluetoothClass.Device.Major.PHONE,
                 BluetoothClass.Device.Major.PERIPHERAL,
                 BluetoothClass.Device.Major.IMAGING,
-                BluetoothClass.Device.Major.NETWORKING -> return false
+                BluetoothClass.Device.Major.NETWORKING -> {
+                    Log.d(TAG, "非音频大类，忽略: " + safeName(device))
+                    return false
+                }
             }
         }
 
         val n = safeName(device).lowercase()
         if (KEYWORDS.any { n.contains(it) }) return true
-        Log.w(TAG, "设备类型与名称均无法判定，按音频设备处理以免漏弹窗: " + n)
-        return true
+
+        // 关键改动：兜底从「按音频处理」改为「不弹」
+        if (Prefs.popupUnknownDevices) {
+            Log.i(TAG, "类型与名称均未命中，按设置对未知设备也弹窗: " + n)
+            return true
+        }
+        Log.i(TAG, "非音频设备，不弹窗: " + n + "（如需弹窗请开启『未知设备也弹窗』）")
+        return false
     }
 
     // ---------------------------------------------------------------- 弹窗
