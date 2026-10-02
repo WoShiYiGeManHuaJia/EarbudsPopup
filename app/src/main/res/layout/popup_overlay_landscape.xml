@@ -125,7 +125,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="3dp"
                 android:ellipsize="end"
-                android:maxLines="1"
+                android:maxLines="2"
                 android:text="左耳 --%  ·  右耳 --%  ·  充电仓 --%"
                 android:textColor="@color/popup_text"
                 android:textSize="11sp" />
