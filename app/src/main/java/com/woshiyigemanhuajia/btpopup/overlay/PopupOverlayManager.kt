@@ -32,6 +32,7 @@ import coil.load
 import coil.size.Size
 import com.woshiyigemanhuajia.btpopup.R
 import com.woshiyigemanhuajia.btpopup.battery.BatteryInfo
+import com.woshiyigemanhuajia.btpopup.util.PopupSound
 import com.woshiyigemanhuajia.btpopup.util.Prefs
 import com.woshiyigemanhuajia.btpopup.widget.LiveBlurView
 import com.woshiyigemanhuajia.btpopup.widget.RoundedCardLayout
@@ -159,6 +160,10 @@ object PopupOverlayManager {
         return (widthPx * LAND_FLAT_RATIO).toInt().coerceAtLeast(minH)
     }
 
+    /** 上一次弹窗的朝向，用于检测横竖屏切换 */
+    @Volatile
+    private var lastLandscape: Boolean? = null
+
     /** 用与真实悬浮窗完全相同的布局 / 数据绑定 / 样式逻辑创建预览视图 */
     fun createPreviewView(
         context: Context,
@@ -188,6 +193,17 @@ object PopupOverlayManager {
         val now = System.currentTimeMillis()
         val landscape = context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val signature = buildSignature(info, imageUri, landscape)
+
+        //
+        // 【修复「横屏弹窗时切成竖屏会错乱」】
+        // 弹窗是悬浮窗，横竖屏切换时窗口参数不会自动跟着变：
+        // 旧窗口留在错位的位置，新的竖屏弹窗又叠上来 —— 就是位移错乱 + 重复冒出。
+        // 这里在每次显示前比对朝向，变了就先拆掉旧窗口，再按新朝向重建。
+        //
+        if (rootView != null && lastLandscape != null && lastLandscape != landscape) {
+            removeInternal(false)
+        }
+        lastLandscape = landscape
 
         // 外观参数完全一致时才复用现有弹窗，否则重建，保证改完参数预览立即生效
         if (rootView != null && signature == lastSignature) {
@@ -338,6 +354,11 @@ object PopupOverlayManager {
 
         playEnter(view)
         startDismissTimer(true)
+        // 弹窗已显示：按配置播放提示音（内部按延迟 / 时长 / 音量处理，失败只记日志）
+        try {
+            PopupSound.play(context.applicationContext)
+        } catch (ignored: Throwable) {
+        }
     }
 
     /** 外观参数签名：任一参数变化都触发重建，避免"改了参数但预览没变化" */
@@ -357,6 +378,12 @@ object PopupOverlayManager {
         val v = rootView ?: return
         val wm = rootWindowManager
         cancelDismissTimer()
+        // 弹窗收掉：朝向记录失效，提示音一并停
+        lastLandscape = null
+        try {
+            PopupSound.stop()
+        } catch (ignored: Throwable) {
+        }
         rootView = null
         rootWindowManager = null
         layoutParams = null
@@ -809,7 +836,8 @@ object PopupOverlayManager {
 
     private fun applyPanelStyle(view: View, landscape: Boolean) {
         val density = view.context.resources.displayMetrics.density
-        val radiusPx = Prefs.cornerRadiusDp.coerceIn(0, 200) * density
+        // 横屏卡片更扁，沿用竖屏的大圆角会显得笨重 —— 横屏走独立的小圆角
+        val radiusPx = radiusFor(landscape) * density
         //
         // 卡片底色必须半透明，系统模糊才能透出来。
         // 图片 / GIF 区域由不透明的原图铺满，天然盖住、始终清晰 ——
@@ -985,6 +1013,11 @@ object PopupOverlayManager {
      *  4. 底部两角圆角跟随卡片圆角；轻度压暗只为保证文字可读。
      */
         //
+    /** 按朝向取卡片圆角（dp）：横屏更小更利落，竖屏沿用用户设的大圆角 */
+    private fun radiusFor(landscape: Boolean): Float =
+        if (landscape) Prefs.landCornerRadiusDp.coerceIn(0, 60).toFloat()
+        else Prefs.cornerRadiusDp.coerceIn(0, 200).toFloat()
+
     /** 该弹窗 View 是否是横屏布局（以是否存在 detailBlurBg 为准，比读屏幕方向可靠） */
     private fun isLandscapeView(view: View): Boolean =
         view.findViewById<View>(R.id.detailBlurBg) != null
@@ -1001,7 +1034,7 @@ object PopupOverlayManager {
         // 与模糊模式的压暗保持一致（默认 12%），观感上接近"模糊后的暗底"
         val dim = Prefs.landBlurDimPercent.coerceIn(0, 90)
         val c = ColorUtils.blendARGB(base, Color.BLACK, dim / 100f)
-        val r = Prefs.cornerRadiusDp.coerceIn(0, 200) * density
+        val r = radiusFor(true) * density
         val gd = android.graphics.drawable.GradientDrawable().apply {
             shape = android.graphics.drawable.GradientDrawable.RECTANGLE
             cornerRadii = floatArrayOf(0f, 0f, 0f, 0f, r, r, r, r)
@@ -1076,7 +1109,7 @@ object PopupOverlayManager {
             // 压暗默认 12%，只为保证文字可读；旧值 30% 会把整块压成黑
             val dim = Prefs.landBlurDimPercent.coerceIn(0, 90) * 255 / 100
             blur.setDim(dim shl 24)
-            blur.setBottomCornerRadius(Prefs.cornerRadiusDp.coerceIn(0, 200) * density)
+            blur.setBottomCornerRadius(radiusFor(true) * density)
             blur.setSource(image)
             blur.visibility = View.VISIBLE
             if (detail == null) {
