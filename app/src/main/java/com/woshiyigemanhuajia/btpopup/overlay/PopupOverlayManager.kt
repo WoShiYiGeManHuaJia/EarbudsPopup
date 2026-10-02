@@ -39,6 +39,10 @@ import com.woshiyigemanhuajia.btpopup.widget.RoundedCardLayout
 import com.woshiyigemanhuajia.btpopup.widget.RoundedImageView
 import java.util.WeakHashMap
 import kotlin.math.min
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
 
 /**
  * 系统级悬浮弹窗（TYPE_APPLICATION_OVERLAY）。
@@ -163,6 +167,60 @@ object PopupOverlayManager {
     /** 上一次弹窗的朝向，用于检测横竖屏切换 */
     @Volatile
     private var lastLandscape: Boolean? = null
+
+    //
+    // 【真正的旋转检测】
+    // 之前把朝向判断写在 showInternal() 里是无效的：旋转发生时弹窗已经在屏幕上，
+    // 用户不会再去开盖触发 show()，那段代码永远等不到执行。
+    // 悬浮窗窗口参数不会随旋转自动重排，旧窗口就一直错位挂着、圆角变形、两层模糊一起算。
+    //
+    // ACTION_CONFIGURATION_CHANGED 只能动态注册，因此在弹窗显示时注册、收掉时注销。
+    //
+    private var configReceiver: BroadcastReceiver? = null
+    private var configReceiverCtx: Context? = null
+
+    private fun registerConfigWatcher(context: Context) {
+        if (configReceiver != null) return
+        val r = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                if (intent.action != Intent.ACTION_CONFIGURATION_CHANGED) return
+                val nowLandscape =
+                    ctx.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+                val prev = lastLandscape
+                if (prev != null && prev != nowLandscape) {
+                    Log.i(TAG, "屏幕旋转（$prev -> $nowLandscape）：直接收掉弹窗，避免错位 / 变形 / 卡顿")
+                    // 旋转是显示环境整体变化，直接收掉最干净；下次开盖按新朝向正常弹
+                    removeInternal(false)
+                } else {
+                    lastLandscape = nowLandscape
+                }
+            }
+        }
+        try {
+            val f = IntentFilter(Intent.ACTION_CONFIGURATION_CHANGED)
+            if (Build.VERSION.SDK_INT >= 33) {
+                context.applicationContext.registerReceiver(r, f, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                ContextCompat.registerReceiver(
+                    context.applicationContext, r, f, ContextCompat.RECEIVER_NOT_EXPORTED
+                )
+            }
+            configReceiver = r
+            configReceiverCtx = context.applicationContext
+        } catch (t: Throwable) {
+            Log.w(TAG, "注册旋转监听失败（不影响弹窗）: " + t.message)
+        }
+    }
+
+    private fun unregisterConfigWatcher() {
+        val r = configReceiver ?: return
+        try {
+            configReceiverCtx?.unregisterReceiver(r)
+        } catch (ignored: Throwable) {
+        }
+        configReceiver = null
+        configReceiverCtx = null
+    }
 
     /** 用与真实悬浮窗完全相同的布局 / 数据绑定 / 样式逻辑创建预览视图 */
     fun createPreviewView(
@@ -361,6 +419,9 @@ object PopupOverlayManager {
         lastShowAt = now
         lastSignature = signature
 
+        lastLandscape = landscape
+        // 弹窗在屏期间监听旋转，方向一变立刻收掉（见 registerConfigWatcher 说明）
+        registerConfigWatcher(context.applicationContext)
         playEnter(view)
         startDismissTimer(true)
         // 弹窗已显示：按配置播放提示音（内部按延迟 / 时长 / 音量处理，失败只记日志）
@@ -387,7 +448,8 @@ object PopupOverlayManager {
         val v = rootView ?: return
         val wm = rootWindowManager
         cancelDismissTimer()
-        // 弹窗收掉：朝向记录失效，提示音一并停
+        // 弹窗收掉：注销旋转监听、朝向记录失效，提示音一并停
+        unregisterConfigWatcher()
         lastLandscape = null
         //
         // 【弹窗速度】收掉后立刻清零「上次显示时间」。
