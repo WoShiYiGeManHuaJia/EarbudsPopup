@@ -33,39 +33,66 @@ class RoundedCardLayout @JvmOverloads constructor(
      * 一次性设置卡片外观：圆角、底色、可选描边。
      * 可反复调用（改圆角 / 改透明度 / 改配色时即时生效）。
      */
+    private var cardColor = 0
+
+    /**
+     * 一次性设置卡片外观：圆角、底色、可选描边。
+     * 可反复调用（改圆角 / 改透明度 / 改配色时即时生效）。
+     *
+     * 【圆角上限】卡片很扁时（横屏）大圆角会把两端拉成半圆，非常难看。
+     * 这里统一按「短边的一半」封顶 —— 无论传入多大，形态都不会失控。
+     * 横屏卡片矮，圆角会自动收到与高度相称的大小。
+     */
     fun setCardStyle(radiusPx: Float, color: Int, outlineColor: Int = 0, outlineWidthPx: Float = 0f) {
         cardRadius = radiusPx.coerceAtLeast(0f)
+        cardColor = color
         strokeColor = outlineColor
         strokeWidth = outlineWidthPx.coerceAtLeast(0f)
+        rebuildBackground()
+        clipToOutline = true
+        invalidateOutline()
+        invalidate()
+    }
 
+    /** 实际生效半径：按当前尺寸封顶到短边的一半 */
+    private fun effectiveRadius(): Float {
+        val half = minOf(width, height) / 2f
+        return if (half <= 0f) cardRadius else minOf(cardRadius, half)
+    }
+
+    private fun rebuildBackground() {
+        val r = effectiveRadius()
         val bg = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            cornerRadius = cardRadius
-            setColor(color)
-            if (strokeWidth > 0f && outlineColor != 0) {
-                setStroke(strokeWidth.toInt().coerceAtLeast(1), outlineColor)
+            cornerRadius = r
+            setColor(cardColor)
+            if (strokeWidth > 0f && strokeColor != 0) {
+                setStroke(strokeWidth.toInt().coerceAtLeast(1), strokeColor)
             }
         }
         background = bg
+    }
 
+    init {
         outlineProvider = object : ViewOutlineProvider() {
             override fun getOutline(view: View, outline: Outline) {
-                if (cardRadius <= 0f) {
+                val r = effectiveRadius()
+                if (r <= 0f) {
                     outline.setRect(0, 0, view.width, view.height)
                 } else {
-                    outline.setRoundRect(0, 0, view.width, view.height, cardRadius)
+                    outline.setRoundRect(0, 0, view.width, view.height, r)
                 }
             }
         }
-        clipToOutline = cardRadius > 0f
-        invalidateOutline()
-        invalidate()
+        clipToOutline = true
     }
 
     fun getCardRadius(): Float = cardRadius
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        if (cardRadius > 0f) invalidateOutline()
+        // 尺寸变了（含旋转 / 横屏切换）：按新短边重算封顶后的圆角
+        rebuildBackground()
+        invalidateOutline()
     }
 }
