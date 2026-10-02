@@ -60,12 +60,29 @@ object Prefs {
         get() = gi("sound_volume", 80)
         set(v) = si("sound_volume", v.coerceIn(0, 100))
 
+    /**
+     * 是否显示「充电中」。
+     *
+     * 【默认关闭】充电标志来自厂商私有 HFP / 广播上报，各家编码不一致，
+     * 第三方 App 没有可靠途径校验，极易把非充电状态误判成充电（表现为永远显示"充电中"）。
+     * 与其一直显示错的，不如默认不显示 —— 需要的话自行打开。
+     */
+    var showCharging: Boolean
+        get() = gb("show_charging", false)
+        set(v) = sb("show_charging", v)
+
     // ---------------- 横屏圆角 ----------------
 
-    /** 横屏卡片圆角（dp）。横屏卡片更扁，沿用竖屏的大圆角会显得笨重。 */
+    /**
+     * 横屏卡片圆角（dp）。
+     *
+     * 【默认 -1 = 跟随竖屏设置】
+     * 之前给了个固定默认值，结果横屏圆角跟用户自己调的竖屏圆角不一致，看着更别扭。
+     * -1 表示直接用竖屏那套数值，保证两个朝向观感统一；想单独调再手动改。
+     */
     var landCornerRadiusDp: Int
-        get() = gi("land_corner_radius", 14)
-        set(v) = si("land_corner_radius", v.coerceIn(0, 60))
+        get() = gi("land_corner_radius", -1)
+        set(v) = si("land_corner_radius", v.coerceIn(-1, 200))
 
     // ---------------- 设备自定义名称 ----------------
     //
