@@ -33,6 +33,43 @@ object Prefs {
         if (ready) sp.edit().putBoolean(k, v).apply()
     }
 
+    // ---------------- 设备自定义名称 ----------------
+    //
+    // 系统蓝牙设置里改名后，BluetoothDevice.getName() 未必同步
+    // （部分 ROM 要重启蓝牙 / 重新配对才生效，有的干脆不同步到第三方 App）。
+    // 与其依赖系统，不如让用户在 App 里直接指定显示名 —— 按 MAC 单独存，
+    // 多副耳机各自独立，改一台不影响另一台。
+
+    private const val KEY_CUSTOM_NAME_PREFIX = "custom_name_"
+
+    /** 取某台设备的自定义名；未设置返回 null */
+    fun customName(address: String?): String? {
+        if (address.isNullOrBlank()) return null
+        return gs(KEY_CUSTOM_NAME_PREFIX + address.uppercase(), null)
+            ?.takeIf { it.isNotBlank() }
+    }
+
+    /** 设置自定义名；传空白表示清除（回退到系统名） */
+    fun setCustomName(address: String?, name: String?) {
+        if (address.isNullOrBlank()) return
+        val k = KEY_CUSTOM_NAME_PREFIX + address.uppercase()
+        if (name.isNullOrBlank()) sp.edit().remove(k).apply()
+        else ss(k, name.trim())
+    }
+
+    /** 所有已设置的自定义名（地址 -> 名称），供设置页列出 */
+    fun allCustomNames(): List<Pair<String, String>> {
+        if (!ready) return emptyList()
+        return sp.all
+            .filterKeys { it.startsWith(KEY_CUSTOM_NAME_PREFIX) }
+            .mapNotNull { (k, v) ->
+                val addr = k.removePrefix(KEY_CUSTOM_NAME_PREFIX)
+                val name = v as? String
+                if (name.isNullOrBlank()) null else addr to name
+            }
+            .sortedBy { it.first }
+    }
+
     // ---------------- 外观 ----------------
     var imageUri: String?
         get() = gs("image_uri", null)
