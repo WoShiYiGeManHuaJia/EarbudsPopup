@@ -591,18 +591,93 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton("确认禁用") { _, _ ->
                 toast("正在执行…")
                 Thread {
-                    val results = AdbShell.execAll(
-                        listOf("pm disable-user --user 0 com.xiaomi.bluetooth")
+                    //
+                    // 多条命令依次尝试：不同 ROM / 权限状态下能成功的那条不一样。
+                    // appops 管的是「后台弹出界面」，比 pm disable 温和，
+                    // 即便 pm disable 被拒，这条也可能单独生效。
+                    //
+                    val cmds = listOf(
+                        "pm disable-user --user 0 com.xiaomi.bluetooth",
+                        "pm disable-user com.xiaomi.bluetooth",
+                        "appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW deny",
+                        "appops set com.xiaomi.bluetooth 10021 deny",
+                        "appops set com.xiaomi.bluetooth START_FOREGROUND deny"
                     )
-                    val ok = results.firstOrNull()?.ok == true
+                    val results = AdbShell.execAll(cmds)
+                    val okCount = results.count { it.ok }
                     runOnUiThread {
-                        if (ok) toast("已禁用系统耳机弹窗；换耳机也不会再弹")
-                        else toast("执行失败，可复制 ADB 命令手动执行")
+                        if (okCount > 0) {
+                            toast("已执行 $okCount/${cmds.size} 条；若仍弹系统窗，请用下方「复制命令」手动跑")
+                        } else {
+                            toast("全部失败，请用下方「复制命令」手动执行")
+                        }
+                        // 无论成败都展示完整结果：退出码 / stdout / stderr 全拿出来，
+                        // 不再让用户只看到一句"执行失败"却无从下手
+                        showCommandResult(cmds, results)
                     }
                 }.start()
             }
+            .setNeutralButton("复制命令") { _, _ -> copyDisableCommands() }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    /** 汇总每条命令的退出码与输出，失败原因一目了然 */
+    private fun showCommandResult(cmds: List<String>, results: List<com.woshiyigemanhuajia.btpopup.adb.AdbShell.Result>) {
+        val sb = StringBuilder()
+        cmds.forEachIndexed { i, c ->
+            val r = results.getOrNull(i)
+            sb.append("\$ ").append(c).append('\n')
+            if (r == null) {
+                sb.append("  （未执行）\n\n")
+                return@forEachIndexed
+            }
+            sb.append(if (r.ok) "  [成功]" else "  [失败]").append(" 退出码=").append(r.code).append('\n')
+            if (r.out.isNotBlank()) sb.append("  输出: ").append(r.out.trim()).append('\n')
+            if (r.err.isNotBlank()) sb.append("  错误: ").append(r.err.trim()).append('\n')
+            sb.append('\n')
+        }
+        val text = sb.toString()
+        val tv = android.widget.TextView(this).apply {
+            setText(text)
+            setTextIsSelectable(true)
+            textSize = 11f
+            setPadding(40, 30, 40, 30)
+            setTypeface(android.graphics.Typeface.MONOSPACE)
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("执行结果")
+            .setView(android.widget.ScrollView(this).apply { addView(tv) })
+            .setPositiveButton("复制全部") { _, _ ->
+                val cm = getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                        as android.content.ClipboardManager
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("cmds", text))
+                toast("已复制")
+            }
+            .setNegativeButton("关闭", null)
+            .show()
+    }
+
+    /**
+     * 直接把禁用命令复制到剪贴板。
+     * 之前失败只弹一句 toast，用户根本没有可复制的地方 —— 这里单独给一个入口，
+     * 复制后粘贴到任意 ADB / 终端工具即可手动执行。
+     */
+    private fun copyDisableCommands() {
+        val script = listOf(
+            "pm disable-user --user 0 com.xiaomi.bluetooth",
+            "pm disable-user com.xiaomi.bluetooth",
+            "appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW deny",
+            "appops set com.xiaomi.bluetooth 10021 deny",
+            "appops set com.xiaomi.bluetooth START_FOREGROUND deny",
+            "",
+            "# 恢复：",
+            "pm enable com.xiaomi.bluetooth"
+        ).joinToString("\n")
+        val cm = getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                as android.content.ClipboardManager
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("disable_cmds", script))
+        toast("已复制禁用命令，粘贴到 ADB / 终端执行即可")
     }
 
     private fun setupImageScale() {
