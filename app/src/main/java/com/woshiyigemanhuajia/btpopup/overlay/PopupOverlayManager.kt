@@ -671,17 +671,22 @@ object PopupOverlayManager {
         // 同一张图不重复发起请求：拖动尺寸 / 颜色滑块会高频重套样式，
         // 每帧都 load 会让旧请求（尤其 GIF 解码）被反复取消，表现为图片久不显示。
         // 但"已经显示出来了"才算数——上次请求没结果时绝不能吞掉这次机会。
-        if (image.tag == imageUri && image.drawable != null) {
+        //
+        // 复用判断带上「换图版本号」：换图后版本号变化，即便 URI 完全相同
+        // 也会强制重新解码，杜绝"换了图还显示旧图"。
+        //
+        val tagKey = imageUri + "#" + Prefs.imageRevision
+        if (image.tag == tagKey && image.drawable != null) {
             // 图片已就绪：拖动「图片缩放 / 位移 / 旋转」滑块时走这里，立即套用新变换
             applyImageTransform(image)
             return
         }
-        image.tag = imageUri
+        image.tag = tagKey
         // 看门狗：请求若长时间既没成功也没失败（视图未 attach、URI 权限失效且无回调等），
         // 主动把占位提示重新亮出来，绝不让用户面对一块没有任何说明的空白。
         imageLoadGuard[image]?.let { image.removeCallbacks(it) }
         val guard = Runnable {
-            if (image.drawable == null && image.tag == imageUri) {
+            if (image.drawable == null && image.tag == tagKey) {
                 Log.w(TAG, "图片超时未就绪，回退占位提示：" + imageUri)
                 hint?.visibility = View.VISIBLE
             }
