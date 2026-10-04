@@ -41,6 +41,10 @@ import rikka.shizuku.Shizuku
 import android.util.Log
 import com.woshiyigemanhuajia.btpopup.util.PopupSound
 import android.os.SystemClock
+import android.widget.ImageView
+import coil.load
+import org.json.JSONArray
+import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
 
@@ -270,6 +274,7 @@ class MainActivity : AppCompatActivity() {
         refreshLiveStatus()
         refreshDeviceNameList()
         refreshPreview()
+        renderHistory()
         refreshServiceStatus()
         refreshAccessibilityState()
         // 服务启动是异步的：补拉后稍等再刷一次，避免仍显示"未启动"
@@ -628,7 +633,9 @@ class MainActivity : AppCompatActivity() {
             Prefs.imageRevision += 1
             previewStage.invalidate()
             refreshPreview()
+            renderHistory()
         }
+        b.btnClearHistory.setOnClickListener { clearHistory() }
         b.btnQuickPreview.setOnClickListener { showTestPopup() }
         b.btnLandscapePreview.setOnClickListener { toggleLandscapePreview() }
         b.btnAdbGrant.setOnClickListener { runOneKeyGrant() }
@@ -898,6 +905,8 @@ class MainActivity : AppCompatActivity() {
             Prefs.imageRevision += 1
             previewStage.invalidate()
             refreshPreview()
+            // 只有成功复制成本地文件的才进历史：content:// 会因授权失效而丢失，不适合入库
+            if (stored != null) addToHistory(stored) else renderHistory()
         } else if (requestCode == REQ_PICK_SOUND && resultCode == RESULT_OK) {
             val uri: Uri = data?.data ?: return
             try {
@@ -931,17 +940,11 @@ class MainActivity : AppCompatActivity() {
             //
             val ext = if (isGif) "gif" else "img"
             val out = java.io.File(dir, "image_" + System.currentTimeMillis() + "." + ext)
-            // 清掉旧的同类文件，避免用户反复换图导致文件堆积
-            try {
-                dir.listFiles()?.forEach { f ->
-                    val n = f.name
-                    if (n.startsWith("image_") && n.endsWith(".$ext") && f.absolutePath != out.absolutePath) {
-                        f.delete()
-                    }
-                }
-            } catch (t: Throwable) {
-                Log.w("MainActivity", "清理旧图片失败: " + t.message)
-            }
+            //
+            // 注意：这里**不再**删除旧文件。
+            // 加了「上传历史」后，旧图要能在历史里被切回来，文件必须留着。
+            // 文件数量由历史上限统一管理（见 addToHistory），不会无限堆积。
+            //
             val tmp = java.io.File(dir, "image.tmp")
             val input = contentResolver.openInputStream(uri) ?: return null
             input.use { src -> tmp.outputStream().use { dst -> src.copyTo(dst) } }
@@ -952,6 +955,189 @@ class MainActivity : AppCompatActivity() {
         } catch (t: Throwable) {
             null
         }
+    }
+
+    // ------------------------------------------------------------------ 上传历史
+
+    /** 历史里的一条记录：只记录**已复制到私有目录**的本地文件，content:// 不入库 */
+    private data class MediaItem(
+        val path: String,
+        val name: String,
+        val time: Long,
+        val isGif: Boolean
+    )
+
+    /** 历史上限：超出后删掉最老的一条（连同文件一并删除，避免堆积） */
+    private val HISTORY_LIMIT = 20
+
+    private fun loadHistory(): MutableList<MediaItem> {
+        return try {
+            val arr = JSONArray(Prefs.mediaHistoryJson)
+            val list = mutableListOf<MediaItem>()
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val p = o.optString("p", "")
+                if (p.isBlank()) continue
+                // 文件已经不在（被清理 / 手动删）的记录直接跳过，不再展示成空白格子
+                if (!java.io.File(p).exists()) continue
+                list += MediaItem(
+                    path = p,
+                    name = o.optString("n", "图片"),
+                    time = o.optLong("t", 0L),
+                    isGif = o.optBoolean("g", false)
+                )
+            }
+            list
+        } catch (t: Throwable) {
+            Log.w("MainActivity", "读取上传历史失败: " + t.message)
+            mutableListOf()
+        }
+    }
+
+    private fun saveHistory(list: List<MediaItem>) {
+        try {
+            val arr = JSONArray()
+            list.forEach { it2 ->
+                arr.put(JSONObject().apply {
+                    put("p", it2.path)
+                    put("n", it2.name)
+                    put("t", it2.time)
+                    put("g", it2.isGif)
+                })
+            }
+            Prefs.mediaHistoryJson = arr.toString()
+        } catch (t: Throwable) {
+            Log.w("MainActivity", "保存上传历史失败: " + t.message)
+        }
+    }
+
+    /**
+     * 把新上传的图加入历史。
+     *
+     * 同一张图重复选（内容相同）不做去重：文件名带时间戳，每次都是新记录，
+     * 这样用户反复微调再上传时能保留每一步 —— 更符合"历史"的语义。
+     */
+    private fun addToHistory(file: java.io.File) {
+        val list = loadHistory()
+        list += MediaItem(
+            path = file.absolutePath,
+            name = file.name,
+            time = System.currentTimeMillis(),
+            isGif = file.name.endsWith(".gif", ignoreCase = true)
+        )
+        // 超出上限：删最老的，文件一并删掉
+        while (list.size > HISTORY_LIMIT) {
+            val oldest = list.removeAt(0)
+            try {
+                java.io.File(oldest.path).delete()
+            } catch (t: Throwable) {
+                Log.w("MainActivity", "删除超出上限的历史文件失败: " + t.message)
+            }
+        }
+        saveHistory(list)
+        renderHistory()
+    }
+
+    /** 渲染历史缩略图列表；当前正在用的那张加高亮边框 */
+    private fun renderHistory() {
+        val list = loadHistory()
+        if (list.isEmpty()) {
+            b.historySection.visibility = View.GONE
+            b.historyList.removeAllViews()
+            return
+        }
+        b.historySection.visibility = View.VISIBLE
+        b.historyList.removeAllViews()
+
+        val current = Prefs.imageUri
+        val size = (64 * resources.displayMetrics.density).toInt()
+        val gap = (8 * resources.displayMetrics.density).toInt()
+
+        // 最新的排最前，符合直觉
+        list.asReversed().forEach { item ->
+            val wrap = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(size, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    marginEnd = gap
+                }
+            }
+            val thumb = ImageView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(size, size)
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                // 圆角 + 边框：当前使用的描主色边，其余描浅灰边
+                val on = current == Uri.fromFile(java.io.File(item.path)).toString()
+                val stroke = GradientDrawable().apply {
+                    setColor(Color.WHITE)
+                    cornerRadius = 10 * resources.displayMetrics.density
+                    setStroke(
+                        if (on) (2.5 * resources.displayMetrics.density).toInt() else 1,
+                        if (on) ContextCompat.getColor(this@MainActivity, R.color.brand_teal)
+                        else ContextCompat.getColor(this@MainActivity, R.color.divider)
+                    )
+                }
+                background = stroke
+                val pad = (2 * resources.displayMetrics.density).toInt()
+                setPadding(pad, pad, pad, pad)
+            }
+            try {
+                thumb.load(java.io.File(item.path))
+            } catch (t: Throwable) {
+                Log.w("MainActivity", "历史缩略图加载失败: " + t.message)
+            }
+
+            thumb.setOnClickListener { applyHistoryItem(item) }
+            thumb.setOnLongClickListener {
+                removeHistoryItem(item)
+                true
+            }
+            wrap.addView(thumb)
+            b.historyList.addView(wrap)
+        }
+    }
+
+    /** 点历史项：切回这张图 */
+    private fun applyHistoryItem(item: MediaItem) {
+        Prefs.imageUri = Uri.fromFile(java.io.File(item.path)).toString()
+        Prefs.imageRevision += 1
+        previewStage.invalidate()
+        refreshPreview()
+        renderHistory()
+        toast("已切换")
+    }
+
+    /** 长按历史项：删掉这一条（不删当前正在用的） */
+    private fun removeHistoryItem(item: MediaItem) {
+        val uri = Uri.fromFile(java.io.File(item.path)).toString()
+        if (uri == Prefs.imageUri) {
+            toast("这张正在使用，先换一张再删")
+            return
+        }
+        val list = loadHistory().filter { it.path != item.path }
+        try {
+            java.io.File(item.path).delete()
+        } catch (t: Throwable) {
+            Log.w("MainActivity", "删除历史文件失败: " + t.message)
+        }
+        saveHistory(list)
+        renderHistory()
+        toast("已删除")
+    }
+
+    /** 清空历史：删掉所有历史文件与记录，当前正在用的那张保留 */
+    private fun clearHistory() {
+        val current = Prefs.imageUri
+        val list = loadHistory()
+        list.forEach { item ->
+            if (Uri.fromFile(java.io.File(item.path)).toString() == current) return@forEach
+            try {
+                java.io.File(item.path).delete()
+            } catch (t: Throwable) {
+                Log.w("MainActivity", "清空历史删除文件失败: " + t.message)
+            }
+        }
+        Prefs.mediaHistoryJson = "[]"
+        renderHistory()
+        toast("已清空上传历史")
     }
 
     private fun refreshPreview() {
