@@ -285,11 +285,7 @@ object BluetoothPopupTrigger {
             return false
         }
 
-        // 进程已被蓝牙广播唤醒：立刻挂上进程级电量监听，
-        // 连接后几秒内的「系统真实电量 / 厂商分体电量」广播都能收到并刷新弹窗。
-        // 不依赖前台服务能否拉起（Android 12+ 后台 startForegroundService 大概率被拒）。
-        BatteryUpdateBridge.ensureRegistered(context)
-
+        // 电量监听放到弹窗之后：注册是异步的，且绝不能占用弹窗的时间
         val resolved = device ?: resolveConnectedAudioDevice(context)
         if (device != null && !isAudioLike(device)) {
             Log.i(TAG, "判定为非音频设备，不弹窗: " + safeName(device))
@@ -357,6 +353,9 @@ object BluetoothPopupTrigger {
             "弹窗失败原因=无：已授权，直接添加悬浮窗（不依赖前台服务）: " + name.ifBlank { address }
         )
         val shown = PopupOverlayManager.show(context, quick, Prefs.imageUri)
+
+        // 弹窗已出来，再挂电量监听（异步执行，不占弹窗时间）
+        BatteryUpdateBridge.ensureRegistered(context)
 
         if (shown && resolved != null) {
             // 电量异步补齐：不占用弹窗的时间
