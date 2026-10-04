@@ -34,8 +34,11 @@ class BluetoothEventReceiver : BroadcastReceiver() {
             Prefs.init(context)
             val app = context.applicationContext
 
-            // 进程已被唤醒：先挂上进程级电量监听（幂等，只注册一次）
-            BatteryUpdateBridge.ensureRegistered(app)
+            //
+            // 注意顺序：这里**不再**在弹窗之前同步注册电量监听。
+            // ensureRegistered 内部已改为异步，但即便如此也把它放在弹窗之后更稳妥 ——
+            // 冷启动时弹窗速度优先，电量由后面的异步补偿刷新补齐。
+            //
 
             // 电量广播直接交给桥处理（少数 ROM 会把这两条广播派发给静态接收器）
             if (action == BatteryUpdateBridge.ACTION_BATTERY_LEVEL_CHANGED ||
@@ -57,6 +60,9 @@ class BluetoothEventReceiver : BroadcastReceiver() {
             // 1) 直接弹窗：不依赖前台服务能否启动（后台广播里 startForegroundService 很可能被拒）
             val device = BluetoothPopupTrigger.deviceFrom(intent)
             BluetoothPopupTrigger.showConnectedPopup(app, device)
+
+            // 1.5) 弹窗出来之后再补挂电量监听（异步，不占弹窗时间）
+            BatteryUpdateBridge.ensureRegistered(app)
 
             // 2) 附带尝试把常驻监听服务拉起来，失败也不影响上一步已经弹出的弹窗
             if (Prefs.monitorEnabled && !BluetoothMonitorService.running) {
