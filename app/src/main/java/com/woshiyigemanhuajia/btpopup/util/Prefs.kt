@@ -86,6 +86,17 @@ object Prefs {
         set(v) = sb("popup_unknown_devices", v)
 
     /**
+     * 上传历史：用户上传过的图片 / GIF 列表，JSON 数组字符串。
+     *
+     * 每项格式：{"p":"本地文件绝对路径","n":"显示名","t":时间戳,"g":是否GIF}
+     * 只存**已复制到私有目录**的本地文件路径 —— content:// 会因授权失效而丢失，
+     * 不适合进历史。
+     */
+    var mediaHistoryJson: String
+        get() = gs("media_history", "[]") ?: "[]"
+        set(v) = ss("media_history", v)
+
+    /**
      * 换图版本号：每次更换 / 清除自定义图片都 +1。
      *
      * 加载侧用「URI + 版本号」作为复用判断依据，
