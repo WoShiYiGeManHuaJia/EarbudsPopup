@@ -625,6 +625,8 @@ class MainActivity : AppCompatActivity() {
         }
         b.btnClearImage.setOnClickListener {
             Prefs.imageUri = null
+            Prefs.imageRevision += 1
+            previewStage.invalidate()
             refreshPreview()
         }
         b.btnQuickPreview.setOnClickListener { showTestPopup() }
@@ -891,6 +893,10 @@ class MainActivity : AppCompatActivity() {
             // 等任何原因都不再会导致"图片突然没了"。失败时回退用原 URI。
             val stored = copyMediaToLocal(uri)
             Prefs.imageUri = stored?.let { Uri.fromFile(it).toString() } ?: uri.toString()
+            // 换图版本号 +1：即便极端情况下 URI 完全相同（例如回退到原始 content:// 且复用同名），
+            // 也能强制加载侧丢弃旧图重新解码，杜绝"换了图还是旧图"。
+            Prefs.imageRevision += 1
+            previewStage.invalidate()
             refreshPreview()
         } else if (requestCode == REQ_PICK_SOUND && resultCode == RESULT_OK) {
             val uri: Uri = data?.data ?: return
@@ -912,8 +918,30 @@ class MainActivity : AppCompatActivity() {
             val isGif = contentResolver.getType(uri) == "image/gif" ||
                 (uri.lastPathSegment?.endsWith(".gif", ignoreCase = true) == true)
             val dir = java.io.File(filesDir, "popup_media").apply { mkdirs() }
-            // 先写临时文件再替换，避免复制到一半时弹窗加载到损坏文件
-            val out = java.io.File(dir, if (isGif) "image.gif" else "image.img")
+            //
+            // 【修复「换图片/GIF 后预览还固定显示旧图」】
+            // 原实现永远写死成同一个文件名 image.gif / image.img，
+            // 于是 Prefs.imageUri **每次换图都是完全相同的字符串**。
+            // 加载侧有「URI 未变且已有图 → 直接复用、不重新 load」的判断，
+            // 加上 Coil 的内存/磁盘缓存也以 URI 为 key，
+            // 结果就是换了图也永远读到旧的那一帧 —— 换图完全不生效。
+            //
+            // 改成带时间戳的唯一文件名，每次换图 URI 必然不同，
+            // 复用判断与 Coil 缓存都会自然失效，新图必定被重新加载。
+            //
+            val ext = if (isGif) "gif" else "img"
+            val out = java.io.File(dir, "image_" + System.currentTimeMillis() + "." + ext)
+            // 清掉旧的同类文件，避免用户反复换图导致文件堆积
+            try {
+                dir.listFiles()?.forEach { f ->
+                    val n = f.name
+                    if (n.startsWith("image_") && n.endsWith(".$ext") && f.absolutePath != out.absolutePath) {
+                        f.delete()
+                    }
+                }
+            } catch (t: Throwable) {
+                Log.w("MainActivity", "清理旧图片失败: " + t.message)
+            }
             val tmp = java.io.File(dir, "image.tmp")
             val input = contentResolver.openInputStream(uri) ?: return null
             input.use { src -> tmp.outputStream().use { dst -> src.copyTo(dst) } }
