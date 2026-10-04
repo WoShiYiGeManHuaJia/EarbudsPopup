@@ -41,6 +41,20 @@ class PopupPreviewStage(private val context: Context, private val stage: FrameLa
         requestRender()
     }
 
+    /**
+     * 强制重建预览视图。
+     *
+     * 换图片 / GIF 后必须调用：ensurePopup 默认复用同一个 View 只重套样式，
+     * 而复用路径下的图片加载有「URI 未变就跳过」的判断，换图后若 URI 恰好相同
+     * （见 MainActivity.copyMediaToLocal 的说明）就会一直显示旧图。
+     * 这里直接丢弃旧视图，下次渲染必然走 createPreviewView 重新加载。
+     */
+    fun invalidate() {
+        popupView = null
+        screen?.removeAllViews()
+        requestRender()
+    }
+
     fun isLandscape(): Boolean = landscape
 
     /** 竖屏 / 横屏预览切换（横竖屏是两套不同布局，必须重建视图） */
