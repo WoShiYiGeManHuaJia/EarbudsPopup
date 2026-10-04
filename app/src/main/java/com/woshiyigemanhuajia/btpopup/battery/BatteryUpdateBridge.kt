@@ -77,11 +77,37 @@ object BatteryUpdateBridge {
     }
 
     /** 幂等注册：进程生命周期内只注册一次，任何入口调用都安全 */
+    //
+    // 【修复「后台挂几小时后，开盖要 8~9 秒才弹窗」】
+    //
+    // 原实现是**同步**注册 1 条系统电量广播 + 9 条厂商电量广播，共 10 次
+    // registerReceiver —— 每次都是跨进程 Binder 调用到 AMS。
+    // 而它就在 App.onCreate() 里执行：进程被蓝牙广播冷启动唤醒时，
+    // Application.onCreate 会**先于** BroadcastReceiver.onReceive 跑完，
+    // 于是这 10 次 Binder 调用把弹窗活活堵在后面。
+    // 冷启动时 AMS 本身繁忙（正在派发蓝牙连接风暴），单次调用可达数百毫秒，
+    // 10 次就是几秒 —— 这正是"开盖后要等 8~9 秒"的主要来源。
+    //
+    // 改法：注册动作整体搬到后台线程，主线程立即返回。
+    // 弹窗不依赖这些广播也能显示（电量由后续异步补偿刷新补齐），
+    // 因此"先弹窗、再补电量监听"是安全的顺序。
+    //
+    private val registerExec: java.util.concurrent.ExecutorService =
+        java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+            Thread(r, "batt-bridge-reg").apply { isDaemon = true }
+        }
+
+    @Volatile
+    private var registerStarted = false
+
     fun ensureRegistered(context: Context) {
-        if (registered) return
+        if (registerStarted) return
         synchronized(this) {
-            if (registered) return
-            val app = context.applicationContext
+            if (registerStarted) return
+            registerStarted = true
+        }
+        val app = context.applicationContext
+        registerExec.execute {
             try {
                 // 系统真实电量广播
                 ContextCompat.registerReceiver(
@@ -100,6 +126,8 @@ object BatteryUpdateBridge {
                 Log.i(TAG, "进程级电量广播监听已注册（厂商 category " + COMPANY_IDS.size + " 条）")
             } catch (t: Throwable) {
                 Log.e(TAG, "注册电量广播失败: " + t.message)
+                // 注册失败允许重试：进程还活着，下次事件再试一次
+                synchronized(this) { registerStarted = false }
             }
         }
     }
