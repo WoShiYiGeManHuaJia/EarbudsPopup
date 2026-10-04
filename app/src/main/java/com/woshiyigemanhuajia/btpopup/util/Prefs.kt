@@ -85,6 +85,17 @@ object Prefs {
         get() = gb("popup_unknown_devices", false)
         set(v) = sb("popup_unknown_devices", v)
 
+    /**
+     * 换图版本号：每次更换 / 清除自定义图片都 +1。
+     *
+     * 加载侧用「URI + 版本号」作为复用判断依据，
+     * 这样即便 URI 因故保持不变，也能强制丢弃旧图重新解码，
+     * 避免"换了图片但预览 / 弹窗还显示旧图"。
+     */
+    var imageRevision: Int
+        get() = gi("image_revision", 0)
+        set(v) = si("image_revision", v)
+
     // ---------------- 横屏圆角 ----------------
 
     /**
