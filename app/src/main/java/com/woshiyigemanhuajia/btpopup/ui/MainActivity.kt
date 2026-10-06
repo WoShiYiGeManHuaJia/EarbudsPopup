@@ -657,6 +657,7 @@ class MainActivity : AppCompatActivity() {
             Prefs.islandLeftIcon = v
         }
         b.btnIslandBypass.setOnClickListener { showBypassTest() }
+        b.btnIslandScan.setOnClickListener { showIslandScan() }
         b.btnQuickPreview.setOnClickListener { showTestPopup() }
         b.btnLandscapePreview.setOnClickListener { toggleLandscapePreview() }
         b.btnAdbGrant.setOnClickListener { runOneKeyGrant() }
@@ -1067,7 +1068,47 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** 把「设备支不支持 / 有没有 Stellar 权限」显示在开关下方，避免用户盲试 */
+    /**
+     * 扫描系统里真实存在的岛通知。
+     *
+     * 决定性问题：这台机器上到底有没有第三方 App 成功上过岛。
+     * 只有系统 App 有 → 第三方被挡，改参数无用；有第三方 → 直接抄它的参数。
+     */
+    private fun showIslandScan() {
+        toast("正在扫描系统通知，请稍候…")
+        Thread {
+            val r = IslandNotifier.scanSystemIsland(this)
+            runOnUiThread {
+                try {
+                    val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    cm.setPrimaryClip(ClipData.newPlainText("island-scan", r))
+                    toast("扫描结果已复制到剪贴板")
+                } catch (t: Throwable) {
+                    Log.w("MainActivity", "复制扫描结果失败: " + t.message)
+                }
+                try {
+                    val tv = TextView(this).apply {
+                        text = r
+                        setTextIsSelectable(true)
+                        textSize = 10f
+                        val pad = (16 * resources.displayMetrics.density).toInt()
+                        setPadding(pad, pad, pad, pad)
+                        setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
+                    }
+                    val scroll = android.widget.ScrollView(this).apply { addView(tv) }
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("系统岛通知扫描")
+                        .setView(scroll)
+                        .setPositiveButton("关闭", null)
+                        .show()
+                } catch (t: Throwable) {
+                    Log.w("MainActivity", "显示扫描结果失败: " + t.message)
+                }
+            }
+        }.start()
+    }
+
+    /** 把「设备支不支持 / 有没有 Stellar 权限」显示在开关下方，避免用户盲试 */    /** 把「设备支不支持 / 有没有 Stellar 权限」显示在开关下方，避免用户盲试 */
     private fun refreshIslandState() {
         val supported = IslandNotifier.isSupported()
         val protocol = IslandNotifier.focusProtocol(this)

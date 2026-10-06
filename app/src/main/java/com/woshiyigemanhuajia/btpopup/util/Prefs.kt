@@ -101,7 +101,8 @@ object Prefs {
      * 两种写法在不同 ROM 上表现不一致，做成可切换，哪个能显示就用哪个。
      */
     var islandLeftIcon: Boolean
-        get() = gb("island_left_icon", true)
+        // 默认 false：与课表成品一致（左区用文字），先保证能上岛，再谈图标
+        get() = gb("island_left_icon", false)
         set(v) = sb("island_left_icon", v)
 
     /**

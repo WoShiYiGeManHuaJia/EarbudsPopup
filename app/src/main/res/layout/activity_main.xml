@@ -1688,6 +1688,14 @@
                 android:text="上岛诊断（复制报告）" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnIslandScan"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="扫描系统岛通知（抓真实参数）" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnIslandBypass"
                 style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="match_parent"

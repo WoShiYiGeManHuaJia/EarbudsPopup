@@ -219,18 +219,22 @@ object IslandNotifier {
                     // 课表原值
                     put("templateNo", 2)
 
+                    //
+                    // 课表成品里 imageTextInfoLeft 只用 textInfo（type=1，文字），
+                    // 不用图标。所以默认走文字模式。
+                    // 图标模式保留，但 pic 只能引用 pics 里真实存在的 key（pic_small），
+                    // 否则系统取不到图。
+                    //
                     if (Prefs.islandLeftIcon) {
-                        // 左：耳机图标
                         put("imageTextInfoLeft", JSONObject().apply {
                             put("type", 0)
                             put("picInfo", JSONObject().apply {
                                 put("type", 1)
-                                put("pic", "miui.focus.pic_imageText")
-                                put("picDark", "miui.focus.pic_imageText_dark")
+                                put("pic", "miui.focus.pic_small")
+                                put("picDark", "miui.focus.pic_small_dark")
                             })
                         })
                     } else {
-                        // 左：耳机名文字（课表原本就是这么用的，type=1 已验证）
                         put("imageTextInfoLeft", JSONObject().apply {
                             put("type", 1)
                             put("textInfo", JSONObject().apply {
@@ -299,6 +303,13 @@ object IslandNotifier {
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
 
+        //
+        // 【与课表成品 APK 逐字对齐】
+        // 反编译课表 APK 后确认：它 dex 里出现的 miui.focus 字符串一共只有 6 个，
+        // 其中 pics 里只放这 4 个 key：pic_app_icon / pic_app_icon_dark / pic_small / pic_small_dark。
+        // 我前几版额外放的 pic_imageText / pic_imageText_dark 课表根本没有，
+        // 这里删掉 —— 多出来的 key 可能让系统解析异常。
+        //
         val picsBundle = Bundle().apply {
             val headset = Icon.createWithResource(context, R.drawable.ic_island_headset)
             val headsetDark = Icon.createWithResource(context, R.drawable.ic_island_headset_dark)
@@ -307,8 +318,6 @@ object IslandNotifier {
             putParcelable("miui.focus.pic_app_icon_dark", launcher)
             putParcelable("miui.focus.pic_small", headset)
             putParcelable("miui.focus.pic_small_dark", headsetDark)
-            putParcelable("miui.focus.pic_imageText", headset)
-            putParcelable("miui.focus.pic_imageText_dark", headsetDark)
         }
         builder.addExtras(Bundle().apply {
             putBundle("miui.focus.pics", picsBundle)
@@ -398,6 +407,67 @@ object IslandNotifier {
         sb.append("--- 恢复 ---\n")
         val on = IslandPrivilege.setXmsfNetworkingEnabled(context, true)
         sb.append("返回=$on  ").append(IslandPrivilege.lastReport).append('\n')
+        return sb.toString()
+    }
+
+    // ------------------------------------------------------------------ 系统级扫描
+
+    /**
+     * 用 Shizuku 直接读系统当前所有通知，找出真正带 miui.focus.param 的那些。
+     *
+     * 这是判断"到底是参数错了，还是系统根本不放行第三方"的决定性证据：
+     *   - 如果系统里只有系统应用（com.android.*, com.miui.*）带 focus param
+     *     → 说明这台机器上第三方上岛被挡，改任何参数都没用
+     *   - 如果有第三方应用带 → 把它真实的 param 抓出来照抄
+     *
+     * 之前几个版本我一直在猜参数，这次直接从系统里取真值。
+     */
+    fun scanSystemIsland(context: Context): String {
+        val sb = StringBuilder()
+        sb.append("========== 系统岛通知扫描 ==========\n\n")
+        if (!AdbShell.binderAlive() || !AdbShell.hasPermission()) {
+            return sb.append("需要 Stellar / Shizuku 权限才能扫描\n").toString()
+        }
+
+        fun run(cmd: String, limit: Int = 4000): String {
+            return try {
+                val r = AdbShell.exec(cmd)
+                val t = if (r.out.isNotBlank()) r.out else r.err
+                if (t.isBlank()) "(空)" else t.take(limit)
+            } catch (t: Throwable) {
+                "执行异常: ${t.message}"
+            }
+        }
+
+        // 1. 系统里有多少条通知带 focus param
+        sb.append("【1】当前通知中 miui.focus.param 出现次数\n")
+        sb.append(run("dumpsys notification --noredact 2>/dev/null | grep -c 'miui.focus.param'", 200))
+        sb.append("\n\n")
+
+        // 2. 哪些包名发出了带 focus param 的通知
+        sb.append("【2】带 focus param 的通知来自哪些包名\n")
+        sb.append(run("dumpsys notification --noredact 2>/dev/null | grep -oE 'pkg=[a-zA-Z0-9._]+' | sort | uniq -c | sort -rn | head -30", 1500))
+        sb.append("\n\n")
+
+        // 3. 抓一段真实的 focus param 内容
+        sb.append("【3】真实 miui.focus.param 片段\n")
+        val raw = run("dumpsys notification --noredact 2>/dev/null | grep -m1 -o 'miui.focus.param=[^ ]*' | head -c 1500", 1800)
+        sb.append(raw).append("\n\n")
+
+        // 4. island / focus 相关系统属性
+        sb.append("【4】系统属性（island / focus）\n")
+        sb.append(run("getprop 2>/dev/null | grep -iE 'island|focus'", 1500))
+        sb.append("\n\n")
+
+        // 5. 设置项
+        sb.append("【5】设置项（focus / island）\n")
+        sb.append(run("settings list global 2>/dev/null | grep -iE 'focus|island'; settings list secure 2>/dev/null | grep -iE 'focus|island'; settings list system 2>/dev/null | grep -iE 'focus|island'", 1500))
+        sb.append("\n\n")
+
+        // 6. 本机上岛相关包是否安装
+        sb.append("【6】小米服务框架状态\n")
+        sb.append(run("pm list packages 2>/dev/null | grep -iE 'xmsf|miui.statusbar|focus'", 800))
+        sb.append("\n\n========== 扫描结束 ==========\n")
         return sb.toString()
     }
 
