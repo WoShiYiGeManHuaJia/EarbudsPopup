@@ -86,6 +86,16 @@ object Prefs {
         set(v) = sb("popup_unknown_devices", v)
 
     /**
+     * 是否启用小米「超级岛 / 焦点通知」上岛。
+     *
+     * 默认关闭：上岛依赖系统岛能力与（多数情况下）Stellar / Shizuku 提权绕过白名单校验，
+     * 并非所有机型都能成功。让用户在设置页自己试，成功就留着，不成功也不影响弹窗。
+     */
+    var islandEnabled: Boolean
+        get() = gb("island_enabled", false)
+        set(v) = sb("island_enabled", v)
+
+    /**
      * 上传历史：用户上传过的图片 / GIF 列表，JSON 数组字符串。
      *
      * 每项格式：{"p":"本地文件绝对路径","n":"显示名","t":时间戳,"g":是否GIF}
