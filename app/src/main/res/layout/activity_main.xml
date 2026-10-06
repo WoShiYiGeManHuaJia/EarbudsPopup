@@ -1669,6 +1669,14 @@
                 android:text="取消测试岛" />
         </LinearLayout>
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnIslandDiag"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="上岛诊断（复制报告）" />
+
         <!-- ================= 权限与 ADB 授权 ================= -->
                 <LinearLayout
                     android:layout_width="match_parent"
