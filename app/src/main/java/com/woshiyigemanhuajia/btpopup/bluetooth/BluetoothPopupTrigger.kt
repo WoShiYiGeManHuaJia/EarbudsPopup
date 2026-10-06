@@ -14,6 +14,7 @@ import android.util.Log
 import com.woshiyigemanhuajia.btpopup.battery.BatteryInfo
 import com.woshiyigemanhuajia.btpopup.battery.BatteryRepository
 import com.woshiyigemanhuajia.btpopup.battery.BatteryUpdateBridge
+import com.woshiyigemanhuajia.btpopup.island.IslandNotifier
 import com.woshiyigemanhuajia.btpopup.battery.GattBatteryReader
 import com.woshiyigemanhuajia.btpopup.overlay.PopupOverlayManager
 import com.woshiyigemanhuajia.btpopup.util.PermissionGuard
@@ -247,6 +248,12 @@ object BluetoothPopupTrigger {
     fun handleDisconnected(context: Context) {
         PopupOverlayManager.dismiss()
         PopupSound.stop()
+        // 断开时同步收掉岛通知，否则耳机都断连了岛还挂在屏幕上
+        try {
+            IslandNotifier.cancel(context.applicationContext)
+        } catch (t: Throwable) {
+            Log.w(TAG, "取消岛通知失败（不影响收弹窗）: " + t.message)
+        }
         //
         // 【关键】断开必须同时清掉去重状态。
         // 开盖时常常是「先断后连」（主从切换）：连接把 lastTriggerAt 记下，
@@ -356,6 +363,27 @@ object BluetoothPopupTrigger {
 
         // 弹窗已出来，再挂电量监听（异步执行，不占弹窗时间）
         BatteryUpdateBridge.ensureRegistered(context)
+
+        //
+        // 上岛：连接成功后在屏幕顶部显示「耳机图标 + 已连接」。
+        // 放在弹窗之后，绝不占用弹窗的时间；内部自带开关与设备支持判定，
+        // 不支持 / 未开启时直接返回，也不会因为异常影响弹窗。
+        //
+        if (shown) {
+            try {
+                val shownName = name.ifBlank { quick.name.ifBlank { "蓝牙耳机" } }
+                val batteryText = if (quick.hasAny) {
+                    listOfNotNull(
+                        quick.left?.let { "左耳 $it%" },
+                        quick.right?.let { "右耳 $it%" },
+                        quick.case?.let { "仓 $it%" }
+                    ).joinToString(" · ").takeIf { it.isNotBlank() }
+                } else null
+                IslandNotifier.show(context.applicationContext, shownName, batteryText)
+            } catch (t: Throwable) {
+                Log.w(TAG, "上岛失败（不影响弹窗）: " + t.message)
+            }
+        }
 
         if (shown && resolved != null) {
             // 电量异步补齐：不占用弹窗的时间
