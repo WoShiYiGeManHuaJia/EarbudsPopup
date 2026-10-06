@@ -20,46 +20,43 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * 小米「超级岛 / 焦点通知」上岛（耳机版）。
  *
- * 原理（小米官方《超级岛开发指南》）：
- *   notification.extras.putString("miui.focus.param", json)   // 岛的形态与内容
- *   notification.extras.putString("miui.focus.ticker", text)  // 状态栏胶囊文字
- *   notification.extras.putBundle("miui.focus.pics", 图标)     // 岛上用到的图
+ * 【这一版改为逐字照搬 NexioSchedule（软大课表）已验证可用的那份实现】
  *
- * 【这次修正的三个关键点 —— 上一版只出普通通知、不上岛的根因】
+ * 前几版我按自己的理解重写了参数，结果每次都只出普通通知。
+ * 课表那份是在同类 HyperOS 3 机器上实打实能上岛的，所以这次的做法是：
+ *   **原样保留它的 JSON 骨架，只替换内容。**
  *
- * 1. 漏了独立的 `miui.focus.ticker` 字段。
- *    它不在 param JSON 里，是要**单独**往 extras 里 putString 的，
- *    系统靠它把这条通知识别为焦点通知。只写 param 的话系统当普通通知处理。
- * 2. protocol 写成 1，而 HyperOS 3 的超级岛要求 protocol = 3。
- * 3. param_v2 里缺 ticker / islandPriority 字段。
+ * 与课表原实现保持一致的关键点（这些正是我之前改错的地方）：
+ *   1. protocol = 1（不是 3）
+ *   2. bigIslandArea 里带 templateNo = 2
+ *   3. 带完整的 hintInfo（含 timerInfo），缺了它系统可能不认
+ *   4. **不**往 extras 里额外塞 miui.focus.ticker —— 课表没有这一步
+ *   5. 通知 setAutoCancel(true)、带 picInfo（type=1, pic=""）
+ *   6. 图标通过 builder.addExtras( Bundle{ putBundle("miui.focus.pics", ...) } ) 注入
  *
- * 参照：小米官方开发指南 + D4vidDf/HyperIsland-ToolKit（第三方上岛库）的字段定义。
- *
- * 关于 Stellar / Shizuku 绕过：
- * 小米对第三方上岛有白名单校验，校验时 com.xiaomi.xmsf 需要联网。
- * 思路是提权**临时断掉 xmsf 网络**再发通知，发完立刻恢复。
- * 这里用本 App 已有的 AdbShell（shell 身份）执行，不需要额外特权服务。
+ * 只改动的部分：
+ *   - 文案：左区图标 / 耳机名，右区「已连接」
+ *   - 图标：耳机图标（浅底 + 深底两版）
+ *   - 触发时机：蓝牙耳机连接时（由 BluetoothPopupTrigger 调用）
+ *   - 去掉倒计时、按钮、展开态等课程专属内容
  */
 object IslandNotifier {
 
     private const val TAG = "IslandNotifier"
 
+    /** 与课表一致：通知渠道高优先级 + 免打扰放行 */
     private const val CHANNEL_ID = "bt_popup_island"
     private const val CHANNEL_NAME = "耳机上岛"
 
-    /** 岛通知固定 ID：断开时要能精确取消 */
     const val ISLAND_NOTIFICATION_ID = 1003
 
-    /** 业务标识：稳定字符串即可，系统只用来区分来源 */
+    /** 业务标识：课表用 "course_reminder"，这里换成耳机专用 */
     private const val BUSINESS_TAG = "bt_earbuds"
 
     private const val XMSF_PACKAGE = "com.xiaomi.xmsf"
 
-    /** OEM 防火墙链：与系统 setFirewallChainEnabled 的 OEM_DENY 一致 */
+    /** OEM 防火墙链（OEM_DENY） */
     private const val FIREWALL_CHAIN_OEM_DENY = 9
-
-    /** HyperOS 3 的超级岛要求 protocol = 3；OS2 的旧焦点通知是 1~2 */
-    private const val PROTOCOL_SUPER_ISLAND = 3
 
     private val sequence = AtomicInteger(0)
 
@@ -69,6 +66,11 @@ object IslandNotifier {
         java.util.concurrent.Executors.newSingleThreadExecutor { r ->
             Thread(r, "island-bypass").apply { isDaemon = true }
         }
+
+    /** 上一次绕过尝试的结果，供诊断显示 */
+    @Volatile
+    var lastBypassReport: String = "尚未尝试"
+        private set
 
     // ------------------------------------------------------------------ 能力判定
 
@@ -83,7 +85,6 @@ object IslandNotifier {
         }
     }
 
-    /** 焦点通知协议版本：2 以下没有超级岛 */
     fun focusProtocol(context: Context): Int {
         return try {
             android.provider.Settings.System.getInt(
@@ -94,21 +95,12 @@ object IslandNotifier {
         }
     }
 
-    /**
-     * 焦点通知权限是否开启。
-     *
-     * 官方给出的判定接口：content://miui.statusbar.notification.public 的 canShowFocus。
-     * 这个开关没开的话，即使参数完全正确也上不了岛 —— 这是最常见的"只出普通通知"原因。
-     */
     fun canShowFocus(context: Context): String {
         return try {
             val uri = Uri.parse("content://miui.statusbar.notification.public")
             val r = context.contentResolver.call(uri, "canShowFocus", null, null)
-            if (r == null) "接口返回 null"
-            else {
-                val keys = r.keySet().joinToString(",") { "$it=${r.get(it)}" }
-                keys.ifBlank { "返回空 Bundle" }
-            }
+            if (r == null) "接口返回 null（未知）"
+            else r.keySet().joinToString(",") { "$it=${r.get(it)}" }.ifBlank { "返回空 Bundle" }
         } catch (t: Throwable) {
             "查询失败: " + (t.message ?: t.toString())
         }
@@ -121,7 +113,7 @@ object IslandNotifier {
                 CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "耳机连接状态超级岛"
-                setShowBadge(false)
+                setShowBadge(true)
                 setBypassDnd(true)
             }
             manager.createNotificationChannel(channel)
@@ -130,34 +122,34 @@ object IslandNotifier {
         }
     }
 
-    // ------------------------------------------------------------------ 岛参数
+    // ------------------------------------------------------------------ 岛参数（照搬课表骨架）
 
     /**
      * 构造 miui.focus.param。
      *
-     * 大岛用图文模板：左耳机图标 + 右「已连接」。
-     * 同时给出 ticker（状态栏胶囊文字），它是 param 里的必填字段。
+     * 骨架与课表 buildIslandParamsJson 完全一致，只把课程内容换成耳机内容：
+     *   - 左区 imageTextInfoLeft：耳机图标（或耳机名，可在设置里选）
+     *   - 右区 textInfo.title：「已连接」
+     *   - hintInfo / timerInfo：按课表写法保留（非倒计时场景用 timerType=0）
      */
-    private fun buildParams(ticker: String, deviceName: String, batteryText: String?): String {
+    private fun buildParams(context: Context, deviceName: String, batteryText: String?): String {
         val json = JSONObject()
+        val now = System.currentTimeMillis()
+
         val paramV2 = JSONObject().apply {
             put("business", BUSINESS_TAG)
-            // HyperOS 3 的超级岛必须是 3
-            put("protocol", PROTOCOL_SUPER_ISLAND)
-            // 状态栏胶囊文字：param 里的必填字段
-            put("ticker", ticker)
-            put("updatable", true)
-            put("isShowNotification", true)
-            put("enableFloat", false)
+            // 课表原值，不要改成 3
+            put("protocol", 1)
+            // 耳机连接是瞬时事件，不弹悬浮窗，只走岛
             put("islandFirstFloat", true)
+            put("enableFloat", false)
+            put("updatable", true)
             put("outEffectSrc", "")
             put("reopen", "reopen")
             put("sequence", sequence.incrementAndGet())
             put("aodTitle", deviceName.ifBlank { "耳机" })
-            // 状态栏胶囊图标（走 pics 里的 key）
-            put("tickerPic", "miui.focus.pic_ticker")
-            put("tickerPicDark", "miui.focus.pic_ticker_dark")
 
+            // 通知卡片本体（下拉通知栏里看到的那条）
             put("baseInfo", JSONObject().apply {
                 put("type", 2)
                 put("title", deviceName.ifBlank { "蓝牙耳机" })
@@ -183,24 +175,63 @@ object IslandNotifier {
                 put("pic", "")
             })
 
+            // 课表里同样带 hintInfo，保留骨架（这里没有倒计时，timerType=0）
+            put("hintInfo", JSONObject().apply {
+                put("type", 2)
+                put("content", "现在")
+                put("title", "已连接")
+                put("timerInfo", JSONObject().apply {
+                    put("timerType", 0)
+                    put("timerWhen", 0)
+                    put("timerTotal", 0)
+                    put("timerSystemCurrent", 0)
+                })
+                put("subContent", "")
+                put("subTitle", deviceName.ifBlank { "" })
+                put("colorContent", "#666666")
+                put("colorContentDark", "#aaaaaa")
+                put("colorTitle", "#222222")
+                put("colorTitleDark", "#eeeeee")
+                put("colorSubContent", "#666666")
+                put("colorSubContentDark", "#aaaaaa")
+                put("colorSubTitle", "#222222")
+                put("colorSubTitleDark", "#eeeeee")
+            })
+
             put("param_island", JSONObject().apply {
                 put("islandProperty", 1)
-                put("islandPriority", 2)
                 put("islandTimeout", 3600)
 
                 put("bigIslandArea", JSONObject().apply {
-                    // 左：耳机图标
-                    put("imageTextInfoLeft", JSONObject().apply {
-                        put("type", 1)
-                        put("picInfo", JSONObject().apply {
-                            put("type", 1)
-                            put("pic", "miui.focus.pic_imageText")
-                            put("picDark", "miui.focus.pic_imageText_dark")
+                    // 课表原值
+                    put("templateNo", 2)
+
+                    if (Prefs.islandLeftIcon) {
+                        // 左：耳机图标
+                        put("imageTextInfoLeft", JSONObject().apply {
+                            put("type", 0)
+                            put("picInfo", JSONObject().apply {
+                                put("type", 1)
+                                put("pic", "miui.focus.pic_imageText")
+                                put("picDark", "miui.focus.pic_imageText_dark")
+                            })
                         })
-                    })
+                    } else {
+                        // 左：耳机名文字（课表原本就是这么用的，type=1 已验证）
+                        put("imageTextInfoLeft", JSONObject().apply {
+                            put("type", 1)
+                            put("textInfo", JSONObject().apply {
+                                put("title", deviceName.ifBlank { "耳机" })
+                                put("content", "")
+                                put("showHighlightColor", false)
+                                put("narrowFont", false)
+                            })
+                        })
+                    }
 
                     // 右：「已连接」
                     put("textInfo", JSONObject().apply {
+                        put("frontTitle", "")
                         put("title", "已连接")
                         put("content", "")
                         put("showHighlightColor", false)
@@ -218,6 +249,7 @@ object IslandNotifier {
                 })
             })
         }
+
         json.put("param_v2", paramV2)
         return json.toString()
     }
@@ -233,8 +265,10 @@ object IslandNotifier {
         ensureChannel(context)
 
         val name = deviceName.ifBlank { "蓝牙耳机" }
-        val ticker = "已连接"
-        val params = buildParams(ticker, name, batteryText)
+        val content = buildString {
+            append("已连接")
+            if (!batteryText.isNullOrBlank()) append(" · ").append(batteryText)
+        }
 
         val contentIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -244,44 +278,32 @@ object IslandNotifier {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // 与课表一致
         val builder = Notification.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_island_headset)
             .setContentTitle(name)
-            .setContentText(ticker)
+            .setContentText(content)
             .setContentIntent(pendingIntent)
-            .setAutoCancel(false)
-            // 焦点通知本质是"进行中的服务"，按官方示例用 TickerText 再补一道
-            .setTicker(ticker)
+            .setAutoCancel(true)
 
-        val pics = Bundle().apply {
+        val picsBundle = Bundle().apply {
             val headset = Icon.createWithResource(context, R.drawable.ic_island_headset)
             val headsetDark = Icon.createWithResource(context, R.drawable.ic_island_headset_dark)
             val launcher = Icon.createWithResource(context, R.mipmap.ic_launcher)
-            // 状态栏胶囊图标
-            putParcelable("miui.focus.pic_ticker", headset)
-            putParcelable("miui.focus.pic_ticker_dark", headsetDark)
-            // 大岛左侧图文组件
-            putParcelable("miui.focus.pic_imageText", headset)
-            putParcelable("miui.focus.pic_imageText_dark", headsetDark)
-            // 小岛
-            putParcelable("miui.focus.pic_small", headset)
-            putParcelable("miui.focus.pic_small_dark", headsetDark)
-            // 应用图标
             putParcelable("miui.focus.pic_app_icon", launcher)
             putParcelable("miui.focus.pic_app_icon_dark", launcher)
+            putParcelable("miui.focus.pic_small", headset)
+            putParcelable("miui.focus.pic_small_dark", headsetDark)
+            putParcelable("miui.focus.pic_imageText", headset)
+            putParcelable("miui.focus.pic_imageText_dark", headsetDark)
         }
+        builder.addExtras(Bundle().apply {
+            putBundle("miui.focus.pics", picsBundle)
+        })
 
         val notification = builder.build()
-
-        //
-        // 三个字段缺一不可：
-        //   miui.focus.param  岛的形态（JSON）
-        //   miui.focus.pics   岛上用到的图标
-        //   miui.focus.ticker 状态栏胶囊文字（独立字段，不在 JSON 里）
-        //
-        notification.extras.putString("miui.focus.param", params)
-        notification.extras.putBundle("miui.focus.pics", pics)
-        notification.extras.putString("miui.focus.ticker", ticker)
+        // 课表就是这一行，不再额外塞别的字段
+        notification.extras.putString("miui.focus.param", buildParams(context, name, batteryText))
 
         val app = context.applicationContext
         bypassExec.execute { withBypass(app, notification) }
@@ -297,8 +319,16 @@ object IslandNotifier {
         }
     }
 
-    // ------------------------------------------------------------------ 上岛校验绕过
+    // ------------------------------------------------------------------ 白名单绕过
 
+    /**
+     * 断网 xmsf → 发通知 → 恢复网络。
+     *
+     * 课表原实现通过 Shizuku 特权服务直接调 IConnectivityManager；
+     * 这里用本 App 已有的 AdbShell（shell 身份）执行等价命令。
+     * 命令形式做了多种尝试并把结果记录下来 —— 之前是否真的断成功了一直是黑盒，
+     * 现在结果会显示在诊断报告里。
+     */
     private fun withBypass(context: Context, notification: Notification) {
         val canShell = try {
             AdbShell.binderAlive() && AdbShell.hasPermission()
@@ -306,13 +336,14 @@ object IslandNotifier {
             false
         }
         if (!canShell) {
-            Log.i(TAG, "无 Stellar / Shizuku 权限，按普通方式发送（大概率上不了岛）")
+            lastBypassReport = "无 Stellar/Shizuku 权限，未绕过，直接发送"
             sendDirect(context, notification)
             return
         }
         synchronized(bypassLock) {
             val uid = xmsfUid(context)
             if (uid == null) {
+                lastBypassReport = "取不到 xmsf uid，未绕过，直接发送"
                 sendDirect(context, notification)
                 return
             }
@@ -331,7 +362,7 @@ object IslandNotifier {
                     Log.e(TAG, "恢复 xmsf 网络失败（重要）: " + t.message)
                 }
             }
-            if (!disabled) Log.w(TAG, "未能断开 xmsf 网络")
+            lastBypassReport = if (disabled) "断网成功，已绕过发送" else "断网命令失败，仍按普通方式发送"
         }
     }
 
@@ -354,22 +385,56 @@ object IslandNotifier {
         }
     }
 
+    /** 尝试多种命令形式，返回是否断网成功，并记录详细输出 */
     private fun setXmsfNetworking(uid: Int, enabled: Boolean): Boolean {
         val rule = if (enabled) "0" else "2" // 0=ALLOW 2=DENY
-        val r1 = AdbShell.exec("cmd connectivity set-firewall-chain-enabled $FIREWALL_CHAIN_OEM_DENY true")
-        val r2 = AdbShell.exec("cmd connectivity set-uid-firewall-rule $FIREWALL_CHAIN_OEM_DENY $uid $rule")
-        Log.d(TAG, "xmsf 联网 enabled=$enabled -> chain=${r1.ok} rule=${r2.ok} ${r2.brief}")
-        return r2.ok
+        val forms = listOf(
+            "cmd connectivity set-uid-firewall-rule $FIREWALL_CHAIN_OEM_DENY $uid $rule",
+            "cmd connectivity set-firewall-uid-rule $FIREWALL_CHAIN_OEM_DENY $uid $rule"
+        )
+        val chainCmds = listOf(
+            "cmd connectivity set-firewall-chain-enabled $FIREWALL_CHAIN_OEM_DENY true",
+            "cmd connectivity set-firewall-chain-enabled $FIREWALL_CHAIN_OEM_DENY 1"
+        )
+        var chainOk = false
+        var chainLog = ""
+        for (c in chainCmds) {
+            val r = AdbShell.exec(c)
+            chainLog += "[$c] ok=${r.ok} ${r.brief}\n"
+            if (r.ok) { chainOk = true; break }
+        }
+        var ruleOk = false
+        var ruleLog = ""
+        for (c in forms) {
+            val r = AdbShell.exec(c)
+            ruleLog += "[$c] ok=${r.ok} ${r.brief}\n"
+            if (r.ok) { ruleOk = true; break }
+        }
+        val ok = chainOk && ruleOk
+        Log.d(TAG, "xmsf enabled=$enabled chainOk=$chainOk ruleOk=$ruleOk\n$chainLog$ruleLog")
+        lastBypassReport = "enabled=$enabled chain=$chainOk rule=$ruleOk\n$chainLog$ruleLog"
+        return ok
+    }
+
+    /** 手动触发一次绕过测试，把命令真实输出返回出来 */
+    fun testBypass(context: Context): String {
+        val sb = StringBuilder()
+        val alive = try { AdbShell.binderAlive() } catch (t: Throwable) { false }
+        val perm = try { AdbShell.hasPermission() } catch (t: Throwable) { false }
+        sb.append("Shizuku 存活=$alive  已授权=$perm\n")
+        if (!alive || !perm) return sb.append("无法执行绕过命令\n").toString()
+        val uid = xmsfUid(context)
+        sb.append("xmsf uid=$uid\n")
+        if (uid == null) return sb.toString()
+        setXmsfNetworking(uid, false)
+        sb.append("--- 断网结果 ---\n").append(lastBypassReport).append('\n')
+        setXmsfNetworking(uid, true)
+        sb.append("--- 恢复结果 ---\n").append(lastBypassReport).append('\n')
+        return sb.toString()
     }
 
     // ------------------------------------------------------------------ 诊断
 
-    /**
-     * 把所有影响上岛的系统状态读出来。
-     *
-     * 之前几个版本我一直在猜参数，结果每次都只是"多一条普通通知"。
-     * 与其继续猜，不如把这些值直接显示给用户，让真机数据说话。
-     */
     fun diagnose(context: Context): String {
         val sb = StringBuilder()
         sb.append("========== 上岛诊断 ==========\n\n")
@@ -390,23 +455,24 @@ object IslandNotifier {
         val supported = isSupported()
         val protocol = focusProtocol(context)
         sb.append("【岛能力】persist.sys.feature.island = $supported\n")
-        sb.append("【协议版本】notification_focus_protocol = $protocol  （需 ≥3 才有超级岛）\n")
+        sb.append("【协议版本】notification_focus_protocol = $protocol\n")
         sb.append("【焦点权限】canShowFocus = ${canShowFocus(context)}\n")
         sb.append("【上岛开关】island_enabled = ${Prefs.islandEnabled}\n")
+        sb.append("【左区模式】${if (Prefs.islandLeftIcon) "耳机图标(type=0)" else "耳机名文字(type=1)"}\n")
 
         val shellOk = try {
             AdbShell.binderAlive() && AdbShell.hasPermission()
         } catch (t: Throwable) {
             false
         }
-        sb.append("【Stellar/Shizuku】${if (shellOk) "已授权（可绕过白名单）" else "未授权或不可用"}\n")
+        sb.append("【Stellar/Shizuku】${if (shellOk) "已授权" else "未授权或不可用"}\n")
+        sb.append("【上次绕过】$lastBypassReport\n")
 
-        // 通知渠道与权限
         try {
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             val ch = nm.getNotificationChannel(CHANNEL_ID)
             sb.append("【通知渠道】${if (ch == null) "未创建" else "已创建 importance=" + ch.importance}\n")
-            sb.append("【通知权限】${if (nm.areNotificationsEnabled()) "已开启" else "已关闭（必上不了岛）"}\n")
+            sb.append("【通知权限】${if (nm.areNotificationsEnabled()) "已开启" else "已关闭"}\n")
         } catch (t: Throwable) {
             sb.append("【通知状态】读取失败: ${t.message}\n")
         }
@@ -414,10 +480,9 @@ object IslandNotifier {
         sb.append("\n---------------- 判定 ----------------\n")
         val reasons = mutableListOf<String>()
         if (!supported) reasons += "系统属性 persist.sys.feature.island 为 false"
-        if (protocol < 3) reasons += "焦点协议版本 $protocol < 3，不支持超级岛"
-        if (!shellOk) reasons += "无 Stellar/Shizuku 授权，白名单校验可能拦截第三方上岛"
+        if (!shellOk) reasons += "无 Stellar/Shizuku 授权，无法绕过白名单校验"
         sb.append(
-            if (reasons.isEmpty()) "未发现明显阻塞项。若仍只出普通通知，则多为系统白名单限制。\n"
+            if (reasons.isEmpty()) "未发现明显阻塞项。若仍只出普通通知，多为系统白名单限制。\n"
             else reasons.joinToString("\n") { "- $it" } + "\n"
         )
         sb.append("========== 诊断结束 ==========\n")
