@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import com.woshiyigemanhuajia.btpopup.R
+import com.woshiyigemanhuajia.btpopup.adb.AdbShell
 import com.woshiyigemanhuajia.btpopup.shizuku.IslandPrivilege
 import com.woshiyigemanhuajia.btpopup.ui.MainActivity
 import com.woshiyigemanhuajia.btpopup.util.Prefs
@@ -433,7 +434,7 @@ object IslandNotifier {
             return try {
                 val r = AdbShell.exec(cmd)
                 val t = if (r.out.isNotBlank()) r.out else r.err
-                if (t.isBlank()) "(空)" else t.take(limit)
+                if (t.isBlank()) "(空)" else if (t.length > limit) t.substring(0, limit) else t
             } catch (t: Throwable) {
                 "执行异常: ${t.message}"
             }
