@@ -28,6 +28,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.woshiyigemanhuajia.btpopup.R
 import com.woshiyigemanhuajia.btpopup.adb.AdbShell
+import com.woshiyigemanhuajia.btpopup.island.IslandNotifier
 import com.woshiyigemanhuajia.btpopup.battery.BatteryInfo
 import com.woshiyigemanhuajia.btpopup.battery.BatteryRepository
 import com.woshiyigemanhuajia.btpopup.databinding.ActivityMainBinding
@@ -275,6 +276,7 @@ class MainActivity : AppCompatActivity() {
         refreshDeviceNameList()
         refreshPreview()
         renderHistory()
+        refreshIslandState()
         refreshServiceStatus()
         refreshAccessibilityState()
         // 服务启动是异步的：补拉后稍等再刷一次，避免仍显示"未启动"
@@ -636,6 +638,18 @@ class MainActivity : AppCompatActivity() {
             renderHistory()
         }
         b.btnClearHistory.setOnClickListener { clearHistory() }
+        b.swIsland.isChecked = Prefs.islandEnabled
+        b.swIsland.setOnCheckedChangeListener { _, v ->
+            if (loadingUi) return@setOnCheckedChangeListener
+            Prefs.islandEnabled = v
+            if (!v) IslandNotifier.cancel(this)
+            refreshIslandState()
+        }
+        b.btnTestIsland.setOnClickListener { testIsland() }
+        b.btnCancelIsland.setOnClickListener {
+            IslandNotifier.cancel(this)
+            toast("已取消")
+        }
         b.btnQuickPreview.setOnClickListener { showTestPopup() }
         b.btnLandscapePreview.setOnClickListener { toggleLandscapePreview() }
         b.btnAdbGrant.setOnClickListener { runOneKeyGrant() }
@@ -954,6 +968,44 @@ class MainActivity : AppCompatActivity() {
             if (ok && out.length() > 0) out else null
         } catch (t: Throwable) {
             null
+        }
+    }
+
+    // ------------------------------------------------------------------ 小米超级岛
+
+    /** 测试上岛：立刻发一条「耳机图标 + 已连接」的岛通知 */
+    private fun testIsland() {
+        if (!IslandNotifier.isSupported()) {
+            toast("当前设备不支持岛（系统属性未开启）")
+            return
+        }
+        val name = BatteryRepository.all().maxByOrNull { it.updatedAt }?.name
+            ?.takeIf { it.isNotBlank() } ?: "蓝牙耳机"
+        IslandNotifier.show(this, name, "左耳 100% · 右耳 100%")
+        val protocol = IslandNotifier.focusProtocol(this)
+        toast(
+            if (protocol >= 2) "已发送，看屏幕顶部是否出现岛"
+            else "已发送；当前焦点协议版本 $protocol，需 HyperOS 3 才支持超级岛"
+        )
+    }
+
+    /** 把「设备支不支持 / 有没有 Stellar 权限」显示在开关下方，避免用户盲试 */
+    private fun refreshIslandState() {
+        val supported = IslandNotifier.isSupported()
+        val protocol = IslandNotifier.focusProtocol(this)
+        val shellOk = try {
+            AdbShell.binderAlive() && AdbShell.hasPermission()
+        } catch (t: Throwable) {
+            false
+        }
+        b.tvIslandState.text = buildString {
+            append("耳机连接时显示「耳机图标 + 已连接」的岛\n")
+            append("设备支持：").append(if (supported) "是" else "否").append(" · ")
+            append("焦点协议：v").append(protocol).append("（需 v2+ 才有超级岛）\n")
+            append("Stellar / Shizuku：").append(
+                if (shellOk) "已授权，可绕过上岛白名单校验"
+                else "未授权，可能上不了岛（不影响弹窗）"
+            )
         }
     }
 
