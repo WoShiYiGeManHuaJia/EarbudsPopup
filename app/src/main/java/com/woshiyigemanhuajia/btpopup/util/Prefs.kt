@@ -96,6 +96,15 @@ object Prefs {
         set(v) = sb("island_enabled", v)
 
     /**
+     * 岛的左区显示什么：true=耳机图标（type=0 + picInfo），false=耳机名文字（type=1 + textInfo）。
+     *
+     * 两种写法在不同 ROM 上表现不一致，做成可切换，哪个能显示就用哪个。
+     */
+    var islandLeftIcon: Boolean
+        get() = gb("island_left_icon", true)
+        set(v) = sb("island_left_icon", v)
+
+    /**
      * 上传历史：用户上传过的图片 / GIF 列表，JSON 数组字符串。
      *
      * 每项格式：{"p":"本地文件绝对路径","n":"显示名","t":时间戳,"g":是否GIF}
