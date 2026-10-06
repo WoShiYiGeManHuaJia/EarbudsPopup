@@ -11,7 +11,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import com.woshiyigemanhuajia.btpopup.R
-import com.woshiyigemanhuajia.btpopup.adb.AdbShell
+import com.woshiyigemanhuajia.btpopup.shizuku.IslandPrivilege
 import com.woshiyigemanhuajia.btpopup.ui.MainActivity
 import com.woshiyigemanhuajia.btpopup.util.Prefs
 import org.json.JSONObject
@@ -324,14 +324,14 @@ object IslandNotifier {
     /**
      * 断网 xmsf → 发通知 → 恢复网络。
      *
-     * 课表原实现通过 Shizuku 特权服务直接调 IConnectivityManager；
-     * 这里用本 App 已有的 AdbShell（shell 身份）执行等价命令。
-     * 命令形式做了多种尝试并把结果记录下来 —— 之前是否真的断成功了一直是黑盒，
-     * 现在结果会显示在诊断报告里。
+     * 【这一版改回课表的路径】
+     * 之前我用 shell 命令（cmd connectivity ...）去断网，诊断显示"断网命令失败"，
+     * 等于根本没绕过校验，自然只出普通通知。
+     * 现在与课表一致：Shizuku → 特权服务 → 反射调 IConnectivityManager。
      */
     private fun withBypass(context: Context, notification: Notification) {
         val canShell = try {
-            AdbShell.binderAlive() && AdbShell.hasPermission()
+            IslandPrivilege.isShizukuRunning() && IslandPrivilege.checkSelfPermission()
         } catch (t: Throwable) {
             false
         }
@@ -341,15 +341,10 @@ object IslandNotifier {
             return
         }
         synchronized(bypassLock) {
-            val uid = xmsfUid(context)
-            if (uid == null) {
-                lastBypassReport = "取不到 xmsf uid，未绕过，直接发送"
-                sendDirect(context, notification)
-                return
-            }
             var disabled = false
             try {
-                disabled = setXmsfNetworking(uid, false)
+                disabled = IslandPrivilege.setXmsfNetworkingEnabled(context, false)
+                lastBypassReport = "断网: " + IslandPrivilege.lastReport
                 sendDirect(context, notification)
                 try {
                     Thread.sleep(150)
@@ -357,12 +352,13 @@ object IslandNotifier {
                 }
             } finally {
                 try {
-                    setXmsfNetworking(uid, true)
+                    IslandPrivilege.setXmsfNetworkingEnabled(context, true)
+                    lastBypassReport += "\n恢复: " + IslandPrivilege.lastReport
                 } catch (t: Throwable) {
                     Log.e(TAG, "恢复 xmsf 网络失败（重要）: " + t.message)
                 }
             }
-            lastBypassReport = if (disabled) "断网成功，已绕过发送" else "断网命令失败，仍按普通方式发送"
+            if (!disabled) lastBypassReport += "\n（断网失败，本次未按绕过方式发送）"
         }
     }
 
@@ -376,60 +372,19 @@ object IslandNotifier {
         }
     }
 
-    private fun xmsfUid(context: Context): Int? {
-        return try {
-            context.packageManager.getPackageUid(XMSF_PACKAGE, 0)
-        } catch (t: Throwable) {
-            Log.w(TAG, "获取 xmsf uid 失败: " + t.message)
-            null
-        }
-    }
-
-    /** 尝试多种命令形式，返回是否断网成功，并记录详细输出 */
-    private fun setXmsfNetworking(uid: Int, enabled: Boolean): Boolean {
-        val rule = if (enabled) "0" else "2" // 0=ALLOW 2=DENY
-        val forms = listOf(
-            "cmd connectivity set-uid-firewall-rule $FIREWALL_CHAIN_OEM_DENY $uid $rule",
-            "cmd connectivity set-firewall-uid-rule $FIREWALL_CHAIN_OEM_DENY $uid $rule"
-        )
-        val chainCmds = listOf(
-            "cmd connectivity set-firewall-chain-enabled $FIREWALL_CHAIN_OEM_DENY true",
-            "cmd connectivity set-firewall-chain-enabled $FIREWALL_CHAIN_OEM_DENY 1"
-        )
-        var chainOk = false
-        var chainLog = ""
-        for (c in chainCmds) {
-            val r = AdbShell.exec(c)
-            chainLog += "[$c] ok=${r.ok} ${r.brief}\n"
-            if (r.ok) { chainOk = true; break }
-        }
-        var ruleOk = false
-        var ruleLog = ""
-        for (c in forms) {
-            val r = AdbShell.exec(c)
-            ruleLog += "[$c] ok=${r.ok} ${r.brief}\n"
-            if (r.ok) { ruleOk = true; break }
-        }
-        val ok = chainOk && ruleOk
-        Log.d(TAG, "xmsf enabled=$enabled chainOk=$chainOk ruleOk=$ruleOk\n$chainLog$ruleLog")
-        lastBypassReport = "enabled=$enabled chain=$chainOk rule=$ruleOk\n$chainLog$ruleLog"
-        return ok
-    }
-
-    /** 手动触发一次绕过测试，把命令真实输出返回出来 */
+    /** 手动跑一次断网 / 恢复，把特权服务的真实结果返回出来 */
     fun testBypass(context: Context): String {
         val sb = StringBuilder()
-        val alive = try { AdbShell.binderAlive() } catch (t: Throwable) { false }
-        val perm = try { AdbShell.hasPermission() } catch (t: Throwable) { false }
-        sb.append("Shizuku 存活=$alive  已授权=$perm\n")
-        if (!alive || !perm) return sb.append("无法执行绕过命令\n").toString()
-        val uid = xmsfUid(context)
-        sb.append("xmsf uid=$uid\n")
-        if (uid == null) return sb.toString()
-        setXmsfNetworking(uid, false)
-        sb.append("--- 断网结果 ---\n").append(lastBypassReport).append('\n')
-        setXmsfNetworking(uid, true)
-        sb.append("--- 恢复结果 ---\n").append(lastBypassReport).append('\n')
+        val running = try { IslandPrivilege.isShizukuRunning() } catch (t: Throwable) { false }
+        val perm = try { IslandPrivilege.checkSelfPermission() } catch (t: Throwable) { false }
+        sb.append("Shizuku 存活=$running  已授权=$perm\n")
+        if (!running || !perm) return sb.append("无法执行绕过\n").toString()
+        sb.append("--- 断网 ---\n")
+        val off = IslandPrivilege.setXmsfNetworkingEnabled(context, false)
+        sb.append("返回=$off  ").append(IslandPrivilege.lastReport).append('\n')
+        sb.append("--- 恢复 ---\n")
+        val on = IslandPrivilege.setXmsfNetworkingEnabled(context, true)
+        sb.append("返回=$on  ").append(IslandPrivilege.lastReport).append('\n')
         return sb.toString()
     }
 
@@ -461,7 +416,7 @@ object IslandNotifier {
         sb.append("【左区模式】${if (Prefs.islandLeftIcon) "耳机图标(type=0)" else "耳机名文字(type=1)"}\n")
 
         val shellOk = try {
-            AdbShell.binderAlive() && AdbShell.hasPermission()
+            IslandPrivilege.isShizukuRunning() && IslandPrivilege.checkSelfPermission()
         } catch (t: Throwable) {
             false
         }

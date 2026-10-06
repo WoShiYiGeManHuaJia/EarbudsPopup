@@ -57,6 +57,8 @@ android {
 
     buildFeatures {
         viewBinding = true
+        // Shizuku 特权服务（上岛断网 xmsf 用）需要 AIDL
+        aidl = true
     }
 
     lint {
