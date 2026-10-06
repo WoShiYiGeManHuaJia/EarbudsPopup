@@ -1669,6 +1669,16 @@
                 android:text="取消测试岛" />
         </LinearLayout>
 
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/swIslandLeftIcon"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:checked="true"
+                android:text="岛左区显示耳机图标（关掉则显示耳机名文字）"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp" />
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnIslandDiag"
                 style="@style/Widget.Material3.Button.OutlinedButton"
@@ -1676,6 +1686,14 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
                 android:text="上岛诊断（复制报告）" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnIslandBypass"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="测试绕过白名单（看命令是否真的生效）" />
 
         <!-- ================= 权限与 ADB 授权 ================= -->
                 <LinearLayout
