@@ -651,6 +651,12 @@ class MainActivity : AppCompatActivity() {
             toast("已取消")
         }
         b.btnIslandDiag.setOnClickListener { showIslandDiagnose() }
+        b.swIslandLeftIcon.isChecked = Prefs.islandLeftIcon
+        b.swIslandLeftIcon.setOnCheckedChangeListener { _, v ->
+            if (loadingUi) return@setOnCheckedChangeListener
+            Prefs.islandLeftIcon = v
+        }
+        b.btnIslandBypass.setOnClickListener { showBypassTest() }
         b.btnQuickPreview.setOnClickListener { showTestPopup() }
         b.btnLandscapePreview.setOnClickListener { toggleLandscapePreview() }
         b.btnAdbGrant.setOnClickListener { runOneKeyGrant() }
@@ -1026,7 +1032,42 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** 把「设备支不支持 / 有没有 Stellar 权限」显示在开关下方，避免用户盲试 */    /** 把「设备支不支持 / 有没有 Stellar 权限」显示在开关下方，避免用户盲试 */
+    /**
+     * 测试绕过白名单：真跑一遍断网 xmsf 的命令并把输出显示出来。
+     *
+     * 之前几版我一直在猜"绕过到底成没成功"，这是黑盒。
+     * 现在把命令与退出码直接摊开，成功失败一眼看得出。
+     */
+    private fun showBypassTest() {
+        val r = IslandNotifier.testBypass(this)
+        try {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText("island-bypass", r))
+            toast("结果已复制到剪贴板")
+        } catch (t: Throwable) {
+            Log.w("MainActivity", "复制绕过结果失败: " + t.message)
+        }
+        try {
+            val tv = TextView(this).apply {
+                text = r
+                setTextIsSelectable(true)
+                textSize = 11f
+                val pad = (16 * resources.displayMetrics.density).toInt()
+                setPadding(pad, pad, pad, pad)
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
+            }
+            val scroll = android.widget.ScrollView(this).apply { addView(tv) }
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("绕过测试结果")
+                .setView(scroll)
+                .setPositiveButton("关闭", null)
+                .show()
+        } catch (t: Throwable) {
+            Log.w("MainActivity", "显示绕过结果失败: " + t.message)
+        }
+    }
+
+    /** 把「设备支不支持 / 有没有 Stellar 权限」显示在开关下方，避免用户盲试 */
     private fun refreshIslandState() {
         val supported = IslandNotifier.isSupported()
         val protocol = IslandNotifier.focusProtocol(this)
