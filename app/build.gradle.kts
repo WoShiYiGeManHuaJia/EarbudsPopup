@@ -8,14 +8,14 @@ val releaseKeystoreFile: File = file("${project.rootDir}/release.keystore")
 
 android {
     namespace = "com.woshiyigemanhuajia.btpopup"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.woshiyigemanhuajia.btpopup"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 49
-        versionName = "1.7.3"
+        targetSdk = 36
+        versionCode = 50
+        versionName = "1.7.4"
         resConfigs("zh", "en")
     }
 

@@ -72,6 +72,19 @@ object IslandNotifier {
     var lastBypassReport: String = "尚未尝试"
         private set
 
+    // ------------------------------------------------------------------ 权限
+
+    /** Android 16 新增的「推广通知」权限：小米超级岛走的就是这条通道 */
+    private const val PERM_PROMOTED = "android.permission.POST_PROMOTED_NOTIFICATIONS"
+
+    fun isPromotedGranted(context: Context): Boolean {
+        return try {
+            context.checkSelfPermission(PERM_PROMOTED) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        } catch (t: Throwable) {
+            false
+        }
+    }
+
     // ------------------------------------------------------------------ 能力判定
 
     fun isSupported(): Boolean {
@@ -413,6 +426,7 @@ object IslandNotifier {
         sb.append("【协议版本】notification_focus_protocol = $protocol\n")
         sb.append("【焦点权限】canShowFocus = ${canShowFocus(context)}\n")
         sb.append("【上岛开关】island_enabled = ${Prefs.islandEnabled}\n")
+        sb.append("【推广通知权限】POST_PROMOTED_NOTIFICATIONS = ${if (isPromotedGranted(context)) "已授予" else "未授予（上不了岛的主因）"}\n")
         sb.append("【左区模式】${if (Prefs.islandLeftIcon) "耳机图标(type=0)" else "耳机名文字(type=1)"}\n")
 
         val shellOk = try {
@@ -435,6 +449,7 @@ object IslandNotifier {
         sb.append("\n---------------- 判定 ----------------\n")
         val reasons = mutableListOf<String>()
         if (!supported) reasons += "系统属性 persist.sys.feature.island 为 false"
+        if (!isPromotedGranted(context)) reasons += "缺少 POST_PROMOTED_NOTIFICATIONS 权限，去设置页点「一键 ADB 授权」"
         if (!shellOk) reasons += "无 Stellar/Shizuku 授权，无法绕过白名单校验"
         sb.append(
             if (reasons.isEmpty()) "未发现明显阻塞项。若仍只出普通通知，多为系统白名单限制。\n"

@@ -86,6 +86,8 @@ object AdbShell {
         "pm grant $pkg android.permission.BLUETOOTH_CONNECT || true",
         "pm grant $pkg android.permission.BLUETOOTH_SCAN || true",
         "pm grant $pkg android.permission.POST_NOTIFICATIONS || true",
+        // Android 16 推广通知权限：小米超级岛 / 焦点通知走这条通道，缺了上不了岛
+        "pm grant $pkg android.permission.POST_PROMOTED_NOTIFICATIONS || true",
         "pm grant $pkg android.permission.ACCESS_FINE_LOCATION || true",
         "pm grant $pkg android.permission.ACCESS_COARSE_LOCATION || true",
         "appops set $pkg SYSTEM_ALERT_WINDOW allow || true",
