@@ -650,6 +650,7 @@ class MainActivity : AppCompatActivity() {
             IslandNotifier.cancel(this)
             toast("已取消")
         }
+        b.btnIslandDiag.setOnClickListener { showIslandDiagnose() }
         b.btnQuickPreview.setOnClickListener { showTestPopup() }
         b.btnLandscapePreview.setOnClickListener { toggleLandscapePreview() }
         b.btnAdbGrant.setOnClickListener { runOneKeyGrant() }
@@ -989,7 +990,43 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    /** 把「设备支不支持 / 有没有 Stellar 权限」显示在开关下方，避免用户盲试 */
+    /**
+     * 上岛诊断：把系统属性、焦点协议版本、焦点权限、Stellar 授权状态全部读出来，
+     * 弹窗展示并复制到剪贴板。
+     *
+     * 前几版我一直在猜岛参数，结果每次都只是"多一条普通通知"。
+     * 与其继续猜，不如让真机把真实状态报出来，对着数据改。
+     */
+    private fun showIslandDiagnose() {
+        val report = IslandNotifier.diagnose(this)
+        try {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText("island-diag", report))
+            toast("诊断报告已复制到剪贴板")
+        } catch (t: Throwable) {
+            Log.w("MainActivity", "复制诊断报告失败: " + t.message)
+        }
+        try {
+            val tv = TextView(this).apply {
+                text = report
+                setTextIsSelectable(true)
+                textSize = 11f
+                val pad = (16 * resources.displayMetrics.density).toInt()
+                setPadding(pad, pad, pad, pad)
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
+            }
+            val scroll = android.widget.ScrollView(this).apply { addView(tv) }
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("上岛诊断")
+                .setView(scroll)
+                .setPositiveButton("关闭", null)
+                .show()
+        } catch (t: Throwable) {
+            Log.w("MainActivity", "显示诊断报告失败: " + t.message)
+        }
+    }
+
+    /** 把「设备支不支持 / 有没有 Stellar 权限」显示在开关下方，避免用户盲试 */    /** 把「设备支不支持 / 有没有 Stellar 权限」显示在开关下方，避免用户盲试 */
     private fun refreshIslandState() {
         val supported = IslandNotifier.isSupported()
         val protocol = IslandNotifier.focusProtocol(this)
