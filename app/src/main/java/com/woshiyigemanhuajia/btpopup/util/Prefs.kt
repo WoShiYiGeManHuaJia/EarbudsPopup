@@ -106,6 +106,14 @@ object Prefs {
         set(v) = sb("island_left_icon", v)
 
     /**
+     * 岛的会话倒计时分钟数（仅用于驱动岛渲染，不展示给用户）。
+     * 小米的岛必须挂一个真实倒计时才会被系统当焦点通知处理。
+     */
+    var islandCountdownMinutes: Int
+        get() = gi("island_countdown_min", 60)
+        set(v) = si("island_countdown_min", v)
+
+    /**
      * 上传历史：用户上传过的图片 / GIF 列表，JSON 数组字符串。
      *
      * 每项格式：{"p":"本地文件绝对路径","n":"显示名","t":时间戳,"g":是否GIF}

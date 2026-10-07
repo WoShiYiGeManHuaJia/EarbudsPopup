@@ -150,13 +150,21 @@ object IslandNotifier {
         val json = JSONObject()
         val now = System.currentTimeMillis()
 
+        //
+        // 【关键】倒计时目标时间戳。
+        // 课表的岛有两条分支：倒计时中（timerType=-1 + 未来时间戳 + enableFloat=true）
+        // 和已上课（timerType=0 + 全 0 + enableFloat=false）。
+        // 能渲染出岛的是前者 —— 岛必须挂一个真实倒计时才会被系统当焦点通知处理。
+        // 耳机没有天然倒计时，这里用一个「会话倒计时」驱动渲染，显示文字仍是「已连接」。
+        //
+        val countdownMs = Prefs.islandCountdownMinutes.coerceAtLeast(1) * 60_000L
+
         val paramV2 = JSONObject().apply {
             put("business", BUSINESS_TAG)
             // 课表原值，不要改成 3
             put("protocol", 1)
-            // 耳机连接是瞬时事件，不弹悬浮窗，只走岛
-            put("islandFirstFloat", true)
-            put("enableFloat", false)
+            // 与课表「倒计时中」分支一致：只给 enableFloat=true，不带 islandFirstFloat
+            put("enableFloat", true)
             put("updatable", true)
             put("outEffectSrc", "")
             put("reopen", "reopen")
@@ -192,13 +200,14 @@ object IslandNotifier {
             // 课表里同样带 hintInfo，保留骨架（这里没有倒计时，timerType=0）
             put("hintInfo", JSONObject().apply {
                 put("type", 2)
-                put("content", "现在")
-                put("title", "已连接")
+                put("content", "蓝牙耳机")
+                put("title", "")
                 put("timerInfo", JSONObject().apply {
-                    put("timerType", 0)
-                    put("timerWhen", 0)
-                    put("timerTotal", 0)
-                    put("timerSystemCurrent", 0)
+                    // 必须 -1 + 未来时间戳，与课表能出岛的分支一致
+                    put("timerType", -1)
+                    put("timerWhen", now + countdownMs)
+                    put("timerTotal", 0L)
+                    put("timerSystemCurrent", now)
                 })
                 put("subContent", "")
                 put("subTitle", deviceName.ifBlank { "" })
