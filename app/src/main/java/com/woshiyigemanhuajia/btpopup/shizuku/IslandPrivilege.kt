@@ -74,8 +74,9 @@ object IslandPrivilege {
         return try {
             bindLatch = CountDownLatch(1)
             val args = Shizuku.UserServiceArgs(
+                // 必须与 applicationId 一致，否则 Stellar 找不到服务组件
                 ComponentName(
-                    "com.woshiyigemanhuajia.btpopup",
+                    context.packageName,
                     PrivilegedServiceImpl::class.java.name
                 )
             )

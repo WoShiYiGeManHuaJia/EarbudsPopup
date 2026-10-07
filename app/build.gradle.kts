@@ -11,11 +11,18 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.woshiyigemanhuajia.btpopup"
+        //
+        // 【包名改成课表的包名】
+        // 源码层面已与课表逐字对齐，但课表能上岛、本 App 不能 —— 唯一剩下的差异就是包名。
+        // 小米超级岛的白名单校验很可能按包名放行：com.haooz.chedule 已被放行，
+        // 而 com.woshiyigemanhuajia.btpopup 不在名单里，所以断网绕过也没用。
+        // 这里直接改用课表包名做验证。
+        //
+        applicationId = "com.haooz.chedule"
         minSdk = 26
         targetSdk = 36
-        versionCode = 51
-        versionName = "1.7.5"
+        versionCode = 52
+        versionName = "1.7.6"
         resConfigs("zh", "en")
     }
 

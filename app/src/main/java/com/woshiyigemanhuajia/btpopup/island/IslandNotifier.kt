@@ -486,6 +486,7 @@ object IslandNotifier {
             "读取失败: ${t.message}"
         }
 
+        sb.append("包名: ${context.packageName}\n")
         sb.append("机型: ${android.os.Build.MODEL} / ${android.os.Build.DEVICE}\n")
         sb.append("系统: Android ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})\n")
         sb.append("MIUI/HyperOS: ${prop("ro.miui.ui.version.name")}\n")
