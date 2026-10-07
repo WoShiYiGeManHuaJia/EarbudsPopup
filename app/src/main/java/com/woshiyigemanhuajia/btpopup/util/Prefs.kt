@@ -105,6 +105,58 @@ object Prefs {
         get() = gb("island_left_icon", false)
         set(v) = sb("island_left_icon", v)
 
+    // ---------------- 自绘「耳机岛」（不依赖系统焦点通知）----------------
+
+    /** 自绘岛总开关：连接耳机时在屏幕顶部显示胶囊岛 */
+    var islandOverlayEnabled: Boolean
+        get() = gb("island_overlay_enabled", false)
+        set(v) = sb("island_overlay_enabled", v)
+
+    /** 岛显示的文字，默认「已连接」 */
+    var islandOverlayText: String
+        get() = gs("island_overlay_text", "已连接")
+        set(v) = ss("island_overlay_text", v)
+
+    /** 岛高度 dp（圆角按高度一半，天然胶囊形） */
+    var islandOverlayHeightDp: Int
+        get() = gi("island_overlay_h", 36)
+        set(v) = si("island_overlay_h", v)
+
+    /** 岛宽度 dp（仅在非全宽时生效） */
+    var islandOverlayWidthDp: Int
+        get() = gi("island_overlay_w", 130)
+        set(v) = si("island_overlay_w", v)
+
+    /** 是否左右撑满（更接近系统岛连通挖孔的观感） */
+    var islandOverlayFullWidth: Boolean
+        get() = gb("island_overlay_full", false)
+        set(v) = sb("island_overlay_full", v)
+
+    /** 距屏幕顶部 dp */
+    var islandOverlayTopDp: Int
+        get() = gi("island_overlay_top", 8)
+        set(v) = si("island_overlay_top", v)
+
+    /** 停留时长 ms，超时自动消失 */
+    var islandOverlayStayMs: Int
+        get() = gi("island_overlay_stay", 5000)
+        set(v) = si("island_overlay_stay", v)
+
+    /** 文字大小 sp */
+    var islandOverlayTextSp: Int
+        get() = gi("island_overlay_text_sp", 13)
+        set(v) = si("island_overlay_text_sp", v)
+
+    /** 文字后面是否附带设备名 */
+    var islandOverlayShowName: Boolean
+        get() = gb("island_overlay_show_name", false)
+        set(v) = sb("island_overlay_show_name", v)
+
+    /** 岛背景色（默认接近系统岛的纯黑） */
+    var islandOverlayBgColor: Int
+        get() = gi("island_overlay_bg", -0x1000000)
+        set(v) = si("island_overlay_bg", v)
+
     /**
      * 岛的会话倒计时分钟数（仅用于驱动岛渲染，不展示给用户）。
      * 小米的岛必须挂一个真实倒计时才会被系统当焦点通知处理。

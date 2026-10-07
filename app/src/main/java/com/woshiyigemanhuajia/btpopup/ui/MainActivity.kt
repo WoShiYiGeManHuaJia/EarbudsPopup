@@ -642,12 +642,13 @@ class MainActivity : AppCompatActivity() {
         b.swIsland.setOnCheckedChangeListener { _, v ->
             if (loadingUi) return@setOnCheckedChangeListener
             Prefs.islandEnabled = v
-            if (!v) IslandNotifier.cancel(this)
+            if (!v) { IslandNotifier.cancel(this); IslandOverlay.dismiss() }
             refreshIslandState()
         }
         b.btnTestIsland.setOnClickListener { testIsland() }
         b.btnCancelIsland.setOnClickListener {
             IslandNotifier.cancel(this)
+            IslandOverlay.dismiss()
             toast("已取消")
         }
         b.btnIslandDiag.setOnClickListener { showIslandDiagnose() }
@@ -658,6 +659,23 @@ class MainActivity : AppCompatActivity() {
         }
         b.btnIslandBypass.setOnClickListener { showBypassTest() }
         b.btnIslandScan.setOnClickListener { showIslandScan() }
+        b.swIslandOverlay.isChecked = Prefs.islandOverlayEnabled
+        b.swIslandOverlay.setOnCheckedChangeListener { _, v ->
+            if (loadingUi) return@setOnCheckedChangeListener
+            Prefs.islandOverlayEnabled = v
+            if (!v) IslandOverlay.dismiss()
+        }
+        b.btnIslandOverlayTest.setOnClickListener {
+            if (!android.provider.Settings.canDrawOverlays(this)) {
+                toast("需要先授予悬浮窗权限")
+                return@setOnClickListener
+            }
+            Prefs.islandOverlayEnabled = true
+            b.swIslandOverlay.isChecked = true
+            IslandOverlay.show(this, "Redmi Buds 5 Pro")
+            toast("已尝试绘制，看屏幕顶部")
+        }
+        b.btnIslandOverlayHide.setOnClickListener { IslandOverlay.dismiss() }
         b.btnQuickPreview.setOnClickListener { showTestPopup() }
         b.btnLandscapePreview.setOnClickListener { toggleLandscapePreview() }
         b.btnAdbGrant.setOnClickListener { runOneKeyGrant() }
@@ -990,6 +1008,7 @@ class MainActivity : AppCompatActivity() {
         val name = BatteryRepository.all().maxByOrNull { it.updatedAt }?.name
             ?.takeIf { it.isNotBlank() } ?: "蓝牙耳机"
         IslandNotifier.show(this, name, "左耳 100% · 右耳 100%")
+        IslandOverlay.show(this, name)
         val protocol = IslandNotifier.focusProtocol(this)
         toast(
             if (protocol >= 2) "已发送，看屏幕顶部是否出现岛"

@@ -1687,6 +1687,41 @@
                 android:layout_marginTop="6dp"
                 android:text="上岛诊断（复制报告）" />
 
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/swIslandOverlay"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:checked="false"
+                android:text="自绘「耳机岛」（不依赖系统，直接画顶部胶囊）"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnIslandOverlayTest"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="测试自绘岛（立刻在屏幕顶部画一个）" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnIslandOverlayHide"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="收起自绘岛" />
+
+            <TextView
+                android:id="@+id/tvIslandOverlayHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="系统焦点通知这条路在本机不向第三方开放（白名单为空、断网绕过也无效）。自绘岛绕开它，用悬浮窗直接画：左耳机图标 + 右「已连接」。需要悬浮窗权限。"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp" />
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnIslandScan"
                 style="@style/Widget.Material3.Button.OutlinedButton"
