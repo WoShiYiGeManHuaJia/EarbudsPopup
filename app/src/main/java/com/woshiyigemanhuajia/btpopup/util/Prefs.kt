@@ -114,7 +114,7 @@ object Prefs {
 
     /** 岛显示的文字，默认「已连接」 */
     var islandOverlayText: String
-        get() = gs("island_overlay_text", "已连接")
+        get() = gs("island_overlay_text", "已连接") ?: "已连接"
         set(v) = ss("island_overlay_text", v)
 
     /** 岛高度 dp（圆角按高度一半，天然胶囊形） */

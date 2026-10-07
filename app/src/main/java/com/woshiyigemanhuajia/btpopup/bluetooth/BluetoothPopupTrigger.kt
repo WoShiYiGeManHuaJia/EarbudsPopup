@@ -15,6 +15,7 @@ import com.woshiyigemanhuajia.btpopup.battery.BatteryInfo
 import com.woshiyigemanhuajia.btpopup.battery.BatteryRepository
 import com.woshiyigemanhuajia.btpopup.battery.BatteryUpdateBridge
 import com.woshiyigemanhuajia.btpopup.island.IslandNotifier
+import com.woshiyigemanhuajia.btpopup.island.IslandOverlay
 import com.woshiyigemanhuajia.btpopup.battery.GattBatteryReader
 import com.woshiyigemanhuajia.btpopup.overlay.PopupOverlayManager
 import com.woshiyigemanhuajia.btpopup.util.PermissionGuard
