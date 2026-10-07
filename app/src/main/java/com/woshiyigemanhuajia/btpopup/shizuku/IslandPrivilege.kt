@@ -69,7 +69,7 @@ object IslandPrivilege {
     }
 
     /** 取特权服务：已绑定直接返回，否则发起绑定并最多等 3 秒 */
-    private fun getPrivilegedService(): IPrivilegedService? {
+    private fun getPrivilegedService(context: Context): IPrivilegedService? {
         if (privilegedService != null && serviceConnected) return privilegedService
         return try {
             bindLatch = CountDownLatch(1)
@@ -123,7 +123,7 @@ object IslandPrivilege {
             lastReport = "取不到 $XMSF_PACKAGE 的 uid"
             return false
         }
-        val service = getPrivilegedService()
+        val service = getPrivilegedService(context)
         if (service == null) {
             if (!lastReport.startsWith("特权服务") && !lastReport.startsWith("绑定")) {
                 lastReport = "特权服务不可用"
