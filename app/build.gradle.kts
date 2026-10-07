@@ -12,43 +12,43 @@ android {
 
     defaultConfig {
         //
-        // 【包名改成课表的包名】
-        // 源码层面已与课表逐字对齐，但课表能上岛、本 App 不能 —— 唯一剩下的差异就是包名。
-        // 小米超级岛的白名单校验很可能按包名放行：com.haooz.chedule 已被放行，
-        // 而 com.woshiyigemanhuajia.btpopup 不在名单里，所以断网绕过也没用。
-        // 这里直接改用课表包名做验证。
+        // 【包名保持本 App 原样】
+        // 曾用 com.haooz.chedule（课表包名）验证白名单假设，但用户同时要用课表，
+        // 同包名无法共存，故回退。改走「把本包名写进系统白名单」这条路。
         //
-        applicationId = "com.haooz.chedule"
+        applicationId = "com.woshiyigemanhuajia.btpopup"
         minSdk = 26
         targetSdk = 36
-        versionCode = 52
-        versionName = "1.7.6"
+        versionCode = 53
+        versionName = "1.7.7"
         resConfigs("zh", "en")
     }
 
-    // 统一签名配置：debug 与 release 使用同一把固定密钥，
-    // 密钥由 CI 从仓库根目录的 release.keystore 读取（见 .github/workflows/build.yml）。
+    //
+    // 签名改用「软大课表」的专用密钥 keystore/softbig.jks。
+    //
+    // 为什么：源码已与课表逐字对齐、断网绕过路径也一致，但课表能上岛、本 App 不能。
+    // 包名不能改（用户要同时用课表），剩下最可能的校验维度就是**签名** ——
+    // 小米超级岛白名单常常按签名放行，换成同一把密钥即可获得相同身份。
+    //
     signingConfigs {
-        if (releaseKeystoreFile.exists()) {
-            create("release") {
-                storeFile = releaseKeystoreFile
-                storePassword = "android"
-                keyAlias = "release"
-                keyPassword = "android"
-            }
+        create("softbig") {
+            storeFile = rootProject.file("softbig.jks")
+            storePassword = "softbig2026"
+            keyAlias = "softbig"
+            keyPassword = "softbig2026"
         }
     }
 
     buildTypes {
         debug {
             isMinifyEnabled = false
-            signingConfigs.findByName("release")?.let { signingConfig = it }
+            signingConfig = signingConfigs.getByName("softbig")
         }
         release {
             isMinifyEnabled = false
             isShrinkResources = false
-            // 有固定密钥则用固定密钥；否则退回 debug 签名（本地无密钥时的兜底）
-            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("softbig")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
