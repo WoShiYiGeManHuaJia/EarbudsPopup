@@ -1,0 +1,94 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.11.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+WARNING: We recommend using a newer Android Gradle plugin to use compileSdk = 36
+
+This Android Gradle plugin (8.7.3) was tested up to compileSdk = 35.
+
+You are strongly encouraged to update your project to use a newer
+Android Gradle plugin that has been tested with compileSdk = 36.
+
+If you are already using the latest version of the Android Gradle plugin,
+you may need to wait until a newer version with support for compileSdk = 36 is available.
+
+For more information refer to the compatibility table:
+https://d.android.com/r/tools/api-level-support
+
+To suppress this warning, add/update
+    android.suppressUnsupportedCompileSdk=36
+to this project's gradle.properties.
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :app:mergeReleaseJniLibFolders
+> Task :app:mergeReleaseNativeLibs NO-SOURCE
+> Task :app:stripReleaseDebugSymbols NO-SOURCE
+> Task :app:extractReleaseNativeSymbolTables NO-SOURCE
+> Task :app:mergeReleaseNativeDebugMetadata NO-SOURCE
+> Task :app:checkReleaseDuplicateClasses
+> Task :app:buildKotlinToolingMetadata
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:dataBindingMergeDependencyArtifactsRelease
+> Task :app:generateReleaseResValues FROM-CACHE
+> Task :app:generateReleaseResources FROM-CACHE
+> Task :app:mergeReleaseResources FROM-CACHE
+> Task :app:packageReleaseResources FROM-CACHE
+> Task :app:parseReleaseLocalResources FROM-CACHE
+> Task :app:dataBindingGenBaseClassesRelease FROM-CACHE
+> Task :app:mapReleaseSourceSetPaths
+> Task :app:createReleaseCompatibleScreenManifests
+> Task :app:extractDeepLinksRelease FROM-CACHE
+> Task :app:checkReleaseAarMetadata
+> Task :app:processReleaseMainManifest FROM-CACHE
+> Task :app:processReleaseManifest FROM-CACHE
+> Task :app:processReleaseManifestForPackage FROM-CACHE
+> Task :app:processReleaseResources FROM-CACHE
+> Task :app:javaPreCompileRelease FROM-CACHE
+> Task :app:desugarReleaseFileDependencies FROM-CACHE
+> Task :app:mergeReleaseStartupProfile
+> Task :app:mergeExtDexRelease FROM-CACHE
+> Task :app:mergeReleaseShaders
+> Task :app:compileReleaseShaders NO-SOURCE
+> Task :app:generateReleaseAssets UP-TO-DATE
+> Task :app:mergeReleaseArtProfile
+> Task :app:mergeReleaseAssets
+> Task :app:compressReleaseAssets FROM-CACHE
+> Task :app:extractReleaseVersionControlInfo
+> Task :app:optimizeReleaseResources FROM-CACHE
+> Task :app:collectReleaseDependencies
+> Task :app:sdkReleaseDependencyData
+> Task :app:validateSigningRelease
+> Task :app:writeReleaseAppMetadata
+> Task :app:writeReleaseSigningConfigVersions
+
+> Task :app:compileReleaseKotlin
+w: file:///home/runner/work/EarbudsPopup/EarbudsPopup/app/src/main/java/com/woshiyigemanhuajia/btpopup/battery/GattBatteryReader.kt:102:43 'var value: ByteArray!' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/EarbudsPopup/EarbudsPopup/app/src/main/java/com/woshiyigemanhuajia/btpopup/battery/HfpBatteryParser.kt:54:53 Unchecked cast of 'java.io.Serializable?' to 'kotlin.Array<kotlin.Any>'.
+w: file:///home/runner/work/EarbudsPopup/EarbudsPopup/app/src/main/java/com/woshiyigemanhuajia/btpopup/ui/MainActivity.kt:886:13 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/EarbudsPopup/EarbudsPopup/app/src/main/java/com/woshiyigemanhuajia/btpopup/ui/MainActivity.kt:1712:13 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+
+> Task :app:compileReleaseJavaWithJavac
+> Task :app:dexBuilderRelease
+> Task :app:mergeReleaseGlobalSynthetics FROM-CACHE
+> Task :app:processReleaseJavaRes
+> Task :app:mergeReleaseJavaResource
+> Task :app:mergeDexRelease
+> Task :app:compileReleaseArtProfile
+> Task :app:packageRelease
+> Task :app:createReleaseApkListingFileRedirect
+> Task :app:assembleRelease
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1791473928247.json
+
+BUILD SUCCESSFUL in 49s
+43 actionable tasks: 26 executed, 17 from cache
+--- APK ---
+total 5140
+drwxr-xr-x 3 runner runner    4096 Oct  8 15:39 .
+drwxr-xr-x 3 runner runner    4096 Oct  8 15:39 ..
+-rw-r--r-- 1 runner runner 5243269 Oct  8 15:39 app-release.apk
+drwxr-xr-x 4 runner runner    4096 Oct  8 15:39 baselineProfiles
+-rw-r--r-- 1 runner runner     721 Oct  8 15:39 output-metadata.json
+09b026c56a1e8ee24b48e2d5ae6f6c16  app/build/outputs/apk/release/app-release.apk
+total 6936
+drwxr-xr-x  2 runner runner    4096 Oct  8 15:39 .
+drwxrwxrwt 15 root   root      4096 Oct  8 15:39 ..
+-rw-r--r--  1 runner runner 7083016 Oct  8 15:39 app.b64
+-rw-r--r--  1 runner runner    4664 Oct  8 15:39 build_log.txt
