@@ -643,9 +643,103 @@ class MainActivity : AppCompatActivity() {
         b.btnCrashLog.setOnClickListener { showCrashLog() }
         b.btnAutoStartSetting.setOnClickListener { openAutoStartSettings() }
         b.btnPermFix.setOnClickListener { fixPermissions() }
-        b.btnOpenBtDetail.setOnClickListener { openBluetoothDeviceSettings() }
-        b.btnDisableSysPopup.setOnClickListener { disableSystemEarbudsPopup() }
         b.btnRestoreSysBt.setOnClickListener { restoreSystemBluetooth() }
+    }
+
+    // ------------------------------------------------------------------ 恢复系统蓝牙
+
+    /**
+     * 完整撤销「全局禁用」做过的所有改动。
+     *
+     * 必须存在的原因：那套命令会把 com.xiaomi.bluetooth 挂起 + 对当前用户卸载 +
+     * 掐掉后台弹界面 / 悬浮窗 / 前台启动 / 后台运行四项权限。
+     * 只恢复其中一部分，蓝牙相关的系统功能依旧是残缺的。
+     *
+     * 所以这里把**每一条**对称地反向执行一遍：
+     *   pm suspend      -> pm unsuspend
+     *   pm uninstall -k -> pm install-existing（+ cmd package 兜底）
+     *   appops deny     -> appops allow / reset
+     *
+     * 最后回读真实状态，不靠"命令没报错"判断成功。
+     */
+    private fun restoreSystemBluetooth() {
+        if (!AdbShell.binderAlive()) {
+            toast("未检测到 Stellar / Shizuku，请先启动服务")
+            return
+        }
+        if (!AdbShell.hasPermission()) {
+            AdbShell.requestPermission(REQ_SHIZUKU)
+            return
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("恢复系统蓝牙")
+            .setMessage(
+                "将撤销「全局禁用」做过的全部改动：\n" +
+                    "· 解除挂起\n· 装回当前用户\n· 放开全部被掐掉的权限\n\n" +
+                    "执行完建议重启一次手机。\n\n" +
+                    "副作用：小米快连弹窗会重新出现（可改用耳机详情页单独关闭）。"
+            )
+            .setPositiveButton("确认恢复") { _, _ ->
+                toast("正在恢复…")
+                Thread {
+                    val cmds = listOf(
+                        "pm unsuspend com.xiaomi.bluetooth",
+                        "pm unsuspend --user 0 com.xiaomi.bluetooth",
+                        "pm install-existing --user 0 com.xiaomi.bluetooth",
+                        "cmd package install-existing --user 0 com.xiaomi.bluetooth",
+                        "pm install-existing com.xiaomi.bluetooth",
+                        "pm enable com.xiaomi.bluetooth",
+                        "appops set com.xiaomi.bluetooth 10021 allow",
+                        "cmd appops set com.xiaomi.bluetooth 10021 allow",
+                        "appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW allow",
+                        "appops set com.xiaomi.bluetooth START_FOREGROUND allow",
+                        "appops set com.xiaomi.bluetooth RUN_IN_BACKGROUND allow",
+                        "appops reset com.xiaomi.bluetooth",
+                        "cmd appops reset com.xiaomi.bluetooth"
+                    )
+                    val results = AdbShell.execAll(cmds)
+                    val verify = AdbShell.execAll(
+                        listOf(
+                            "dumpsys package com.xiaomi.bluetooth | grep -iE 'suspended=|installed=|enabled='",
+                            "pm list packages com.xiaomi.bluetooth"
+                        )
+                    )
+                    val text = buildString {
+                        append("===== 恢复命令结果 =====\n\n")
+                        cmds.forEachIndexed { i, c ->
+                            val r = results.getOrNull(i)
+                            append(if (r?.ok == true) "[成功] " else "[失败] ").append(c).append("\n")
+                        }
+                        append("\n===== 恢复后状态 =====\n")
+                        verify.forEach { v ->
+                            if (!v.out.isNullOrBlank()) append(v.out).append("\n")
+                        }
+                        append("\ninstalled=true 且 suspended=false 即已恢复。\n建议重启一次手机。")
+                    }
+                    runOnUiThread {
+                        val tv = android.widget.TextView(this).apply {
+                            setText(text)
+                            setTextIsSelectable(true)
+                            textSize = 11f
+                            setPadding(40, 30, 40, 30)
+                        }
+                        val sc = android.widget.ScrollView(this).apply { addView(tv) }
+                        android.app.AlertDialog.Builder(this)
+                            .setTitle("恢复系统蓝牙")
+                            .setView(sc)
+                            .setNeutralButton("复制") { _, _ ->
+                                val cm = getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                        as android.content.ClipboardManager
+                                cm.setPrimaryClip(android.content.ClipData.newPlainText("restore", text))
+                                toast("已复制")
+                            }
+                            .setPositiveButton("关闭", null)
+                            .show()
+                    }
+                }.start()
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     // ------------------------------------------------------------------ 撤销系统蓝牙禁用
@@ -745,99 +839,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------------ 系统耳机弹窗屏蔽
-
-    /**
-     * 打开系统蓝牙设置：HyperOS 的耳机系统弹窗是**按设备记忆**的 ——
-     * 你对 Redmi Buds 5 Pro 关过"连接弹窗"，换成 Buds 6（另一台设备）要单独再关一次。
-     * 在耳机详情页把「连接弹窗 / 智能弹窗」关掉即可。
-     */
-    private fun openBluetoothDeviceSettings() {
-        try {
-            beginExternalActivity()
-            startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-            toast("找到 Redmi Buds 6 的详情页，关闭「连接弹窗」")
-        } catch (t: Throwable) {
-            toast("无法打开蓝牙设置")
-        }
-    }
-
-    /**
-     * 通过 Shizuku 禁用 HyperOS 耳机弹窗相关服务（com.xiaomi.bluetooth）。
-     * 这是全局方案：禁用后所有小米耳机的系统弹窗都不会再出现。
-     * 恢复命令：adb shell pm enable com.xiaomi.bluetooth
-     */
-    private fun disableSystemEarbudsPopup() {
-        if (!AdbShell.binderAlive()) {
-            toast("未检测到 Stellar / Shizuku，请先启动服务")
-            return
-        }
-        if (!AdbShell.hasPermission()) {
-            AdbShell.requestPermission(REQ_SHIZUKU)
-            return
-        }
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("禁用系统耳机弹窗")
-            .setMessage(
-                "将执行：pm disable-user --user 0 com.xiaomi.bluetooth\n\n" +
-                    "效果：HyperOS 所有耳机的系统弹窗（含 Redmi Buds 6）不再出现，" +
-                    "本应用的弹窗不受影响。\n" +
-                    "可能影响：小米设备互联 / 耳机地图等小米快连周边功能。\n\n" +
-                    "恢复方式（随时）：adb shell pm enable com.xiaomi.bluetooth"
-            )
-            .setPositiveButton("确认禁用") { _, _ ->
-                toast("正在执行…")
-                Thread {
-                    //
-                    // 关键发现：pm disable-user 对**系统应用**必然失败 ——
-                    //   java.lang.SecurityException: Cannot disable system packages.
-                    // com.xiaomi.bluetooth 是 /system_ext 下的系统包，这条路从一开始就堵死。
-                    //
-                    // 改用系统允许的四类手段依次尝试：
-                    //  1) pm suspend           —— 挂起应用（系统包也允许），恢复用 pm unsuspend
-                    //  2) pm uninstall -k --user 0 —— 对当前用户卸载（去更新 + 标记未安装），
-                    //                                 系统包通常允许，恢复用 pm install-existing
-                    //  3) appops deny          —— 禁「后台弹出界面」(MIUI op 10021) 与悬浮窗等
-                    //  4) am force-stop        —— 仅立即止住当前这一轮，非持久
-                    //
-                    val cmds = listOf(
-                        "pm suspend --user 0 com.xiaomi.bluetooth",
-                        "pm uninstall -k --user 0 com.xiaomi.bluetooth",
-                        "appops set com.xiaomi.bluetooth 10021 deny",
-                        "cmd appops set com.xiaomi.bluetooth 10021 deny",
-                        "appops set com.xiaomi.bluetooth SYSTEM_ALERT_WINDOW deny",
-                        "appops set com.xiaomi.bluetooth START_FOREGROUND deny",
-                        "appops set com.xiaomi.bluetooth RUN_IN_BACKGROUND deny",
-                        "am force-stop com.xiaomi.bluetooth"
-                    )
-                    val results = AdbShell.execAll(cmds)
-                    val okCount = results.count { it.ok }
-                    // 回读真实状态：不看"命令有没有报错"，看"包现在到底处于什么状态"
-                    val verifyCmds = listOf(
-                        "dumpsys package com.xiaomi.bluetooth | grep -iE 'suspended|enabled=|firstInstallTime|flags=',",
-                        "pm list packages -d com.xiaomi.bluetooth",
-                        "pm list packages -u com.xiaomi.bluetooth",
-                        "appops get com.xiaomi.bluetooth 10021"
-                    )
-                    val verifyResults = AdbShell.execAll(verifyCmds)
-                    val verifyText = verifyCmds.mapIndexed { i, c ->
-                        val r = verifyResults.getOrNull(i)
-                        "【状态】$c\n" + (r?.let {
-                            (it.out.trim().ifBlank { it.err.trim() }).ifBlank { "(空)" }
-                        } ?: "(未执行)")
-                    }.joinToString("\n\n")
-                    runOnUiThread {
-                        toast(
-                            if (okCount > 0) "已执行 $okCount/${cmds.size} 条，见下方状态回读"
-                            else "命令全部被拒（系统包限制），见下方状态回读"
-                        )
-                        showCommandResult(cmds, results, verifyText)
-                    }
-                }.start()
-            }
-            .setNeutralButton("复制命令") { _, _ -> copyDisableCommands() }
-            .setNegativeButton("取消", null)
-            .show()
-    }
 
     /** 汇总每条命令的退出码与输出，并附上状态回读，失败原因一目了然 */
     private fun showCommandResult(

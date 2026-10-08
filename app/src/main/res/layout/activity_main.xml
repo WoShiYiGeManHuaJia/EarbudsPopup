@@ -1695,7 +1695,7 @@
                 </LinearLayout>
 
 
-                <!-- ================= 系统耳机弹窗屏蔽 ================= -->
+                <!-- ================= 修复：恢复系统蓝牙（撤销历史误操作） ================= -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -1708,45 +1708,22 @@
                         style="@style/CardTitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="屏蔽系统耳机弹窗" />
+                        android:text="恢复系统蓝牙" />
 
                     <TextView
                         style="@style/CardHint"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="HyperOS 的耳机系统弹窗是按设备记忆的：对 Buds 5 Pro 关过弹窗，换成 Redmi Buds 6 需要单独再关一次。两个办法：① 在蓝牙设备详情页关掉「连接弹窗」（推荐）；② 用 Shizuku 全局禁用弹窗服务（换任何耳机都不弹）。" />
+                        android:text="旧版本曾用 pm suspend / pm uninstall 处理系统弹窗，可能连累了小米蓝牙组件。点一下可完整撤销：解除挂起、装回当前用户、放开全部被掐掉的权限。执行完建议重启手机。" />
 
-                    <LinearLayout
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnRestoreSysBt"
+                        style="@style/Widget.Material3.Button"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:orientation="horizontal">
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnOpenBtDetail"
-                            style="@style/Widget.Material3.Button"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="打开蓝牙设备详情" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnDisableSysPopup"
-                            style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:text="全局禁用（Shizuku）" />
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btnRestoreSysBt"
-                                style="@style/Widget.Material3.Button"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginTop="8dp"
-                                android:text="恢复系统蓝牙（撤销上面的禁用）" />
-                    </LinearLayout>
+                        android:text="恢复系统蓝牙" />
                 </LinearLayout>
 
 
