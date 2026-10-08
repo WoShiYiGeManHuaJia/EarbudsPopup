@@ -14,8 +14,6 @@ import android.util.Log
 import com.woshiyigemanhuajia.btpopup.battery.BatteryInfo
 import com.woshiyigemanhuajia.btpopup.battery.BatteryRepository
 import com.woshiyigemanhuajia.btpopup.battery.BatteryUpdateBridge
-import com.woshiyigemanhuajia.btpopup.island.IslandNotifier
-import com.woshiyigemanhuajia.btpopup.island.IslandOverlay
 import com.woshiyigemanhuajia.btpopup.battery.GattBatteryReader
 import com.woshiyigemanhuajia.btpopup.overlay.PopupOverlayManager
 import com.woshiyigemanhuajia.btpopup.util.PermissionGuard
@@ -251,8 +249,7 @@ object BluetoothPopupTrigger {
         PopupSound.stop()
         // 断开时同步收掉岛通知，否则耳机都断连了岛还挂在屏幕上
         try {
-            IslandNotifier.cancel(context.applicationContext)
-            IslandOverlay.dismiss()
+
         } catch (t: Throwable) {
             Log.w(TAG, "取消岛通知失败（不影响收弹窗）: " + t.message)
         }
@@ -381,13 +378,7 @@ object BluetoothPopupTrigger {
                         quick.case?.let { "仓 $it%" }
                     ).joinToString(" · ").takeIf { it.isNotBlank() }
                 } else null
-                IslandNotifier.show(context.applicationContext, shownName, batteryText)
-                //
-                // 自绘「耳机岛」：不依赖小米焦点通知，直接画一个顶部胶囊悬浮窗。
-                // 这是 1.7.0~1.7.8 反复失败后的替代方案 —— 系统不向第三方开放上岛，
-                // 但我们自己有悬浮窗权限，完全可以自己画一个长得一样的。
-                //
-                IslandOverlay.show(context.applicationContext, shownName)
+
             } catch (t: Throwable) {
                 Log.w(TAG, "上岛失败（不影响弹窗）: " + t.message)
             }

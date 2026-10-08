@@ -28,8 +28,6 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.woshiyigemanhuajia.btpopup.R
 import com.woshiyigemanhuajia.btpopup.adb.AdbShell
-import com.woshiyigemanhuajia.btpopup.island.IslandNotifier
-import com.woshiyigemanhuajia.btpopup.island.IslandOverlay
 import com.woshiyigemanhuajia.btpopup.battery.BatteryInfo
 import com.woshiyigemanhuajia.btpopup.battery.BatteryRepository
 import com.woshiyigemanhuajia.btpopup.databinding.ActivityMainBinding
@@ -277,7 +275,6 @@ class MainActivity : AppCompatActivity() {
         refreshDeviceNameList()
         refreshPreview()
         renderHistory()
-        refreshIslandState()
         refreshServiceStatus()
         refreshAccessibilityState()
         // 服务启动是异步的：补拉后稍等再刷一次，避免仍显示"未启动"
@@ -639,44 +636,6 @@ class MainActivity : AppCompatActivity() {
             renderHistory()
         }
         b.btnClearHistory.setOnClickListener { clearHistory() }
-        b.swIsland.isChecked = Prefs.islandEnabled
-        b.swIsland.setOnCheckedChangeListener { _, v ->
-            if (loadingUi) return@setOnCheckedChangeListener
-            Prefs.islandEnabled = v
-            if (!v) { IslandNotifier.cancel(this); IslandOverlay.dismiss() }
-            refreshIslandState()
-        }
-        b.btnTestIsland.setOnClickListener { testIsland() }
-        b.btnCancelIsland.setOnClickListener {
-            IslandNotifier.cancel(this)
-            IslandOverlay.dismiss()
-            toast("已取消")
-        }
-        b.btnIslandDiag.setOnClickListener { showIslandDiagnose() }
-        b.swIslandLeftIcon.isChecked = Prefs.islandLeftIcon
-        b.swIslandLeftIcon.setOnCheckedChangeListener { _, v ->
-            if (loadingUi) return@setOnCheckedChangeListener
-            Prefs.islandLeftIcon = v
-        }
-        b.btnIslandBypass.setOnClickListener { showBypassTest() }
-        b.btnIslandScan.setOnClickListener { showIslandScan() }
-        b.swIslandOverlay.isChecked = Prefs.islandOverlayEnabled
-        b.swIslandOverlay.setOnCheckedChangeListener { _, v ->
-            if (loadingUi) return@setOnCheckedChangeListener
-            Prefs.islandOverlayEnabled = v
-            if (!v) IslandOverlay.dismiss()
-        }
-        b.btnIslandOverlayTest.setOnClickListener {
-            if (!android.provider.Settings.canDrawOverlays(this)) {
-                toast("需要先授予悬浮窗权限")
-                return@setOnClickListener
-            }
-            Prefs.islandOverlayEnabled = true
-            b.swIslandOverlay.isChecked = true
-            IslandOverlay.show(this, "Redmi Buds 5 Pro")
-            toast("已尝试绘制，看屏幕顶部")
-        }
-        b.btnIslandOverlayHide.setOnClickListener { IslandOverlay.dismiss() }
         b.btnQuickPreview.setOnClickListener { showTestPopup() }
         b.btnLandscapePreview.setOnClickListener { toggleLandscapePreview() }
         b.btnAdbGrant.setOnClickListener { runOneKeyGrant() }
@@ -995,156 +954,6 @@ class MainActivity : AppCompatActivity() {
             if (ok && out.length() > 0) out else null
         } catch (t: Throwable) {
             null
-        }
-    }
-
-    // ------------------------------------------------------------------ 小米超级岛
-
-    /** 测试上岛：立刻发一条「耳机图标 + 已连接」的岛通知 */
-    private fun testIsland() {
-        if (!IslandNotifier.isSupported()) {
-            toast("当前设备不支持岛（系统属性未开启）")
-            return
-        }
-        val name = BatteryRepository.all().maxByOrNull { it.updatedAt }?.name
-            ?.takeIf { it.isNotBlank() } ?: "蓝牙耳机"
-        IslandNotifier.show(this, name, "左耳 100% · 右耳 100%")
-        IslandOverlay.show(this, name)
-        val protocol = IslandNotifier.focusProtocol(this)
-        toast(
-            if (protocol >= 2) "已发送，看屏幕顶部是否出现岛"
-            else "已发送；当前焦点协议版本 $protocol，需 HyperOS 3 才支持超级岛"
-        )
-    }
-
-    /**
-     * 上岛诊断：把系统属性、焦点协议版本、焦点权限、Stellar 授权状态全部读出来，
-     * 弹窗展示并复制到剪贴板。
-     *
-     * 前几版我一直在猜岛参数，结果每次都只是"多一条普通通知"。
-     * 与其继续猜，不如让真机把真实状态报出来，对着数据改。
-     */
-    private fun showIslandDiagnose() {
-        val report = IslandNotifier.diagnose(this)
-        try {
-            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            cm.setPrimaryClip(ClipData.newPlainText("island-diag", report))
-            toast("诊断报告已复制到剪贴板")
-        } catch (t: Throwable) {
-            Log.w("MainActivity", "复制诊断报告失败: " + t.message)
-        }
-        try {
-            val tv = TextView(this).apply {
-                text = report
-                setTextIsSelectable(true)
-                textSize = 11f
-                val pad = (16 * resources.displayMetrics.density).toInt()
-                setPadding(pad, pad, pad, pad)
-                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
-            }
-            val scroll = android.widget.ScrollView(this).apply { addView(tv) }
-            androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("上岛诊断")
-                .setView(scroll)
-                .setPositiveButton("关闭", null)
-                .show()
-        } catch (t: Throwable) {
-            Log.w("MainActivity", "显示诊断报告失败: " + t.message)
-        }
-    }
-
-    /**
-     * 测试绕过白名单：真跑一遍断网 xmsf 的命令并把输出显示出来。
-     *
-     * 之前几版我一直在猜"绕过到底成没成功"，这是黑盒。
-     * 现在把命令与退出码直接摊开，成功失败一眼看得出。
-     */
-    private fun showBypassTest() {
-        val r = IslandNotifier.testBypass(this)
-        try {
-            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            cm.setPrimaryClip(ClipData.newPlainText("island-bypass", r))
-            toast("结果已复制到剪贴板")
-        } catch (t: Throwable) {
-            Log.w("MainActivity", "复制绕过结果失败: " + t.message)
-        }
-        try {
-            val tv = TextView(this).apply {
-                text = r
-                setTextIsSelectable(true)
-                textSize = 11f
-                val pad = (16 * resources.displayMetrics.density).toInt()
-                setPadding(pad, pad, pad, pad)
-                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
-            }
-            val scroll = android.widget.ScrollView(this).apply { addView(tv) }
-            androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("绕过测试结果")
-                .setView(scroll)
-                .setPositiveButton("关闭", null)
-                .show()
-        } catch (t: Throwable) {
-            Log.w("MainActivity", "显示绕过结果失败: " + t.message)
-        }
-    }
-
-    /**
-     * 扫描系统里真实存在的岛通知。
-     *
-     * 决定性问题：这台机器上到底有没有第三方 App 成功上过岛。
-     * 只有系统 App 有 → 第三方被挡，改参数无用；有第三方 → 直接抄它的参数。
-     */
-    private fun showIslandScan() {
-        toast("正在扫描系统通知，请稍候…")
-        Thread {
-            val r = IslandNotifier.scanSystemIsland(this)
-            runOnUiThread {
-                try {
-                    val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    cm.setPrimaryClip(ClipData.newPlainText("island-scan", r))
-                    toast("扫描结果已复制到剪贴板")
-                } catch (t: Throwable) {
-                    Log.w("MainActivity", "复制扫描结果失败: " + t.message)
-                }
-                try {
-                    val tv = TextView(this).apply {
-                        text = r
-                        setTextIsSelectable(true)
-                        textSize = 10f
-                        val pad = (16 * resources.displayMetrics.density).toInt()
-                        setPadding(pad, pad, pad, pad)
-                        setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
-                    }
-                    val scroll = android.widget.ScrollView(this).apply { addView(tv) }
-                    androidx.appcompat.app.AlertDialog.Builder(this)
-                        .setTitle("系统岛通知扫描")
-                        .setView(scroll)
-                        .setPositiveButton("关闭", null)
-                        .show()
-                } catch (t: Throwable) {
-                    Log.w("MainActivity", "显示扫描结果失败: " + t.message)
-                }
-            }
-        }.start()
-    }
-
-    /** 把「设备支不支持 / 有没有 Stellar 权限」显示在开关下方，避免用户盲试 */    /** 把「设备支不支持 / 有没有 Stellar 权限」显示在开关下方，避免用户盲试 */
-    private fun refreshIslandState() {
-        val supported = IslandNotifier.isSupported()
-        val protocol = IslandNotifier.focusProtocol(this)
-        val shellOk = try {
-            AdbShell.binderAlive() && AdbShell.hasPermission()
-        } catch (t: Throwable) {
-            false
-        }
-        b.tvIslandState.text = buildString {
-            append("耳机连接时显示「耳机图标 + 已连接」的岛\n")
-            append("设备支持：").append(if (supported) "是" else "否").append(" · ")
-            append("焦点协议：v").append(protocol).append("（需 v2+ 才有超级岛）\n")
-            append("Stellar / Shizuku：").append(
-                if (shellOk) "已授权，可绕过上岛白名单校验"
-                else "未授权，可能上不了岛（不影响弹窗）"
-            )
         }
     }
 

@@ -19,36 +19,33 @@ android {
         applicationId = "com.woshiyigemanhuajia.btpopup"
         minSdk = 26
         targetSdk = 36
-        versionCode = 55
-        versionName = "1.8.0"
+        versionCode = 56
+        versionName = "1.9.0"
         resConfigs("zh", "en")
     }
 
-    //
-    // 签名改用「软大课表」的专用密钥 keystore/softbig.jks。
-    //
-    // 为什么：源码已与课表逐字对齐、断网绕过路径也一致，但课表能上岛、本 App 不能。
-    // 包名不能改（用户要同时用课表），剩下最可能的校验维度就是**签名** ——
-    // 小米超级岛白名单常常按签名放行，换成同一把密钥即可获得相同身份。
-    //
+    // 统一签名配置：debug 与 release 使用同一把固定密钥，
+    // 密钥由 CI 从仓库根目录的 release.keystore 读取（见 .github/workflows/build.yml）。
     signingConfigs {
-        create("softbig") {
-            storeFile = rootProject.file("softbig.jks")
-            storePassword = "softbig2026"
-            keyAlias = "softbig"
-            keyPassword = "softbig2026"
+        if (releaseKeystoreFile.exists()) {
+            create("release") {
+                storeFile = releaseKeystoreFile
+                storePassword = "android"
+                keyAlias = "release"
+                keyPassword = "android"
+            }
         }
     }
 
     buildTypes {
         debug {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("softbig")
+            signingConfigs.findByName("release")?.let { signingConfig = it }
         }
         release {
             isMinifyEnabled = false
             isShrinkResources = false
-            signingConfig = signingConfigs.getByName("softbig")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -64,8 +61,6 @@ android {
 
     buildFeatures {
         viewBinding = true
-        // Shizuku 特权服务（上岛断网 xmsf 用）需要 AIDL
-        aidl = true
     }
 
     lint {
