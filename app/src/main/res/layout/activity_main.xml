@@ -1738,6 +1738,14 @@
                             android:layout_height="wrap_content"
                             android:layout_marginStart="8dp"
                             android:text="全局禁用（Shizuku）" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnRestoreSysBt"
+                                style="@style/Widget.Material3.Button"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:text="恢复系统蓝牙（撤销上面的禁用）" />
                     </LinearLayout>
                 </LinearLayout>
 
